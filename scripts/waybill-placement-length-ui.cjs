@@ -25,8 +25,8 @@ const card=id=>'document.querySelector('+JSON.stringify('[data-wagon="'+id+'"]')
 const target=card(fixture.target),count=()=>evaljs(target+'.querySelectorAll(".ktk-unit").length');assert.equal(await count(),6);
 assert.ok(await evaljs('[...document.querySelectorAll(".wagon-card")].every(el=>el.getBoundingClientRect().top===document.querySelector(".wagon-card").getBoundingClientRect().top)'));
 assert.equal(await evaljs('new Set([...document.querySelectorAll(".ktk-box")].map(el=>getComputedStyle(el).backgroundImage)).size'),1);
-assert.ok(await evaljs('[...document.querySelectorAll(".wagon-caption")].every(el=>/^№[0-9]+$/.test(el.textContent))'));
-assert.ok(await evaljs('[...document.querySelectorAll(".ktk-box")].every(el=>/^[A-Z0-9]+(?:20|40)FT$/.test(el.textContent))'));
+assert.ok(await evaljs('[...document.querySelectorAll(".wagon-caption")].every(el=>/^№[0-9]+[(](?:40|60|80)FT[)]$/.test(el.textContent))'));
+assert.ok(await evaljs('[...document.querySelectorAll(".ktk-box")].every(el=>/^(?:20|40)FT[A-Z0-9]+$/.test(el.textContent))'));
 assert.equal(await evaljs('document.querySelectorAll(".wagon-meta,.ktk-topline,.ktk-bottomline").length'),0);
 const width=()=>evaljs(target+'.querySelector(".ktk-box").getBoundingClientRect().width');const sixWidth=await width();let previousWidth=sixWidth;await shot('six');
 for(let i=0;i<2;i++){

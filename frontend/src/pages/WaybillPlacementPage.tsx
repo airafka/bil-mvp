@@ -91,7 +91,7 @@ export function WaybillPlacementPage() {
       <button type="button" className="ktk-box" data-picked={picked === c.rowId} disabled={busy || !c.selected}
         title={'КТК ' + c.number + ' · ' + (containerFeet(c.type) ?? '—') + 'FT · накладная ' + c.waybillNumber + (!c.selected ? ' · Накладная не выбрана' : '')} aria-pressed={picked === c.rowId} aria-label={'Выбрать КТК ' + c.number + ', накладная ' + c.waybillNumber}
         onClick={() => { if (picked && picked !== c.rowId) move(picked, wagonId, c.rowId); else setPicked(picked === c.rowId ? null : c.rowId) }}>
-        <strong>{c.number}</strong><span className="ktk-type">{containerFeet(c.type) ?? '—'}FT</span>
+        <span className="ktk-type">{containerFeet(c.type) ?? '—'}FT</span><strong>{c.number}</strong>
         <span className="ktk-door" aria-hidden="true" />
       </button>
     </div>
@@ -119,7 +119,7 @@ export function WaybillPlacementPage() {
         onDragOver={e => { if (drag.current && !busy) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(w.id) } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null) }}
         onDrop={e => { e.preventDefault(); if (drag.current) move(drag.current, w.id); drag.current = null }}>
         <div className="wagon-load" style={{ gridTemplateColumns: 'repeat(' + Math.max(1, rows.length) + ', minmax(0, 1fr))' }}>{rows.map(containerCard)}{!rows.length && <button type="button" className="wagon-empty-slot" disabled={!picked || busy} onClick={() => { if (picked) move(picked, w.id) }} aria-label={'Переместить выбранный КТК на вагон ' + w.number}><span aria-hidden="true">＋</span>{picked ? 'Разместить здесь' : 'Нет КТК'}</button>}</div>
-        <Chassis /><div className="wagon-caption"><strong>№{w.number}</strong></div>
+        <Chassis /><div className="wagon-caption"><strong>№{w.number}({w.feet ?? '—'}FT)</strong></div>
         {issue && <p className="wagon-issue" role="status">{issue}</p>}
         {picked && rows.length > 0 && <button className="secondary-button" disabled={busy} onClick={() => move(picked, w.id)}>Переместить сюда</button>}
       </section> })}</div>
