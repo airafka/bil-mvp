@@ -14,6 +14,13 @@ export function wagonFeet(rows: PlacementContainer[]): number | null {
   const lengths = rows.map(c => containerFeet(c.type))
   return lengths.some(n => n == null) ? null : lengths.reduce<number>((sum, n) => sum + (n ?? 0), 0)
 }
+// Keep unused platform length visible; compress an erroneous overloaded source so every KTK remains movable.
+export function wagonTracks(wagon: PlacementWagon, rows: PlacementContainer[]) {
+  const lengths = rows.map(c => containerFeet(c.type) ?? 20)
+  const freeFeet = Math.max(0, (wagon.feet ?? 0) - lengths.reduce((sum, n) => sum + n, 0))
+  const tracks = [...lengths, ...(freeFeet > 0 ? [freeFeet] : [])]
+  return { freeFeet, columns: tracks.length ? tracks.map(n => 'minmax(0,' + n + 'fr)').join(' ') : '1fr' }
+}
 export function wagonIssue(wagon: PlacementWagon, rows: PlacementContainer[]): string | null {
   if (!rows.length) return null
   const feet = wagonFeet(rows)

@@ -41,6 +41,9 @@ assert.equal(await evaljs('new Set([...document.querySelectorAll(".ktk-box")].ma
 assert.ok(await evaljs('[...document.querySelectorAll(".wagon-caption")].every(el=>/^№[0-9]+[(](?:40|60|80)FT[)]$/.test(el.textContent))'));
 assert.ok(await evaljs('[...document.querySelectorAll(".ktk-box")].every(el=>/^(?:20|40)FT[A-Z0-9]+$/.test(el.textContent))'));
 assert.equal(await evaljs('document.querySelectorAll(".wagon-meta,.ktk-topline,.ktk-bottomline").length'),0);
+async function checkTextSpacing(){assert.ok(await evaljs('[...document.querySelectorAll(".ktk-box")].every(el=>{const type=el.querySelector(".ktk-type").getBoundingClientRect(),number=el.querySelector("strong").getBoundingClientRect();return number.top-type.bottom>=3 && number.bottom<=el.getBoundingClientRect().bottom})'),'KTK labels overlap or escape the box')}
+await checkTextSpacing();assert.equal(await evaljs('document.querySelectorAll(".placement-page > .placement-alert").length'),0);
+assert.ok(await evaljs('[...document.querySelectorAll(".wagon-card")].filter(el=>el.querySelector(".ktk-waybill")).every(el=>el.querySelector(".ktk-waybill").getBoundingClientRect().top-el.getBoundingClientRect().top<20)'),'Unexpected space above waybill');
 const width=()=>evaljs(target+'.querySelector(".ktk-box").getBoundingClientRect().width');const sixWidth=await width();let previousWidth=sixWidth;await shot('six');
 for(let i=0;i<2;i++){
  const coords=await evaljs('['+target+'.querySelector(".ktk-box"),'+card(fixture.empty[i])+'.querySelector(".wagon-empty-slot")].map(el=>{const r=el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})');
@@ -50,8 +53,10 @@ for(let i=0;i<2;i++){
  await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...coords[1]});await wait(target+'.querySelectorAll(".ktk-unit").length==='+String(5-i));
  const currentWidth=await width();assert.ok(currentWidth>previousWidth);previousWidth=currentWidth;if(i===0){assert.ok(await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));await shot('five')}
 }
-assert.ok(!await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));await shot('four');await click('Сохранить');await wait('document.querySelector(".placement-success")');
+assert.ok(!await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));
+for(const id of fixture.empty){assert.ok(await evaljs('(()=>{const card='+card(id)+';return Math.abs(card.querySelector(".ktk-unit").getBoundingClientRect().width-card.querySelector(".wagon-free-slot").getBoundingClientRect().width)<1})()'),'A single 20ft container must occupy half of a 40ft wagon')}
+await checkTextSpacing();await shot('four');await click('Сохранить');await wait('document.querySelector(".placement-success")');
 console.log('PASS: four wagons in one row, single blue palette, minimal labels, six visible containers, real drag 6→5→4 with increasing size, length validation and save');
-for(const width of [1024,640,360,320]){await send('Emulation.setDeviceMetricsOverride',{width,height:1100,deviceScaleFactor:1,mobile:false});await pause(300);const sizes=await evaljs('({width:innerWidth,scroll:document.documentElement.scrollWidth})');assert.ok(sizes.scroll<=sizes.width,'Horizontal overflow '+JSON.stringify(sizes));if(width===360)await shot('mobile')}
+for(const width of [1024,640,360,320]){await send('Emulation.setDeviceMetricsOverride',{width,height:1100,deviceScaleFactor:1,mobile:false});await pause(300);await checkTextSpacing();const sizes=await evaljs('({width:innerWidth,scroll:document.documentElement.scrollWidth})');assert.ok(sizes.scroll<=sizes.width,'Horizontal overflow '+JSON.stringify(sizes));if(width===360)await shot('mobile')}
 assert.deepEqual(errors,[]);console.log('PASS: responsive 320–1440, no browser exceptions');await send('Browser.close');ws.close();
 })().catch(e=>{console.error(e);process.exitCode=1;chrome.kill()});
