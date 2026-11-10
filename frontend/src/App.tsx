@@ -26,6 +26,7 @@ const CreateOrderPage = lazy(() => import('./pages/CreateOrderPage').then(module
 const OrderListPage = lazy(() => import('./pages/OrderListPage').then(module => ({ default: module.OrderListPage })))
 const OrderViewPage = lazy(() => import('./pages/OrderViewPage').then(module => ({ default: module.OrderViewPage })))
 const WaybillCreatePage = lazy(() => import('./pages/WaybillCreatePage').then(module => ({ default: module.WaybillCreatePage })))
+const WaybillPlacementPage = lazy(() => import('./pages/WaybillPlacementPage').then(module => ({ default: module.WaybillPlacementPage })))
 const WaybillRegistryPage = lazy(() => import('./pages/WaybillRegistryPage').then(module => ({ default: module.WaybillRegistryPage })))
 const ComplexServiceRegistryPage = lazy(() => import('./pages/ComplexServicePages').then(module => ({ default: module.ComplexServiceRegistryPage })))
 const ComplexServiceCreatePage = lazy(() => import('./pages/ComplexServicePages').then(module => ({ default: module.ComplexServiceCreatePage })))
@@ -77,6 +78,7 @@ function App() {
           <Route path="/railway-carriages" element={<RailwayCarriageRegistryPage />} />
           <Route path="/containers" element={<ContainerRegistryPage />} />
           <Route path="/waybills" element={<WaybillRegistryPage />} />
+          <Route path="/waybills/edit-placement" element={<WaybillPlacementPage />} />
           <Route path="/waybills/generate" element={<WaybillGeneratePage />} />
           <Route path="/waybills/create" element={<WaybillCreatePage />} />
           <Route path="*" element={<section className="table-card empty-state"><h1>Страница не найдена</h1><p>Проверьте адрес или откройте реестр заявок.</p><Link className="primary-button" to="/comprehensive-service-orders">К заявкам на услугу</Link></section>} />

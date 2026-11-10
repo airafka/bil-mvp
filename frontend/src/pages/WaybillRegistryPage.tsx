@@ -56,7 +56,7 @@ export function WaybillRegistryPage() {
     <section className="registry-page">
       <div className="page-header">
         <h1>Накладные</h1>
-        <div className="header-actions"><Link className="secondary-button" to="/waybills/generate">Создать автоматически</Link><Link className="primary-button create-action-button" to="/waybills/create"><ActionIcon name="plus" /> Создать</Link></div>
+        <div className="header-actions"><Link className="secondary-button" to="/waybills/edit-placement"><ActionIcon name="edit" /> Редактировать накладные</Link><Link className="secondary-button" to="/waybills/generate">Создать автоматически</Link><Link className="primary-button create-action-button" to="/waybills/create"><ActionIcon name="plus" /> Создать</Link></div>
       </div>
 
       {createdNumber && <Notification kind="success">Накладная {createdNumber} создана</Notification>}
