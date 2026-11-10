@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 
 type Props = Omit<ComponentPropsWithoutRef<'tr'>, 'onDoubleClick'> & { to: string }
 

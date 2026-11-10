@@ -1,0 +1,31 @@
+const fs=require('fs'),path=require('path'),assert=require('node:assert/strict'),{spawn}=require('node:child_process');
+const dir=__dirname,profile=path.join(dir,'route-layout-test-profile-'+Date.now());fs.mkdirSync(profile);
+const chrome=spawn('C:/Program Files/Google/Chrome/Application/chrome.exe',['--headless=new','--disable-gpu','--disable-background-timer-throttling','--disable-renderer-backgrounding','--no-first-run','--no-default-browser-check','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{windowsHide:true,stdio:'ignore'});
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{
+let port;for(let i=0;i<80;i++){try{port=fs.readFileSync(path.join(profile,'DevToolsActivePort'),'utf8').split('\n')[0];break}catch{}await pause(100)}assert.ok(port,'Headless browser startup');
+const target=(await(await fetch('http://127.0.0.1:'+port+'/json/list')).json()).find(x=>x.type==='page');const ws=new WebSocket(target.webSocketDebuggerUrl);await new Promise((r,j)=>{ws.addEventListener('open',r,{once:true});ws.addEventListener('error',j,{once:true})});
+let seq=0;const pending=new Map();ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(pending.has(m.id)){const {resolve,reject}=pending.get(m.id);pending.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result)}});
+function send(method,params={}){return new Promise((resolve,reject)=>{const id=++seq;const timeout=setTimeout(()=>reject(Error('CDP timeout: '+method)),15000);pending.set(id,{resolve:r=>{clearTimeout(timeout);resolve(r)},reject:e=>{clearTimeout(timeout);reject(e)}});ws.send(JSON.stringify({id,method,params}))})}
+async function evaljs(expression){const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value}
+async function wait(expression){for(let i=0;i<70;i++){if(await evaljs('Boolean('+expression+')'))return;await pause(100)}throw Error('Timeout: '+expression)}
+await send('Page.enable');await send('Runtime.enable');await send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+
+
+
+
+
+
+
+
+const base=process.env.BILLING_UI_BASE||'http://localhost:3001',tag=process.env.BILLING_REPORT||'before';await send('Emulation.setFocusEmulationEnabled',{enabled:true});await send('Performance.enable');
+await send('Page.addScriptToEvaluateOnNewDocument',{source: 'window.navLong=[];window.navRequests=[];window.frameRuns=[];window.navErrors=[];window.addEventListener("error",e=>window.navErrors.push(e.message));new PerformanceObserver(l=>window.navLong.push(...l.getEntries().map(e=>({start:e.startTime,duration:e.duration})))).observe({type:"longtask",buffered:true});const fetchOriginal=window.fetch;window.fetch=async(...a)=>{if(a[1]?.method&&!(["GET","HEAD"].includes(a[1].method.toUpperCase())))throw Error("Read only diagnostic");const start=performance.now(),r=await fetchOriginal(...a);window.navRequests.push({url:String(a[0]),start,ms:performance.now()-start});return r};'});
+const results=[];
+for(const width of [1920,1440,1366,2320]){await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});await send('Page.navigate',{url:base+'/receiving-orders'});await wait('document.querySelector(".transport-order-registry tbody tr .order-code")');await pause(300);
+for(const cpu of [1,4]){await send('Emulation.setCPUThrottlingRate',{rate:cpu});for(const route of ['/shipping-orders','/receiving-orders']){
+await evaljs('(()=>{window.navStart=performance.now();window.frames=[];window.captureOn=true;const token=window.captureToken=(window.captureToken||0)+1;const capture=()=>{if(!window.captureOn||window.captureToken!==token)return;const t=document.querySelector(".transport-order-registry"),p=t?.parentElement,r=t?.getBoundingClientRect(),pr=p?.getBoundingClientRect();window.frames.push({ms:performance.now()-window.navStart,path:location.pathname,expanded:document.querySelector(".app-shell").dataset.menuExpanded,pageOverflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,scrollers:[...document.querySelectorAll(".main-nav,.nav-children,.table-wrap")].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>({class:e.className,width:e.clientWidth,scroll:e.scrollWidth-e.clientWidth,height:e.clientHeight,overflowX:getComputedStyle(e).overflowX})),table:t?{ready:t.classList.contains("responsive-table"),width:r.width,parent:pr.width,scroll:p.scrollWidth-p.clientWidth,height:r.height,min:t.style.getPropertyValue("--responsive-table-min-width"),rows:t.tBodies[0].rows.length,loading:document.querySelector(".table-card")?.getAttribute("aria-busy")}:null});requestAnimationFrame(capture)};requestAnimationFrame(capture);document.querySelector(\'.nav-section-toggle[aria-label="Заявки"]\').click()})()');await pause(300);
+await evaljs('window.clickAt=performance.now();document.querySelector('+JSON.stringify('.nav-entry a[href="'+route+'"]')+').click()');await wait('location.pathname==='+JSON.stringify(route)+'&&document.querySelector(".table-card")?.getAttribute("aria-busy")==="false"');await pause(400);
+const state=await evaljs('(()=>{window.captureOn=false;return {frames:window.frames,clickMs:window.clickAt-window.navStart,requests:window.navRequests.filter(r=>r.start>=window.navStart),longTasks:window.navLong.filter(r=>r.start>=window.navStart),errors:window.navErrors}})()');results.push({width,cpu,route,...state});
+}}}
+fs.writeFileSync(path.join(dir,'../database/transport-nav-'+tag+'.json'),JSON.stringify(results,null,2));console.log(JSON.stringify(results.map(r=>({width:r.width,cpu:r.cpu,route:r.route,maxPageOverflow:Math.max(...r.frames.map(f=>f.pageOverflow)),otherScrollers:[...new Set(r.frames.flatMap(f=>f.scrollers.filter(s=>s.class!=="table-wrap responsive-table-scroll").map(s=>s.class+":"+s.scroll)))],unready:r.frames.filter(f=>f.table&&!f.table.ready).map(f=>({ms:f.ms,scroll:f.table.scroll,width:f.table.width,parent:f.table.parent})),scrollAfterClick:r.frames.filter(f=>f.ms>r.clickMs&&f.table?.scroll>1).length,longTasks:r.longTasks,requests:r.requests})),null,2));ws.close();chrome.kill();
+})().catch(e=>{console.error(e);chrome.kill();process.exitCode=1});

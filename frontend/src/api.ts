@@ -1,3 +1,5 @@
+import { request } from './http'
+export { ApiError } from './http'
 import type { ContractOption, ComprehensiveServiceOrderSummary, ComprehensiveServiceOrderDetails } from './comprehensiveServiceOrder'
 import type {
   CreatedOrder,
@@ -31,47 +33,6 @@ export function getPaymentInvoice(id: string) {
 }
 export function deletePaymentInvoice(id: string) {
   return request<void>(`/api/payment-invoices/${id}`, { method: 'DELETE' })
-}
-
-type ApiProblem = {
-  detail?: string
-  title?: string
-}
-
-export class ApiError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'ApiError'
-  }
-}
-
-async function sendRequest<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  })
-
-  if (!response.ok) {
-    const problem = (await response.json().catch(() => ({}))) as ApiProblem
-    throw new ApiError(problem.detail ?? problem.title ?? 'Не удалось выполнить запрос')
-  }
-
-  if (response.status === 204) return undefined as T
-  return response.json() as Promise<T>
-}
-
-// Share concurrent reads (including StrictMode effects), never cache settled data.
-const pendingGets = new Map<string, Promise<unknown>>()
-function request<T>(url: string, options?: RequestInit): Promise<T> {
-  if (options?.method && options.method !== 'GET') return sendRequest<T>(url, options)
-  const existing = pendingGets.get(url)
-  if (existing) return existing as Promise<T>
-  const pending = sendRequest<T>(url, options).finally(() => pendingGets.delete(url))
-  pendingGets.set(url, pending)
-  return pending
 }
 
 export function getReferenceOptions(resource: 'clients' | 'containers' | 'etsng-codes' | 'railway-carriages' | 'railway-carriage-types' | 'seal-types' | 'hazard-classes' | 'danger-products' | 'railway-carriage-models' | 'railway-carriage-kinds', query = '') {
@@ -288,13 +249,13 @@ export function completeServiceSection(id: string, section: 'INITIAL_RECEIVING' 
 export type ReturnTariffContract = { clientId: string; clientName: string; contractId: string; contractName: string }
 export type CreatedReturn = { receivingOrderId: string; receivingOrderCode: number; serviceOrderId: string; serviceOrderCode: number; createdService: boolean }
 export function getReturnContracts() { return request<ReturnTariffContract[]>('/api/shipping-orders/return-contracts') }
-export function createShippingReturn(id: string, payload: { containerIds: string[]; useCurrentClient: boolean; clientId?: string; contractId?: string }) {
+export function createShippingReturn(id: string, payload: { containerIds: string[]; useCurrentClient: boolean; clientId?: string; contractId?: string; ownerClientId?: string }) {
   return request<CreatedReturn>(`/api/shipping-orders/${id}/returns`, { method: 'POST', body: JSON.stringify(payload) })
 }
 
 export type ReturnCandidate = { containerId: string; containerName: string; shippingOrderId: string; shippingOrderCode: number }
 export type CreatedReturns = { serviceOrderId: string; serviceOrderCode: number; createdService: boolean; returns: CreatedReturn[] }
 export function getServiceReturnCandidates(id: string) { return request<ReturnCandidate[]>(`/api/comprehensive-service-orders/${id}/returns/available-containers`) }
-export function createServiceReturns(id: string, payload: { containerIds: string[]; useCurrentClient: boolean; clientId?: string; contractId?: string }) {
+export function createServiceReturns(id: string, payload: { containerIds: string[]; useCurrentClient: boolean; clientId?: string; contractId?: string; ownerClientId?: string }) {
   return request<CreatedReturns>(`/api/comprehensive-service-orders/${id}/returns`, { method: 'POST', body: JSON.stringify(payload) })
 }

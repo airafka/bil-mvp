@@ -1,4 +1,4 @@
-import { Children, createContext, isValidElement, useContext, useState } from 'react'
+import { Children, createContext, isValidElement, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ActionIcon } from './ActionIcon'
@@ -39,6 +39,16 @@ export function Notification(props: NotificationProps) {
 function NotificationCard({ kind, title, children, onDismiss }: NotificationProps) {
   const host = useContext(NotificationHost)
   const [dismissed, setDismissed] = useState(false)
+  const dismissCallback = useRef(onDismiss)
+  useEffect(() => { dismissCallback.current = onDismiss }, [onDismiss])
+  useEffect(() => {
+    if (!host || dismissed) return
+    const timer = window.setTimeout(() => {
+      setDismissed(true)
+      dismissCallback.current?.()
+    }, 3000)
+    return () => window.clearTimeout(timer)
+  }, [host, dismissed])
   if (!host || dismissed) return null
   return createPortal(<div className={'notification-card notification-' + kind} role={kind === 'error' ? 'alert' : 'status'} aria-atomic="true">
     <svg className="notification-symbol" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

@@ -7,7 +7,7 @@ const progress: ServiceProgress = {
   serviceName: 'Выбранная услуга из справочника',
   accepted: 10, shippingCreated: 8, shippingCompleted: 6, returnCreated: 0, returnCompleted: 0,
   total: 10, shippingMissing: 2, shippingOrderCount: 4, shippingOrdersCompleted: 3,
-  returnOrderCount: 0, returnOrdersCompleted: 0,
+  returnOrderCount: 0, returnOrdersCompleted: 0, returnMissing: 10,
 }
 
 function stage(html: string, id: string) {
@@ -50,7 +50,7 @@ describe('Карточки этапов услуги', () => {
 })
 
 it('показывает только поставку Авто в отдельной автоуслуге', () => {
-  const html = renderToStaticMarkup(<ServiceProgressCards progress={{ ...progress, total: 2, returnCreated: 2, returnCompleted: 1, returnOrderCount: 1 }} initialOrderStatus="CONFIRMED" autoReturn />)
+  const html = renderToStaticMarkup(<ServiceProgressCards progress={{ ...progress, total: 2, returnMissing: 0, returnCreated: 2, returnCompleted: 1, returnOrderCount: 1 }} initialOrderStatus="CONFIRMED" autoReturn />)
   expect(html.match(/<section /g)).toHaveLength(1)
   expect(html).not.toContain('Поставка - ЖД')
   expect(html).not.toContain('Вывоз - Авто')
@@ -60,4 +60,17 @@ it('показывает только поставку Авто в отдель�
 it('показывает КТК, для которых возврат ещё не создан вручную', () => {
   const html = renderToStaticMarkup(<ServiceProgressCards progress={progress} initialOrderStatus="COMPLETED" />)
   expect(html).toContain('Без заявки на возврат: 10 КТК.')
+})
+
+it('не считает возвраты другой услуги отсутствующими в исходной', () => {
+  const html = renderToStaticMarkup(<ServiceProgressCards progress={{ ...progress, total: 10, returnCreated: 2, returnCompleted: 1, returnOrderCount: 2, returnOrdersCompleted: 1, returnMissing: 3 }} initialOrderStatus="COMPLETED" />)
+  expect(stage(html, 'return')).toContain('КТК: выполнено 1 из 2')
+  expect(stage(html, 'return')).toContain('Заявки: выполнено 1 из 2')
+  expect(stage(html, 'return')).toContain('Без заявки на возврат: 3 КТК.')
+  expect(stage(html, 'return')).not.toContain('Без заявки на возврат: 8 КТК.')
+})
+it('не показывает отсутствие возвратов, если все оформлены на другого клиента', () => {
+  const html = renderToStaticMarkup(<ServiceProgressCards progress={{ ...progress, returnMissing: 0 }} initialOrderStatus="COMPLETED" />)
+  expect(stage(html, 'return')).toContain('КТК: выполнено 0 из 0')
+  expect(stage(html, 'return')).not.toContain('Без заявки на возврат')
 })

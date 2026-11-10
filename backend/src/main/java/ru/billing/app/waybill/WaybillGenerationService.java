@@ -46,7 +46,7 @@ public class WaybillGenerationService {
             else { int count=Math.min(2,twenty); for(int i=0;i<count;i++) containers.add(container(true,seal,nextSeal++)); twenty-=count; }
             carriages.add(new WaybillRailwayCarriageRequest(wagon,containers));
         }
-        return waybills.create(new CreateWaybillRequest(null,2001,1001,"ФИТ",null,null,carriages,
+        return waybills.create(new CreateWaybillRequest(null,1001,2001,"ФИТ",null,null,carriages,
             List.of(new WaybillProductRequest(cargo,null,null,null,danger,null)),number));
     }
     private WaybillContainerRequest container(boolean twenty,UUID seal,int sealNumber) {

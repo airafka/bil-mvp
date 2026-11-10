@@ -2,40 +2,24 @@ import { AppOverlay } from './AppOverlay'
 import { RouteLogisticsFields } from './RouteLogisticsFields'
 import { Notification } from './Notification'
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { createRoute, getOrder, getRoute } from '../api'
-import type { OrderDetails } from '../domain'
-import type { RouteType } from '../routes'
+import { Link } from 'react-router'
+import { createRoute } from '../api'
+import type { ServiceTransportOrder } from '../comprehensiveServiceOrder'
 import { UiInput, UiTextarea } from './FormControls'
 
-export function OrderRouteCell({ id, kind, disabled = false }: { id: string; kind: RouteType; disabled?: boolean }) {
-  const [order, setOrder] = useState<OrderDetails | null>(null)
-  const [route, setRoute] = useState<{ id: string; code: number } | null>(null)
-  const [error, setError] = useState('')
-  const [attempt, setAttempt] = useState(0)
+export function OrderRouteCell({ order, disabled = false }: { order?: ServiceTransportOrder; disabled?: boolean }) {
+  const [createdRoute, setCreatedRoute] = useState<{ id: string; code: number } | null>(null)
   const [open, setOpen] = useState(false)
-  useEffect(() => {
-    let active = true
-    getOrder(kind === 'SHIPPING' ? '/api/shipping-orders' : '/api/receiving-orders', id).then(async value => {
-      if (!active) return
-      setOrder(value)
-      if (value.routeId) {
-        const result = await getRoute(value.routeId)
-        if (active) setRoute(result.route)
-      }
-    }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'Не удалось загрузить рейс') })
-    return () => { active = false }
-  }, [id, kind, attempt])
+  if (!order) return <span>—</span>
+  const route = createdRoute ?? order.route
   if (route) return <Link className="order-code" to={'/routes/' + route.id}>Рейс {route.code}</Link>
-  if (error) return <button type="button" className="text-action-button" title={error} onClick={() => { setError(''); setAttempt(value => value + 1) }}>Повторить загрузку</button>
-  if (!order || order.routeId) return <span>Загрузка…</span>
   return <>
     <button type="button" className="secondary-button create-route-button" disabled={disabled || order.status !== 'DRAFT'} title={order.status !== 'DRAFT' ? 'Добавление в рейс доступно для черновика заявки' : undefined} onClick={() => setOpen(true)}>Создать рейс</button>
-    {open && <RouteDrawer order={order} kind={kind} onClose={() => setOpen(false)} onCreated={value => { setRoute(value); setOpen(false) }} />}
+    {open && <RouteDrawer order={order} onClose={() => setOpen(false)} onCreated={value => { setCreatedRoute(value); setOpen(false) }} />}
   </>
 }
 
-function RouteDrawer({ order, kind, onClose, onCreated }: { order: OrderDetails; kind: RouteType; onClose: () => void; onCreated: (route: { id: string; code: number }) => void }) {
+function RouteDrawer({ order, onClose, onCreated }: { order: ServiceTransportOrder; onClose: () => void; onCreated: (route: { id: string; code: number }) => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const lock = useRef(false)
   const [busy, setBusy] = useState(false)
@@ -49,10 +33,10 @@ function RouteDrawer({ order, kind, onClose, onCreated }: { order: OrderDetails;
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     event.stopPropagation()
-    if (lock.current || !order.terminalArea || !order.transportType) return
+    if (lock.current || !order.terminalAreaId || !order.transportType) return
     lock.current = true; setBusy(true); setError('')
     try {
-      const result = await createRoute({ routeType: kind, transportType: order.transportType, terminalAreaId: order.terminalArea.id,
+      const result = await createRoute({ routeType: order.kind, transportType: order.transportType, terminalAreaId: order.terminalAreaId,
         departureAt: new Date(date).toISOString(), carrierId:order.transportType==='VEHICLE'?carrier||null:null,driverId:order.transportType==='VEHICLE'?driver||null:null,vehicleId:order.transportType==='VEHICLE'?vehicle||null:null,comment, orderIds: [order.id] })
       onCreated(result.route)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось создать рейс') }
@@ -60,7 +44,7 @@ function RouteDrawer({ order, kind, onClose, onCreated }: { order: OrderDetails;
   }
   return <AppOverlay><dialog onDoubleClick={event => event.stopPropagation()} ref={dialog} className="route-side-dialog" aria-labelledby="route-drawer-title" onCancel={event => { event.preventDefault(); if (!busy) onClose() }}>
     <form onSubmit={save}>
-      <header className="route-dialog-heading"><h2 id="route-drawer-title">Создать рейс</h2><div className="header-actions"><button type="submit" className="primary-button create-action-button create-route-button" disabled={busy || !order.terminalArea || !order.transportType}>{busy ? 'Создаём…' : 'Создать рейс'}</button><button type="button" className="close-button" title="Закрыть" aria-label="Закрыть форму рейса" disabled={busy} onClick={onClose}>×</button></div></header>
+      <header className="route-dialog-heading"><h2 id="route-drawer-title">Создать рейс</h2><div className="header-actions"><button type="submit" className="primary-button create-action-button create-route-button" disabled={busy || !order.terminalAreaId || !order.transportType}>{busy ? 'Создаём…' : 'Создать рейс'}</button><button type="button" className="close-button" title="Закрыть" aria-label="Закрыть форму рейса" disabled={busy} onClick={onClose}>×</button></div></header>
       <div className="route-drawer-body">
         <label className="field horizontal-field"><span>Дата и время <b>*</b></span><UiInput autoFocus type="datetime-local" required value={date} disabled={busy} onChange={event => setDate(event.target.value)} /></label>
         {order.transportType === 'VEHICLE' && <RouteLogisticsFields carrierId={carrier} driverId={driver} vehicleId={vehicle} onCarrier={setCarrier} onDriver={setDriver} onVehicle={setVehicle} disabled={busy} showHeading={false} showReferenceInfo={false}>

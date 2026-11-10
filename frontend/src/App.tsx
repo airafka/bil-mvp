@@ -19,7 +19,7 @@ const RailwayCarriageRegistryPage = lazy(() => import('./pages/RailwayCarriageRe
 const ContainerRegistryPage = lazy(() => import('./pages/ContainerRegistryPage').then(module => ({ default: module.ContainerRegistryPage })))
 const ComprehensiveServiceOrderRegistryPage = lazy(() => import('./pages/ComprehensiveServiceOrderRegistryPage').then(module => ({ default: module.ComprehensiveServiceOrderRegistryPage })))
 const ComprehensiveServiceOrderViewPage = lazy(() => import('./pages/ComprehensiveServiceOrderViewPage').then(module => ({ default: module.ComprehensiveServiceOrderViewPage })))
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
 import { orderConfigs } from './domain'
 const CreateOrderPage = lazy(() => import('./pages/CreateOrderPage').then(module => ({ default: module.CreateOrderPage })))

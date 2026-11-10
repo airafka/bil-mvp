@@ -33,6 +33,8 @@ public class ShippingOrderService {
     @Transactional
     public CreatedOrderResponse create(CreateOrderRequest request) {
         if(request.defaultContainerOwnerId()!=null) throw new ru.billing.app.error.ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,"DEFAULT_OWNER_RECEIVING_ONLY","Собственник по умолчанию задаётся только в поставке");
+        if (!request.containerOwners().isEmpty()) throw new ru.billing.app.error.ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
+            "CONTAINER_OWNERS_RECEIVING_ONLY", "Собственник вывоза определяется регистром");
         validator.validateShipping(request);
         if (request.transportType() == TransportType.RAILWAY) {
             referenceDataService.validateShippingRailwayReferences(request);

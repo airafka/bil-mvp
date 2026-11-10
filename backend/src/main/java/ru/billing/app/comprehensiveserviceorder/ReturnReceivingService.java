@@ -46,7 +46,13 @@ public class ReturnReceivingService {
         if(clientId==null || contractId==null) throw new ApiException(HttpStatus.BAD_REQUEST,"CLIENT_CONTRACT_REQUIRED","Выберите клиента и договор");
         if(Boolean.FALSE.equals(jdbc.queryForObject("select exists(select 1 from contract where id=? and client_id=?)",Boolean.class,contractId,clientId)))
             throw new ApiException(HttpStatus.BAD_REQUEST,"CONTRACT_CLIENT_MISMATCH","Договор не принадлежит выбранному клиенту");
-        boolean separate = !clientId.equals(source.clientId()) || !contractId.equals(source.contractId());
+        boolean differentClient = !clientId.equals(source.clientId());
+        UUID returnOwnerId = differentClient ? request.ownerClientId() : null;
+        if (differentClient && returnOwnerId == null)
+            throw new ApiException(HttpStatus.BAD_REQUEST, "RETURN_OWNER_REQUIRED", "Выберите собственника КТК");
+        if (differentClient && !Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from client where id=?)", Boolean.class, returnOwnerId)))
+            throw new ApiException(HttpStatus.BAD_REQUEST, "RETURN_OWNER_NOT_FOUND", "Собственник КТК не найден в справочнике клиентов");
+        boolean separate = differentClient || !contractId.equals(source.contractId());
         var ids = new HashSet<UUID>();
         for (UUID containerId : containerIds) {
             if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from receiving_order_container where source_shipping_order_id=? and container_id=?)",Boolean.class,shippingId,containerId)))
@@ -74,11 +80,13 @@ public class ReturnReceivingService {
                             rs.getObject("seal_type_id", UUID.class), rs.getObject("danger_class_id", UUID.class)), shippingId, containerId);
             if (rows.size() > 1) throw new ApiException(HttpStatus.CONFLICT, "RETURN_OWNER_AMBIGUOUS", "В исходной поставке для КТК указаны разные собственники");
             if (rows.size() != 1) throw new ApiException(HttpStatus.BAD_REQUEST, "CONTAINER_NOT_IN_SHIPPING", "КТК отсутствует в составе вывоза");
-            if (rows.getFirst().ownerClientId() == null) {
+            if (!differentClient && rows.getFirst().ownerClientId() == null) {
                 throw new ApiException(HttpStatus.CONFLICT, "RETURN_OWNER_REQUIRED",
                     "Укажите собственника КТК в исходной поставке КП-ЖД");
             }
-            returnContainers.add(rows.getFirst());
+            var original = rows.getFirst();
+            returnContainers.add(differentClient ? new OrderContainerRequest(containerId, true, null,
+                    returnOwnerId, original.sealNumbers(), original.sealTypeId(), original.hazardClassId()) : original);
         }
         UUID parentId=source.serviceId();
         if(separate && sharedParentId != null) parentId = sharedParentId;
@@ -104,7 +112,7 @@ public class ReturnReceivingService {
     public record ReturnResult(UUID receivingOrderId,int receivingOrderCode,UUID serviceOrderId,int serviceOrderCode,boolean createdService) {}
     public record CreateReturnRequest(
         @jakarta.validation.constraints.NotEmpty @jakarta.validation.constraints.Size(max=1) List<@jakarta.validation.constraints.NotNull UUID> containerIds,
-        @jakarta.validation.constraints.NotNull Boolean useCurrentClient, UUID clientId, UUID contractId) {}
+        @jakarta.validation.constraints.NotNull Boolean useCurrentClient, UUID clientId, UUID contractId, UUID ownerClientId) {}
     public record TariffContract(UUID clientId,String clientName,UUID contractId,String contractName) {}
     @Transactional(readOnly=true)
     public List<TariffContract> contracts() {
@@ -121,7 +129,7 @@ public class ReturnReceivingService {
     public record CreateBulkReturnsRequest(
         @jakarta.validation.constraints.NotEmpty @jakarta.validation.constraints.Size(max=10000)
         List<@jakarta.validation.constraints.NotNull UUID> containerIds,
-        @jakarta.validation.constraints.NotNull Boolean useCurrentClient, UUID clientId, UUID contractId) {}
+        @jakarta.validation.constraints.NotNull Boolean useCurrentClient, UUID clientId, UUID contractId, UUID ownerClientId) {}
     public record BulkReturnResult(UUID serviceOrderId, int serviceOrderCode, boolean createdService, List<ReturnResult> returns) {}
 
     private void requireRailwayService(UUID serviceId) {
@@ -161,7 +169,7 @@ public class ReturnReceivingService {
         UUID sharedParent = null;
         for (var row : available) {
             var result = create(row.shippingOrderId(), new CreateReturnRequest(List.of(row.containerId()),
-                    request.useCurrentClient(),request.clientId(),request.contractId()), sharedParent);
+                    request.useCurrentClient(),request.clientId(),request.contractId(),request.ownerClientId()), sharedParent);
             results.add(result);
             sharedParent = result.serviceOrderId();
         }

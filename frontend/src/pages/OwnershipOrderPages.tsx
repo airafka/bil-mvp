@@ -1,5 +1,6 @@
+import { TableReveal } from '../components/TableReveal'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { RecordRow } from '../components/RecordRow'
 import { Notification } from '../components/Notification'
 import { ActionIcon } from '../components/ActionIcon'
@@ -44,12 +45,12 @@ export function OwnershipOrderRegistryPage() {
   return <section className="registry-page ownership-page">
     <div className="page-header"><h1>Смена собственника КТК</h1><Link className="primary-button create-action-button" to="/service-orders/new"><ActionIcon name="plus" /> Создать</Link></div>
     {error && <Notification kind="error">{error}</Notification>}{message && <Notification kind="success">{message}</Notification>}
-    <div className="table-card">
+    <TableReveal loading={!data && !error}>
       <div className="table-wrap"><table className="ownership-registry-table"><thead><tr><th className="registry-index">№</th><th>Номер заявки</th><th>Новый собственник</th><th>Количество КТК</th><th>Статус</th><th>Дата выполнения</th><th>Комментарий</th><th className="registry-actions" aria-label="Действия" /></tr></thead><tbody>
         {!data && !error && <tr><td colSpan={8}>Загружаем заявки…</td></tr>}{data?.items.length === 0 && <tr><td colSpan={8}>Заявок пока нет</td></tr>}
         {data?.items.map((row, index) => <RecordRow to={'/service-orders/' + row.id} key={row.id}><td className="registry-index">{data.page * data.size + index + 1}</td><td><Link className="order-code" to={'/service-orders/' + row.id}>{row.number}</Link></td><td>{row.clientName}</td><td>{row.containerQuantity}</td><td><OwnershipStatus status={row.status} /></td><td>{completedAt(row.completionAt)}</td><td>{row.comment || '—'}</td><td className="registry-actions"><RowActions label={'Действия с заявкой ' + row.number} disabled={busy} actions={[{ label: 'Открыть', to: '/service-orders/' + row.id }, ...(row.status === 'DRAFT' ? [{ label: 'Изменить', to: '/service-orders/' + row.id + '?edit=1' }, { label: 'Удалить', onClick: () => setDeleting(row) }] : [])]} /></td></RecordRow>)}
       </tbody></table></div>{data && <Pagination data={data} change={value => { setPage(value); setData(null) }} />}
-    </div>
+    </TableReveal>
     {deleting && <div className="modal-backdrop"><div className="complex-service-dialog" role="alertdialog" aria-modal="true" aria-labelledby="ownership-delete-title"><h2 id="ownership-delete-title">Удалить заявку {deleting.number}?</h2><p>Черновик будет удалён, выбранные КТК освободятся для других заявок.</p><div className="complex-service-dialog-actions"><button className="secondary-button" disabled={busy} onClick={() => setDeleting(null)}>Отмена</button><button className="primary-button" disabled={busy} onClick={remove}>{busy ? 'Удаляем…' : 'Удалить'}</button></div></div></div>}
   </section>
 }

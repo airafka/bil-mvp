@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { ActionIcon } from './ActionIcon'
 
 type RowAction = { label: string; to: string; onClick?: never } | { label: string; to?: never; onClick: () => void }

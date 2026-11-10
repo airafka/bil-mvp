@@ -105,6 +105,7 @@ export type OrderFormState = {
 }
 
 export type CreateOrderPayload = {
+  containerOwners?: Array<{ containerId: string; ownerClientId: string }>
   defaultContainerOwnerId?: string
   arrivalAt?: string
   authorizedRepresentative?: string

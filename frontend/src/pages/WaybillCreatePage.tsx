@@ -3,7 +3,7 @@ import { WaybillDraftComposition } from '../components/WaybillDraftComposition'
 import type { RailwayCarriage } from '../railwayCarriages'
 import { UiInput, UiSelect } from '../components/FormControls'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 import { createWaybill, getReferenceOptions } from '../api'
 import type { DangerProductOption, ReferenceOption } from '../domain'
 import {

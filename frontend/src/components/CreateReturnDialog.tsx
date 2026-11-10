@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { createServiceReturns, getReturnContracts, type CreatedReturns, type ReturnTariffContract } from '../api'
-import type { OrderDetails } from '../domain'
+import { Link } from 'react-router'
+import { createServiceReturns, getReferenceOptions, getReturnContracts, type CreatedReturns, type ReturnTariffContract } from '../api'
+import type { OrderDetails, ReferenceOption } from '../domain'
 import { AppOverlay } from './AppOverlay'
 import { UiInput, UiSelect } from './FormControls'
 import { Notification } from './Notification'
@@ -27,6 +27,13 @@ export function ReturnSelectionDialog({ context: order, serviceId, containers: a
   const [loadError, setLoadError] = useState('')
   const [clientId, setClientId] = useState('')
   const [contractId, setContractId] = useState('')
+  const [ownerClientId, setOwnerClientId] = useState('')
+  const [owners, setOwners] = useState<ReferenceOption[]>([])
+  const [ownersLoading, setOwnersLoading] = useState(false)
+  const [ownersError, setOwnersError] = useState('')
+  const [ownersAttempt, setOwnersAttempt] = useState(0)
+  const differentClient = !currentClient && !!clientId && clientId !== order.clientId
+  const ownerRequired = differentClient && (!ownerClientId || ownersLoading || !!ownersError)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => { dialog.current?.showModal() }, [])
@@ -37,33 +44,47 @@ export function ReturnSelectionDialog({ context: order, serviceId, containers: a
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
-  const clients = [...new Map(contracts.map(item => [item.clientId, item])).values()]
+  useEffect(() => {
+    if (!differentClient) return
+    let active = true
+    getReferenceOptions('clients').then(value => { if (active) setOwners(value) })
+      .catch(cause => { if (active) setOwnersError(cause instanceof Error ? cause.message : 'Не удалось загрузить собственников') })
+      .finally(() => { if (active) setOwnersLoading(false) })
+    return () => { active = false }
+  }, [differentClient, ownersAttempt])
+  const otherContracts = contracts.filter(item => item.clientId !== order.clientId)
+  const clients = [...new Map(otherContracts.map(item => [item.clientId, item])).values()]
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); event.stopPropagation()
-    if (lock.current || !selected.length || (!currentClient && (!clientId || !contractId))) return
+    if (lock.current || ownerRequired || !selected.length || (!currentClient && (!clientId || !contractId))) return
     lock.current = true; setBusy(true); setError('')
-    try { onCreated(await createServiceReturns(serviceId, { containerIds: selected, useCurrentClient: currentClient, ...(!currentClient ? { clientId, contractId } : {}) })) }
+    try { onCreated(await createServiceReturns(serviceId, { containerIds: selected, useCurrentClient: currentClient, ...(!currentClient ? { clientId, contractId } : {}), ...(differentClient ? { ownerClientId } : {}) })) }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось создать возврат') }
     finally { lock.current = false; setBusy(false) }
   }
   return <AppOverlay><dialog ref={dialog} className="route-side-dialog return-dialog" aria-labelledby="return-dialog-title" onCancel={event => { event.preventDefault(); if (!busy) onClose() }}>
     <form onSubmit={submit}>
-      <header className="route-dialog-heading"><h2 id="return-dialog-title">Создать возврат</h2><div className="header-actions"><button type="submit" className="primary-button" disabled={busy || !selected.length || (!currentClient && (!clientId || !contractId))}>{busy ? 'Создаём…' : 'Создать возврат'}</button><button type="button" className="close-button" aria-label="Закрыть форму возврата" disabled={busy} onClick={onClose}>×</button></div></header>
+      <header className="route-dialog-heading"><h2 id="return-dialog-title">Создать возврат</h2><div className="header-actions"><button type="submit" className="primary-button" disabled={busy || ownerRequired || !selected.length || (!currentClient && (!clientId || !contractId))}>{busy ? 'Создаём…' : 'Создать возврат'}</button><button type="button" className="close-button" aria-label="Закрыть форму возврата" disabled={busy} onClick={onClose}>×</button></div></header>
       <div className="route-drawer-body">
         <section className="return-form-section return-customer-section" aria-label="Клиент и договор возврата">
           {currentClient ? <dl className="return-client-details"><div><dt>Клиент</dt><dd>{order.clientName}</dd></div><div><dt>Договор</dt><dd>{order.contractName}</dd></div></dl> : <>
             <div className="return-party-fields">
-              <label className="return-party-field"><span>Клиент <b>*</b></span><UiSelect aria-label="Клиент возврата" required value={clientId} disabled={busy || loading} onChange={event => { setClientId(event.target.value); setContractId('') }}><option value="" hidden disabled />{clients.map(item => <option key={item.clientId} value={item.clientId}>{item.clientName}</option>)}</UiSelect></label>
-              <label className="return-party-field"><span>Договор <b>*</b></span><UiSelect aria-label="Договор возврата" required value={contractId} disabled={busy || !clientId || loading} onChange={event => setContractId(event.target.value)}><option value="" hidden disabled />{contracts.filter(item => item.clientId === clientId).map(item => <option key={item.contractId} value={item.contractId}>{item.contractName}</option>)}</UiSelect></label>
+              <label className="return-party-field"><span>Клиент <b>*</b></span><UiSelect aria-label="Клиент возврата" required value={clientId} disabled={busy || loading} onChange={event => { setClientId(event.target.value); setContractId(''); setOwnerClientId(event.target.value); if (!differentClient) { setOwnersLoading(true); setOwnersError('') } }}><option value="" hidden disabled />{clients.map(item => <option key={item.clientId} value={item.clientId}>{item.clientName}</option>)}</UiSelect></label>
+              <label className="return-party-field"><span>Договор <b>*</b></span><UiSelect aria-label="Договор возврата" required value={contractId} disabled={busy || !clientId || loading} onChange={event => setContractId(event.target.value)}><option value="" hidden disabled />{otherContracts.filter(item => item.clientId === clientId).map(item => <option key={item.contractId} value={item.contractId}>{item.contractName}</option>)}</UiSelect></label>
+          {differentClient && <>
+            <label className="return-party-field"><span>Собственник КТК <b>*</b></span><UiSelect aria-label="Собственник КТК" required value={ownerClientId} disabled={busy || ownersLoading || !!ownersError} onChange={event => setOwnerClientId(event.target.value)}><option value="" hidden disabled />{owners.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</UiSelect></label>
+            {ownersLoading && <p role="status">Загружаем собственников…</p>}
+            {ownersError && <Notification kind="error">{ownersError}<button type="button" className="secondary-button" disabled={busy} onClick={() => { setOwnersLoading(true); setOwnersError(''); setOwnersAttempt(value => value + 1) }}>Повторить</button></Notification>}
+          </>}
             </div>
             {loading && <p role="status">Загружаем договоры…</p>}
             {loadError && <Notification kind="error">{loadError}</Notification>}
-            {!loading && !loadError && !contracts.length && <p>Добавьте активный тариф приёма автотранспортом в разделе <Link to="/complex-services">«Комплексные услуги»</Link>, чтобы выбрать другой договор.</p>}
+            {!loading && !loadError && !otherContracts.length && <p>Добавьте активный тариф приёма автотранспортом в разделе <Link to="/complex-services">«Комплексные услуги»</Link>, чтобы выбрать другой договор.</p>}
           </>}
-          <label className="return-current-client"><UiInput type="checkbox" checked={currentClient} disabled={busy} onChange={event => setCurrentClient(event.target.checked)} />Использовать данные исходной заявки</label>
+          <label className="return-current-client"><UiInput type="checkbox" checked={currentClient} disabled={busy} onChange={event => { setCurrentClient(event.target.checked); setOwnerClientId(event.target.checked ? '' : clientId); if (!event.target.checked && clientId) { setOwnersLoading(true); setOwnersError('') } }} />Использовать текущего клиента и договор</label>
         </section>
-        <section className="return-form-section" aria-labelledby="return-containers-title">
-          <div className="return-section-heading"><h3 id="return-containers-title">КТК к возврату</h3></div>
+        <section className="return-form-section">
+
           <div className="table-wrap return-container-scroll">
             <table className="return-container-table" data-responsive-min-width={300} aria-label="КТК к возврату">
               <colgroup><col style={{width:44}}/><col/></colgroup>

@@ -19,7 +19,6 @@ body, .app-shell { background: var(--app-background); }
 .main-nav a { height: 40px; padding: 8px; border-radius: var(--app-radius); }
 .nav-icon { flex-shrink: 0; }
 .app-shell[data-menu-expanded="false"] .nav-label { display: none; }
-.menu-toggle { width: 40px; height: 32px; margin-top: 20px; padding: 6px; border: 1px solid var(--app-border); border-radius: 5px; background: white; color: var(--muted); cursor: pointer; }
 .sidebar-footer { margin-left: 0; }
 .topbar { height: 48px; box-shadow: none; border-bottom: 1px solid var(--app-border); }
 .content { padding: 16px; min-height: calc(100vh - 48px); }
@@ -96,7 +95,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--blue); outline-
 }
 @media (max-width: 640px) {
   .sidebar { inset: auto 0 0; width: 100%; height: 58px; flex-direction: row; padding: 8px; box-shadow: 0 -1px 3px #f2f2f2; }
-  .brand-mark, .sidebar-footer, .menu-toggle { display: none; }
+  .brand-mark, .sidebar-footer { display: none; }
   .main-nav { width: 100%; display: flex; justify-content: space-around; margin: 0; gap: 4px; overflow-x: auto; }
   .main-nav a { flex: 0 0 40px; width: 40px; padding: 8px; }
   .workspace { width: 100%; margin-left: 0; padding-bottom: 64px; }
@@ -383,7 +382,7 @@ tbody th { position: static; }
 .nav-section-chevron { margin-left: auto; flex: 0 0 16px; color: #98a2b3; transition: transform .15s ease; }
 .nav-section-toggle[aria-expanded="true"] .nav-section-chevron { transform: rotate(180deg); }
 .navigation-tree .nav-children { margin: 4px 0 8px 20px; padding-left: 10px; border-left: 1px solid #eef1f6; }
-.navigation-tree .nav-children[hidden] { display: none; }
+.navigation-tree .nav-children-inner { min-height: 0; overflow: hidden; }
 .navigation-tree .nav-children .nav-entry a { padding: 8px; height: auto; min-height: 40px; border-radius: 4px; }
 .navigation-tree .nav-label { font-size: 14px; }
 .navigation-tree .nav-children .nav-label { white-space: normal; line-height: 20px; }
@@ -488,13 +487,15 @@ tbody th { position: static; }
 }
 .service-table-page .form-workspace :is(.service-order-section, .service-main-panel) > h2 { padding:0; margin-bottom:16px; }
 .service-table-page .form-workspace .bulk-return-heading { padding:0 0 16px; }
-.service-table-page .form-workspace .billing-charges-panel { margin-top:24px; }
 
 
 
 /* Full navigation labels remain on a single line. */
 .navigation-tree .nav-children .nav-label { white-space: nowrap; overflow: visible; text-overflow: clip; max-width: none; }
-@media (min-width: 641px) { .app-shell[data-menu-expanded="true"] { --app-sidebar: 340px; } }
+@media (min-width: 641px) {
+  .app-shell[data-menu-expanded="true"] { --app-sidebar: 280px; }
+  .navigation-tree .nav-children { margin-left: 12px; }
+}
 
 .service-section-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 
@@ -507,7 +508,6 @@ tbody th { position: static; }
 #service-panel-charges .billing-charges-panel > .details-grid { margin: 0 0 16px; }
 
 /* Service charge totals stay together instead of occupying the full details grid. */
-.service-table-page .service-tabs-toolbar:has(#service-tab-charges[aria-selected="true"]) { margin-bottom: 16px; }
 .service-charge-totals { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin: 0 0 12px; padding: 0; }
 .service-charge-totals > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; }
 .service-charge-totals > div + div { padding-left: 20px; border-left: 1px solid var(--app-border); }
@@ -534,3 +534,50 @@ tbody th { position: static; }
   .service-tab-charge-totals { width: 100%; margin-left: 0; }
   .service-tab-charge-totals .service-charge-totals > div { grid-template-columns: minmax(0, 150px) minmax(0, 1fr); }
 }
+
+/* Keep menu and workspace movement synchronized; collapsed links are inert. */
+.sidebar { transition: width 240ms ease-out; }
+.workspace { transition: margin-left 240ms ease-out, width 240ms ease-out; }
+.navigation-tree .nav-children {
+  display: grid; grid-template-rows: 1fr; opacity: 1; visibility: visible;
+  transition: grid-template-rows 240ms ease-out, margin 240ms ease-out, padding 240ms ease-out, opacity 160ms ease-out, visibility 240ms;
+}
+.navigation-tree .nav-children[data-open="false"] {
+  grid-template-rows: 0fr; margin-top: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0;
+  opacity: 0; visibility: hidden; border-color: transparent;
+}
+@media (min-width: 641px) {
+  .navigation-tree .nav-section-toggle { overflow: hidden; }
+  .navigation-tree .nav-section-toggle .nav-label {
+    display: inline; flex-shrink: 0; white-space: nowrap; opacity: 1; visibility: visible;
+    transition: opacity 160ms ease-out, visibility 240ms;
+  }
+  .app-shell[data-menu-expanded="false"] .navigation-tree .nav-section-toggle .nav-label {
+    display: inline; opacity: 0; visibility: hidden;
+  }
+  .app-shell[data-menu-expanded="false"] .navigation-tree .nav-children .nav-label { display: inline; }
+}
+@media (max-width: 640px) {
+  .navigation-tree .nav-children-inner { overflow-y: auto; max-height: calc(65vh - 18px); }
+}
+/* Reserve one common toolbar slot so service tables start at the same position. */
+.service-tab-context { display: grid; margin-left: auto; min-width: 0; max-width: 100%; }
+.service-tab-context > * { grid-area: 1 / 1; align-self: center; justify-self: end; }
+.service-tab-context .service-tab-charge-totals { visibility: hidden; }
+.service-tab-context[data-charges="true"] .service-tab-charge-totals { visibility: visible; }
+@media (max-width: 640px) { .service-tab-context { width: 100%; margin-left: 0; } }
+
+
+/* Loading and entrance share a stable frame; animate only after data arrives. */
+.registry-table-reveal { position: relative; }
+.registry-table-reveal[aria-busy="true"] { min-height: 160px; }
+.registry-table-reveal[aria-busy="true"] > :not(.registry-table-loading) { visibility: hidden; }
+.registry-table-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--app-text-muted, #64748b); }
+.registry-table-reveal[aria-busy="false"] { animation: registry-table-enter 520ms cubic-bezier(0.42, 0, 0.58, 1) backwards; }
+@keyframes registry-table-enter { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .registry-table-reveal[aria-busy="false"] { animation: none; } }
+
+/* Keep the existing 240ms menu/workspace motion during navigation too.
+   Intermediate overflow keeps its geometry; only its scrollbar paint is muted. */
+.app-shell[data-menu-closing="true"] .registry-table-reveal.responsive-table-scroll,
+.app-shell[data-menu-closing="true"] .registry-table-reveal .responsive-table-scroll { scrollbar-color: transparent transparent; }

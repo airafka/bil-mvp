@@ -23,7 +23,7 @@ export function ServiceProgressCards({ progress, initialOrderStatus, autoReturn 
         <Metric label="Заявки" completed={progress.returnOrdersCompleted} total={progress.returnOrderCount} />
         <Metric label="КТК" completed={progress.returnCompleted} total={progress.returnCreated} />
       </dl>
-      {progress.total > progress.returnCreated && <p className="service-progress-missing">Без заявки на возврат: {progress.total - progress.returnCreated} КТК.</p>}
+      {progress.returnMissing > 0 && <p className="service-progress-missing">Без заявки на возврат: {progress.returnMissing} КТК.</p>}
     </section>
   </div>
 }

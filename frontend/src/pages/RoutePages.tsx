@@ -1,3 +1,4 @@
+import { TableReveal } from '../components/TableReveal'
 import { RouteLogisticsFields } from '../components/RouteLogisticsFields'
 import { confirmRoute, updateRoute } from '../api'
 import { RecordRow } from '../components/RecordRow'
@@ -8,7 +9,7 @@ import { RouteInformation } from '../components/RouteInformation'
 import { StatusBadge } from '../components/StatusBadge'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router'
 import { UiInput, UiSelect, UiTextarea } from '../components/FormControls'
 import { createRoute, getAvailableRouteOrders, getRoute, getRoutes, getTerminalAreas } from '../api'
 import { transportTypeLabel } from '../domain'
@@ -23,13 +24,13 @@ export function RouteRegistryPage() {
   return <section className="registry-page">
     <div className="page-header"><h1>Рейсы</h1><Link className="primary-button" to="/routes/new"><ActionIcon name="plus" /> Создать</Link></div>
     {error && <Notification kind="error">{error}</Notification>}
-    <div className="table-card">
+    <TableReveal loading={!routes && !error}>
       <div className="table-wrap"><table><thead><tr><th className="registry-index" scope="col">№</th><th>Номер рейса</th><th>Тип рейса</th><th>Дата и время</th><th>Вид транспорта</th><th>Заявок</th><th>Статус</th><th className="registry-actions" scope="col" aria-label="Действия" /></tr></thead><tbody>
         {!routes && !error && <tr><td className="table-message" colSpan={8}>Загружаем рейсы…</td></tr>}
         {routes && routes.length === 0 && <tr><td className="table-message" colSpan={8}>Рейсов пока нет</td></tr>}
         {routes?.map((route, index) => <RecordRow to={`/routes/${route.id}`} key={route.id}><td className="registry-index">{index + 1}</td><td><Link className="order-code" to={`/routes/${route.id}`}>{route.code}</Link></td><td>{routeTypeLabel(route.routeType)}</td><td>{routeDateLabel(route.departureAt)}</td><td>{transportTypeLabel(route.transportType)}</td><td>{route.orderCount}</td><td><StatusBadge status={route.status} /></td><td className="registry-actions"><RowActions label={'Действия с рейсом ' + route.code} actions={[{ label: 'Открыть', to: '/routes/' + route.id }]} /></td></RecordRow>)}
       </tbody></table></div>
-    </div>
+    </TableReveal>
   </section>
 }
 

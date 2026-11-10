@@ -1,3 +1,4 @@
+import { TableReveal } from '../components/TableReveal'
 import { Notification } from '../components/Notification'
 import { useEffect, useState } from 'react'
 import { getRailwayCarriagePage, getReferenceOptions, updateRailwayCarriage } from '../api'
@@ -28,12 +29,12 @@ export function RailwayCarriageRegistryPage() {
   return <section className="registry-page">
     <div className="page-header"><h1>Справочник вагонов</h1></div>
     {error && <Notification kind="error">{error}</Notification>}
-    <div className="table-card"><div className="table-wrap"><table aria-label="Справочник вагонов">
+    <TableReveal loading={loading}><div className="table-wrap"><table aria-label="Справочник вагонов">
       <thead><tr><th>№</th><th>Номер вагона</th><th>Модель вагона</th><th>Грузоподъёмность, кг</th><th>Дата следующего ДР</th><th>Род вагона</th><th aria-label="Действия" /></tr></thead>
       <tbody>{loading ? <tr><td colSpan={7}>Загружаем вагоны…</td></tr> : rows.length ? rows.map((row, index) =>
         <CarriageRow key={row.id} initial={row} index={page * 20 + index + 1} models={models} kinds={kinds} />
       ) : <tr><td colSpan={7}>Вагоны не найдены</td></tr>}</tbody>
-    </table></div></div>
+    </table></div></TableReveal>
     <div className="pagination"><button className="secondary-button" disabled={loading || page === 0} onClick={() => setPage(p => p - 1)}>Назад</button><span>Страница {page + 1} из {Math.max(pages, 1)}</span><button className="secondary-button" disabled={loading || page + 1 >= pages} onClick={() => setPage(p => p + 1)}>Далее</button></div>
   </section>
 }

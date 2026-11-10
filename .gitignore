@@ -24,3 +24,11 @@ backups/
 
 # Current bil-next snapshot explicitly requested for device transfer
 !database/billing-next-snapshot.dump
+
+# Generated browser profiles and local diagnostic artifacts
+/scripts/route-layout-test-profile-*/
+/database/*.png
+/database/*.json
+/database/*.jar
+/database/*-nginx.conf
+!database/billing-next-snapshot.json

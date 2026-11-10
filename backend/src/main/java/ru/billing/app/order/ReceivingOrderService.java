@@ -33,6 +33,13 @@ public class ReceivingOrderService {
     @Transactional
     public CreatedOrderResponse create(CreateOrderRequest request) {
         validator.validate(request);
+        if (!request.containerOwners().isEmpty() && request.transportType() != TransportType.RAILWAY) {
+            throw new ru.billing.app.error.ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                "CONTAINER_OWNERS_RAILWAY_ONLY", "Индивидуальные собственники накладных задаются только в ЖД-поставке");
+        }
+        if (request.containerOwners().stream().map(CreateOrderRequest.ContainerOwner::containerId).distinct().count() != request.containerOwners().size()) {
+            throw new ru.billing.app.error.ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "DUPLICATE_CONTAINER", "КТК указан дважды");
+        }
         if (request.defaultContainerOwnerId() == null) {
             throw new ru.billing.app.error.ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
                 "DEFAULT_CONTAINER_OWNER_REQUIRED", "Выберите собственника КТК по умолчанию в заявке на поставку");
@@ -40,7 +47,10 @@ public class ReceivingOrderService {
         referenceDataService.validateContainerAttributes(request.effectiveDefaultContainerOwnerId(),null,null);
         if (request.transportType() == TransportType.RAILWAY) {
             referenceDataService.validateCommonReferences(request);
+            request.containerOwners().forEach(c -> referenceDataService.validateContainerAttributes(c.ownerClientId(), null, null));
             CreatedOrderResponse created = store.createRailway(request);
+            if (!request.containerOwners().isEmpty()) store.updateContainerAttributes(created.id(), new UpdateOrderContainersRequest(
+                request.containerOwners().stream().map(c -> new UpdateOrderContainersRequest.Attributes(c.containerId(), c.ownerClientId(), null, null, null)).toList()));
             if (request.routeId() != null) routeService.assign(request.routeId(), java.util.List.of(created.id()));
             return created;
         }

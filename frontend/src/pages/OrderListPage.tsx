@@ -1,13 +1,16 @@
+import { TableReveal } from '../components/TableReveal'
 import { RecordRow } from '../components/RecordRow'
 import { Notification } from '../components/Notification'
 import { ActionIcon } from '../components/ActionIcon'
 import { RowActions } from '../components/RowActions'
 import { StatusBadge } from '../components/StatusBadge'
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { getOrders } from '../api'
 import type { OrderConfig, PagedResponse, OrderSummary } from '../domain'
 import { transportTypeLabel } from '../domain'
+
+const orderDateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 type NavigationState = { createdCode?: number }
 
@@ -61,7 +64,7 @@ export function OrderListPage({ config }: { config: OrderConfig }) {
 
       {error && <Notification kind="error">{error}<button type="button" className="secondary-button" onClick={() => { setError(''); setLoading(true); setAttempt(value => value + 1) }}>Повторить</button></Notification>}
 
-      <div className="table-card" aria-busy={loading}>
+      <TableReveal loading={loading}>
         <div className="table-wrap">
           <table className="transport-order-registry" data-responsive-min-width={1180}>
             <colgroup>
@@ -103,7 +106,7 @@ export function OrderListPage({ config }: { config: OrderConfig }) {
                     </Link>
                   </td>
                   <td>{order.clientName}</td>
-                  <td className="transport-order-date">{order.plannedAt ? new Date(order.plannedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                  <td className="transport-order-date">{order.plannedAt ? orderDateFormatter.format(new Date(order.plannedAt)) : '—'}</td>
                   <td>{order.terminalArea?.name ?? '—'}</td>
                   <td>{transportTypeLabel(order.transportType)}</td>
                   <td>{order.routeId && order.routeNumber != null ? <Link to={'/routes/' + order.routeId}>{order.routeNumber}</Link> : '—'}</td>
@@ -122,7 +125,7 @@ export function OrderListPage({ config }: { config: OrderConfig }) {
             <button disabled={loading || page + 1 >= (data?.totalPages ?? 0)} onClick={() => changePage(page + 1)}>Далее</button>
           </div>
         )}
-      </div>
+      </TableReveal>
     </section>
   )
 }

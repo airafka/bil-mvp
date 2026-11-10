@@ -1,10 +1,11 @@
+import { TableReveal } from '../components/TableReveal'
 import { RecordRow } from '../components/RecordRow'
 import { Notification } from '../components/Notification'
 import { ActionIcon } from '../components/ActionIcon'
 import { RowActions } from '../components/RowActions'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { UiInput, UiSelect } from '../components/FormControls'
 import {
   getComplexServiceTariff, createComplexService, deleteComplexService, deleteComplexServiceTariff, getComplexService, getComplexServices,
@@ -51,13 +52,13 @@ export function ComplexServiceRegistryPage() {
   return <section className="registry-page complex-service-page">
     <div className="page-header"><h1>Комплексные услуги</h1><Link className="primary-button create-action-button" to="/complex-services/new"><ActionIcon name="plus" /> Создать</Link></div>
     {error && <Notification kind="error">{error}</Notification>}
-    <div className="table-card">
+    <TableReveal loading={!services && !error}>
       <div className="table-wrap"><table><thead><tr><th className="registry-index" scope="col">№</th><th>Наименование</th><th>Цена без НДС, ₽</th><th>Цена с НДС, ₽</th><th>Тарифов</th><th className="registry-actions" scope="col" aria-label="Действия" /></tr></thead><tbody>
         {!services && !error && <tr><td colSpan={6} className="table-message">Загружаем услуги…</td></tr>}
         {services && services.length === 0 && <tr><td colSpan={6} className="empty-state"><strong>Комплексных услуг пока нет</strong><p>Создайте услугу, затем настройте коэффициенты для клиентов и договоров.</p></td></tr>}
         {services?.map((service, index) => <RecordRow to={`/complex-services/${service.id}`} key={service.id}><td className="registry-index">{index + 1}</td><td><Link className="order-code" to={`/complex-services/${service.id}`}>{service.name}</Link></td><td className="complex-service-money">{priceLabel(service.priceWithoutVat)}</td><td className="complex-service-money">{priceLabel(service.priceWithVat)}</td><td>{service.tariffCount}</td><td className="registry-actions"><RowActions label={'Действия с услугой ' + service.name} disabled={deleting} actions={[{ label: 'Открыть', to: '/complex-services/' + service.id }, { label: 'Удалить', onClick: () => { setDeleteError(''); setDeletingService(service) } }]} /></td></RecordRow>)}
       </tbody></table></div>
-    </div>
+    </TableReveal>
     {deletingService && <div className="modal-backdrop">
       <div className="complex-service-dialog" role="alertdialog" aria-modal="true" aria-labelledby="complex-service-delete-title" aria-describedby="complex-service-delete-description" onKeyDown={event => { if (event.key === 'Escape' && !deleting) setDeletingService(null) }}>
         <h2 id="complex-service-delete-title">Удалить комплексную услугу?</h2>

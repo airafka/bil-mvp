@@ -1,8 +1,11 @@
-import type { OrderDetails, ReceivingContainerAttributes } from '../domain'
+import type { OrderDetails, ReceivingContainerAttributes, ReferenceOption } from '../domain'
 import { OrderContainerTable, type ContainerTableGroup } from './OrderContainerTable'
 import './RailwayReceivingHierarchy.css'
 
-export function RailwayReceivingHierarchy({waybills,containers,defaultOwnerId,onChange}:{
+export function RailwayReceivingHierarchy({waybills,containers,defaultOwnerId,onChange,onBulkOwnerChange,bulkOwnerDisabled,bulkOwnerActionTarget}:{
+  onBulkOwnerChange?:(ids:string[],owner:ReferenceOption)=>void|Promise<void>
+  bulkOwnerDisabled?:boolean
+  bulkOwnerActionTarget?:HTMLElement|null
   waybills:OrderDetails['waybills']
   containers:OrderDetails['containers']
   defaultOwnerId?:string
@@ -20,5 +23,5 @@ export function RailwayReceivingHierarchy({waybills,containers,defaultOwnerId,on
         containerType:source.type,loadCapacity:source.loadCapacity,tareWeight:source.tareWeight,grossWeight:source.grossWeight}
     })
   }))}))
-  return <section className="form-section composition-section" aria-label="КТК по накладным и вагонам"><OrderContainerTable rows={groups.flatMap(group=>group.children?.flatMap(wagon=>wagon.rows)??group.rows)} groups={groups} attributesReadOnly showPhysicalAttributes defaultOwnerId={defaultOwnerId} onChange={onChange}/></section>
+  return <section className="form-section composition-section" aria-label="КТК по накладным и вагонам"><OrderContainerTable rows={groups.flatMap(group=>group.children?.flatMap(wagon=>wagon.rows)??group.rows)} groups={groups} onBulkOwnerChange={onBulkOwnerChange} bulkOwnerDisabled={bulkOwnerDisabled} bulkOwnerActionTarget={bulkOwnerActionTarget} attributesReadOnly showPhysicalAttributes defaultOwnerId={defaultOwnerId} onChange={onChange}/></section>
 }

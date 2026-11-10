@@ -1,9 +1,10 @@
+import { TableReveal } from '../components/TableReveal'
 import { Notification } from '../components/Notification'
 import { ActionIcon } from '../components/ActionIcon'
 import { RowActions } from '../components/RowActions'
 import { WaybillHierarchyView } from '../components/WaybillHierarchyView'
 import { Fragment, useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { getGroupedWaybills } from '../api'
 import type { GroupedWaybillPage } from '../domain'
 import { getWaybillStationName } from '../waybillOptions'
@@ -61,7 +62,7 @@ export function WaybillRegistryPage() {
       {createdNumber && <Notification kind="success">Накладная {createdNumber} создана</Notification>}
       {error && <Notification kind="error">{error}</Notification>}
 
-      <div className="table-card waybill-registry-card">
+      <TableReveal loading={loading} className="table-card waybill-registry-card">
         <div className="table-wrap">
           <table className="waybill-registry-table">
             <thead><tr><th className="registry-index" scope="col">№</th><th>Станция отправления</th><th>Станция назначения</th><th>Плательщик</th><th>Груз</th><th>Вагонов</th><th>КТК</th><th>Накладных</th><th className="registry-actions" scope="col" aria-label="Действия" /></tr></thead>
@@ -98,7 +99,7 @@ export function WaybillRegistryPage() {
           </table>
         </div>
         {(data?.totalPages ?? 0) > 1 && <div className="pagination"><button disabled={page === 0} onClick={() => changePage(page - 1)}>Назад</button><span>Страница {page + 1} из {data?.totalPages}</span><button disabled={page + 1 >= (data?.totalPages ?? 0)} onClick={() => changePage(page + 1)}>Далее</button></div>}
-      </div>
+      </TableReveal>
     </section>
   )
 }

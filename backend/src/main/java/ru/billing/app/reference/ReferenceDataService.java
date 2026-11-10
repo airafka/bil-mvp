@@ -276,8 +276,8 @@ public class ReferenceDataService {
     }
 
     public List<ContractOption> findContracts(UUID clientId, boolean activeTariffsOnly) {
-        return jdbcTemplate.query("select id, client_id, name, contract_type from contract c where (?::uuid is null or client_id = ?) and (not ? or exists(select 1 from complex_service_tariff t join complex_service_catalog s on s.id=t.complex_service_id where t.client_id=c.client_id and t.contract_id=c.id and t.active and s.order_workflow='RAILWAY_RETURN')) order by name, id",
-                (rs, row) -> new ContractOption(rs.getObject("id", UUID.class), rs.getObject("client_id", UUID.class), rs.getString("name"), rs.getString("contract_type")), clientId, clientId, activeTariffsOnly);
+        return jdbcTemplate.query("select id, client_id, name, contract_type, valid_from from contract c where (?::uuid is null or client_id = ?) and (not ? or exists(select 1 from complex_service_tariff t join complex_service_catalog s on s.id=t.complex_service_id where t.client_id=c.client_id and t.contract_id=c.id and t.active and s.order_workflow='RAILWAY_RETURN')) order by name, id",
+                (rs, row) -> new ContractOption(rs.getObject("id", UUID.class), rs.getObject("client_id", UUID.class), rs.getString("name"), rs.getString("contract_type"), rs.getObject("valid_from", java.time.LocalDate.class)), clientId, clientId, activeTariffsOnly);
     }
 
     public void validateContract(UUID clientId, UUID contractId) {

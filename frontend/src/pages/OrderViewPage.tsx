@@ -13,7 +13,7 @@ import { WaybillCompositionTable } from '../components/WaybillCompositionTable'
 import { StatusBadge } from '../components/StatusBadge'
 import { OrderStatusAction } from '../components/OrderStatusAction'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import { updateOrderContainerAttributes, assignRouteOrders, getOrder, getRoutes, getReferenceOptions } from '../api'
 import type { OrderConfig, OrderDetails } from '../domain'
 import { fillingTypeLabel, transportTypeLabel } from '../domain'
@@ -36,6 +36,7 @@ export function OrderViewPage({ config, providedOrderId, embedded = false }: { c
 }
 
 function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId: string; embedded: boolean }) {
+  const [ownerActionTarget, setOwnerActionTarget] = useState<HTMLDivElement | null>(null)
   const [activeTab, setActiveTab] = useState(1)
   const [order, setOrder] = useState<OrderDetails | null>(null)
   const [loading, setLoading] = useState(true)
@@ -151,6 +152,19 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
       {adding&&<AddedContainerCargo rows={pending} options={cargoOptions} onChange={(key,field,value)=>setContainerAdditions(current=>current.map(row=>row.key===key?{...row,container:{...row.container,[field]:value}}:row))}/>}
     </>
   }
+  async function applyBulkOwner(ids: string[], owner: import('../domain').ReferenceOption) {
+    if (!order || saving || !canEditContainers || !isRailwayReceiving) throw new Error('Собственника можно менять только в черновике поставки')
+    const selected = new Set(ids)
+    if (editing) {
+      setContainerDraft(current => current.map(row => selected.has(row.containerId) ? { ...row, ownerClientId: owner.id, ownerClientName: owner.name } : row))
+      return
+    }
+    setSaving(true); setSaveError(''); setSaveMessage('')
+    try {
+      const updated = await updateOrderContainerAttributes(config.apiPath, order.id, ids.map(containerId => ({ containerId, ownerClientId: owner.id })))
+      setOrder(updated)
+    } finally { setSaving(false) }
+  }
   async function saveOrder() {
     if (!order || saving) return
     setSaving(true)
@@ -184,7 +198,7 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
 
         </div>
         <div className="view-header-actions">{returnButton}{editing && order && <div className="header-actions">            <button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelectedRouteId(''); setSaveError('') }}>Отмена</button>
-            <button type="button" className="primary-button" disabled={saving} onClick={saveOrder}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && !editing && <button type="button" className="secondary-button icon-button" onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}{order && !editing && <OrderStatusAction key={order.id} apiPath={config.apiPath} id={order.id} status={order.status} onChanged={status => { setOrder(value => value ? { ...value, status } : value); getOrder(config.apiPath, orderId).then(setOrder).catch(e => setError(String(e))); getRoutes().then(setRoutes).catch(e => setRouteError(String(e))) }} />}<Link className="close-button" to={config.listPath} aria-label="Вернуться в реестр" title="Закрыть"><ActionIcon name="close" /></Link></div>
+            <button type="button" className="primary-button" disabled={saving} onClick={saveOrder}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && !editing && <button type="button" className="secondary-button icon-button" disabled={saving} onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}{order && !editing && !saving && <OrderStatusAction key={order.id} apiPath={config.apiPath} id={order.id} status={order.status} onChanged={status => { setOrder(value => value ? { ...value, status } : value); getOrder(config.apiPath, orderId).then(setOrder).catch(e => setError(String(e))); getRoutes().then(setRoutes).catch(e => setRouteError(String(e))) }} />}<Link className="close-button" to={config.listPath} aria-label="Вернуться в реестр" title="Закрыть"><ActionIcon name="close" /></Link></div>
       </div>
 
       }
@@ -197,9 +211,13 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
         {order && !loading && <>
           {embedded && editing && order && <div className="header-actions">            <button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelectedRouteId(''); setSaveError('') }}>Отмена</button>
             <button type="button" className="primary-button" disabled={saving} onClick={saveOrder}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}
-          {embedded && !editing && <div className="view-header-actions">{returnButton}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && <button type="button" className="secondary-button icon-button" onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}<OrderStatusAction key={order.id} apiPath={config.apiPath} id={order.id} status={order.status} onChanged={status => { setOrder(value => value ? { ...value, status } : value); getOrder(config.apiPath, orderId).then(setOrder).catch(e => setError(String(e))); getRoutes().then(setRoutes).catch(e => setRouteError(String(e))) }} /></div>}
+          {embedded && !editing && <div className="view-header-actions">{returnButton}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && <button type="button" className="secondary-button icon-button" disabled={saving} onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}<OrderStatusAction key={order.id} apiPath={config.apiPath} id={order.id} status={order.status} onChanged={status => { setOrder(value => value ? { ...value, status } : value); getOrder(config.apiPath, orderId).then(setOrder).catch(e => setError(String(e))); getRoutes().then(setRoutes).catch(e => setRouteError(String(e))) }} /></div>}
+          <div className="order-tabs-toolbar">
           <div className="stepper view-tabs" aria-label="Разделы заявки">
             {visibleTabs.map((label, index) => <button type="button" className={`step ${activeTab === index + 1 ? 'current' : ''}`} key={label} onClick={() => setActiveTab(index + 1)}>{label}</button>)}
+          </div>
+
+          <div className="order-tabs-actions" ref={setOwnerActionTarget} />
           </div>
 
           {activeTab === 1 && <div className="form-section">
@@ -272,7 +290,7 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
             </table></div>
           </section>}
 
-          {isRailwayReceiving&&contentTab===4&&<RailwayReceivingHierarchy waybills={order.waybills}
+          {isRailwayReceiving&&contentTab===4&&<RailwayReceivingHierarchy bulkOwnerActionTarget={ownerActionTarget} waybills={order.waybills} onBulkOwnerChange={canEditContainers ? applyBulkOwner : undefined} bulkOwnerDisabled={saving}
             containers={order.containers.map(row=>editing&&canEditContainers?containerDraft.find(c=>c.containerId===row.containerId)??row:row)}
             defaultOwnerId={defaultOwnerDraft||order.defaultContainerOwnerId||undefined}
             onChange={editing&&canEditContainers?(id,change)=>setContainerDraft(current=>current.map(row=>row.containerId===id?{...row,...change}:row)):undefined}/>}  

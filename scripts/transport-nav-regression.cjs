@@ -1,0 +1,40 @@
+const fs=require('fs'),path=require('path'),assert=require('node:assert/strict'),{spawn}=require('node:child_process');
+const dir=__dirname,profile=path.join(dir,'route-layout-test-profile-'+Date.now());fs.mkdirSync(profile);
+const chrome=spawn('C:/Program Files/Google/Chrome/Application/chrome.exe',['--headless=new','--disable-gpu','--disable-background-timer-throttling','--disable-renderer-backgrounding','--no-first-run','--no-default-browser-check','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{windowsHide:true,stdio:'ignore'});
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{
+let port;for(let i=0;i<80;i++){try{port=fs.readFileSync(path.join(profile,'DevToolsActivePort'),'utf8').split('\n')[0];break}catch{}await pause(100)}assert.ok(port,'Headless browser startup');
+const target=(await(await fetch('http://127.0.0.1:'+port+'/json/list')).json()).find(x=>x.type==='page');const ws=new WebSocket(target.webSocketDebuggerUrl);await new Promise((r,j)=>{ws.addEventListener('open',r,{once:true});ws.addEventListener('error',j,{once:true})});
+let seq=0;const pending=new Map();ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(pending.has(m.id)){const {resolve,reject}=pending.get(m.id);pending.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result)}});
+function send(method,params={}){return new Promise((resolve,reject)=>{const id=++seq;const timeout=setTimeout(()=>reject(Error('CDP timeout: '+method)),15000);pending.set(id,{resolve:r=>{clearTimeout(timeout);resolve(r)},reject:e=>{clearTimeout(timeout);reject(e)}});ws.send(JSON.stringify({id,method,params}))})}
+async function evaljs(expression){const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value}
+async function wait(expression){for(let i=0;i<70;i++){if(await evaljs('Boolean('+expression+')'))return;await pause(100)}throw Error('Timeout: '+expression)}
+await send('Page.enable');await send('Runtime.enable');await send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+
+
+
+
+
+
+
+await send('Emulation.setFocusEmulationEnabled',{enabled:true});const base=process.env.BILLING_UI_BASE||'http://localhost:3192';const errors=[],requests=[];await send('Network.enable');ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails);if(m.method==='Network.requestWillBeSent')requests.push({url:m.params.request.url,method:m.params.request.method,time:Date.now()})});
+await send('Page.addScriptToEvaluateOnNewDocument',{source:`const native=window.fetch;window.fetch=(...args)=>{if(args[1]?.method&&!['GET','HEAD'].includes(args[1].method.toUpperCase()))throw Error('Read only');return native(...args)}`});
+await send('Page.navigate',{url:base+'/receiving-orders'});await wait('document.querySelector("table tbody tr a")');await pause(300);
+assert.equal(await evaljs('document.querySelector(".app-shell").dataset.menuExpanded'),'false');
+await evaljs('[...document.querySelectorAll(".nav-section-toggle")].find(b=>b.getAttribute("aria-label")==="Справочники").click()');await pause(300);const start=Date.now();await evaljs('[...document.querySelectorAll(".nav-entry a")].find(a=>a.pathname==="/containers").focus()');await pause(500);const preloaded=requests.filter(r=>r.time>=start);assert.ok(preloaded.some(r=>/ContainerRegistryPage.*\.js/.test(r.url)),'Module loaded on focus');assert.equal(preloaded.filter(r=>r.url.includes('/api/')).length,0,'No API reads on focus');await evaljs('[...document.querySelectorAll(".nav-entry a")].find(a=>a.pathname==="/containers").click()');await wait('document.querySelector("main h1")?.textContent==="Справочник КТК"&&document.querySelectorAll("tbody tr").length>2');await pause(300);assert.equal(await evaljs('document.querySelector(".app-shell").dataset.menuExpanded'),'false');assert.equal(await evaljs('document.querySelector(".nav-section-toggle.highlighted").getAttribute("aria-label")'),'Справочники');
+const layouts=[];await send('Page.navigate',{url:base+'/ui-kit'});await wait('document.querySelector("table.responsive-table")');for(const width of [1440,1024,640,360,320]){await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});await pause(300);const rows=await evaljs('[...document.querySelectorAll("table.responsive-table")].map(t=>{const p=t.parentElement;p.scrollLeft=100000;const scroll=p.scrollLeft;p.scrollLeft=0;return{columns:t.tHead.rows[0].cells.length,min:parseFloat(t.style.getPropertyValue("--responsive-table-min-width")),client:p.clientWidth,scroll}})');assert.ok(rows.every(t=>t.columns>1));assert.ok(rows.filter(t=>t.client>t.min+1).every(t=>t.scroll===0));layouts.push({width,rows});}
+await send('Page.navigate',{url:base+'/comprehensive-service-orders/7c961843-da07-4120-a839-d85e925f206d'});await wait('document.getElementById("service-tab-charges")');await send('Emulation.setDeviceMetricsOverride',{width:1920,height:1100,deviceScaleFactor:1,mobile:false});await evaljs('document.documentElement.style.zoom=0.9');await pause(350);for(const tab of ['receiving','charges']){await evaljs('document.getElementById('+JSON.stringify('service-tab-'+tab)+').click()');await pause(300);fs.writeFileSync(path.join(dir,'../database/transport-nav-regression-'+tab+'.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'))}
+
+await evaljs(`(()=>{const frame=document.createElement('div');frame.id='geometry-regression';frame.style.cssText='width:500px;max-width:100%';frame.innerHTML='<table><thead><tr><th style="width:100px">A</th><th style="width:100px">B</th></tr></thead><tbody><tr><td>A</td><td>B</td></tr></tbody></table>';document.querySelector('main').append(frame)})()`);await pause(100);
+assert.equal(await evaljs('document.querySelector("#geometry-regression table").classList.contains("responsive-table")'),true);
+assert.equal(await evaljs('document.querySelector("#geometry-regression").hasAttribute("tabindex")'),false);
+await evaljs(`document.querySelector('#geometry-regression thead tr').insertAdjacentHTML('beforeend','<th style="width:400px">Extra</th>')`);await pause(100);
+assert.equal(await evaljs('document.querySelector("#geometry-regression").tabIndex'),0,'Added column updates keyboard scrolling without frame resize');
+await evaljs('document.querySelector("#geometry-regression th:last-child").remove()');await pause(100);
+assert.equal(await evaljs('document.querySelector("#geometry-regression").hasAttribute("tabindex")'),false,'Removed column clears keyboard scroll');
+await evaljs('document.querySelector("#geometry-regression").hidden=true');await pause(100);await evaljs('document.querySelector("#geometry-regression").style.width="100px";document.querySelector("#geometry-regression").hidden=false');await pause(100);
+assert.equal(await evaljs('document.querySelector("#geometry-regression").tabIndex'),0,'Hidden table retains geometry and scrolls when shown');
+await evaljs('document.querySelector("#geometry-regression").remove()');
+
+assert.deepEqual(errors,[]);assert.ok(requests.filter(r=>r.url.includes('/api/')).every(r=>['GET','HEAD'].includes(r.method)));fs.writeFileSync(path.join(dir,'../database/transport-nav-regression.json'),JSON.stringify({base,preloaded,layouts,errors},null,2));console.log('PASS dynamic columns/hidden table keyboard access, preload without API reads, menu collapse/highlight, ui-kit on5widths, no JS errors or writes');ws.close();chrome.kill();
+})().catch(e=>{console.error(e);chrome.kill();process.exitCode=1});

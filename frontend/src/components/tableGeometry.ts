@@ -8,3 +8,14 @@ export function tableGeometry(available: number, columns: TableColumn[], minimum
   const spare = width - natural
   return { width, columns: columns.map(column => column.width + (!column.fixed && flexible ? spare * column.width / flexible : 0)) }
 }
+
+/** Let CSS resolve the frame's fractional width instead of rounding clientWidth. */
+export function responsiveColumnGeometry(columns: TableColumn[], minimum = 0) {
+  const flexible = columns.filter(column => !column.fixed).reduce((sum, column) => sum + column.width, 0)
+  return {
+    minimum: tableGeometry(0, columns, minimum).width,
+    columns: columns.map(column => column.fixed || !flexible
+      ? column.width + 'px'
+      : (column.width / flexible * 100) + '%'),
+  }
+}

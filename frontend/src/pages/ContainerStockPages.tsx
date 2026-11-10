@@ -1,7 +1,8 @@
+import { TableReveal } from '../components/TableReveal'
 import { Notification } from '../components/Notification'
 import { ContainerStatusBadge } from '../components/ContainerStatusBadge'
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import { getContainerStock, getOwnerHistory } from '../api'
 import { historyOrderPath, type OwnerHistory, type StockOwner } from '../containerStock'
 import { containerTypeLabel, type PagedResponse } from '../domain'
@@ -19,11 +20,11 @@ export function ContainerStockPage() {
     <div className="page-header"><h1>Остатки и собственники КТК</h1></div>
     <p className="composition-hint">В физических остатках учитываются КТК со статусами «В остатках» и «Ожидает вывоза». Ожидаемые поставки и КТК вне остатков показаны отдельно по статусу.</p>
     {error && <Notification kind="error">{error}</Notification>}
-    <div className="table-card"><div className="table-wrap"><table><thead><tr><th>Номер КТК</th><th>Тип</th><th>Собственник</th><th>Состояние</th><th>История</th></tr></thead><tbody>
+    <TableReveal loading={!data && !error}><div className="table-wrap"><table><thead><tr><th>Номер КТК</th><th>Тип</th><th>Собственник</th><th>Состояние</th><th>История</th></tr></thead><tbody>
       {!data && !error && <tr><td colSpan={5}>Загружаем остатки…</td></tr>}
       {data?.items.length === 0 && <tr><td colSpan={5}>КТК не найдены. Для начала учёта подтвердите поставку и завершите разгрузку.</td></tr>}
       {data?.items.map(row => <tr key={row.id}><td>{row.containerName}</td><td>{containerTypeLabel(row.containerType as Parameters<typeof containerTypeLabel>[0])}</td><td>{row.clientName}</td><td><ContainerStatusBadge status={row.status} /></td><td><Link to={'/container-owners/' + row.containerId + '/history'}>История</Link></td></tr>)}
-    </tbody></table></div>{data && data.totalPages > 1 && <div className="pagination"><button disabled={page === 0} onClick={() => { setPage(page - 1); setData(null) }}>Назад</button><span>{page + 1} / {data.totalPages}</span><button disabled={page + 1 >= data.totalPages} onClick={() => { setPage(page + 1); setData(null) }}>Далее</button></div>}</div>
+    </tbody></table></div>{data && data.totalPages > 1 && <div className="pagination"><button disabled={page === 0} onClick={() => { setPage(page - 1); setData(null) }}>Назад</button><span>{page + 1} / {data.totalPages}</span><button disabled={page + 1 >= data.totalPages} onClick={() => { setPage(page + 1); setData(null) }}>Далее</button></div>}</TableReveal>
   </section>
 }
 

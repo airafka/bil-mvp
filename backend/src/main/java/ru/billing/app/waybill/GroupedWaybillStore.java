@@ -158,12 +158,7 @@ public class GroupedWaybillStore {
         ContainerIndex containers = loadContainers(batchFilter);
         Map<UUID, List<WaybillCarriageSummary>> carriages = loadCarriages(batchFilter, containers.byCarriage());
         jdbcTemplate.query(
-                "select w.id, w.number, w.departure_station, w.destination_station, w.payer, b.created_at, b.shipment_type, b.status, "
-                        + "(select count(*) from waybill_railway_carriage wrc where wrc.waybill_id = w.id) "
-                        + "as railway_carriage_count, "
-                        + "(select count(*) from waybill_container_details wc "
-                        + "join waybill_railway_carriage wrc on wrc.id = wc.waybill_railway_carriage_id "
-                        + "where wrc.waybill_id = w.id) as container_count "
+                "select w.id, w.number, w.departure_station, w.destination_station, w.payer, b.created_at, b.shipment_type, b.status "
                         + "from waybill_details w join waybill b on b.id=w.id where "
                         + batchFilter.sql() + " order by w.number, w.id",
                 resultSet -> {
@@ -175,8 +170,8 @@ public class GroupedWaybillStore {
                     result.computeIfAbsent(key, ignored -> new ArrayList<>()).add(new WaybillLink(
                             resultSet.getObject("id", UUID.class),
                             resultSet.getString("number"),
-                            resultSet.getLong("railway_carriage_count"),
-                            resultSet.getLong("container_count"),
+                            carriages.getOrDefault(resultSet.getObject("id", UUID.class), List.of()).size(),
+                            containers.byWaybill().getOrDefault(resultSet.getObject("id", UUID.class), List.of()).size(),
                             productsByWaybill.getOrDefault(resultSet.getObject("id", UUID.class), List.of()),
                             containers.byWaybill().getOrDefault(resultSet.getObject("id", UUID.class), List.of()),
                             carriages.getOrDefault(resultSet.getObject("id", UUID.class), List.of()),
@@ -234,8 +229,6 @@ public class GroupedWaybillStore {
                        wc.seal_numbers, wc.seal_type_id, wc.seal_type_name
                 from waybill_container_details wc
                 join container c on c.id = wc.container_id
-                  left join client owner on owner.id = wc.owner_container_id
-                  left join seal_type st on st.id = wc.seal_type_id
                 join waybill_railway_carriage rc on rc.id = wc.waybill_railway_carriage_id
                 join waybill_details w on w.id = rc.waybill_id
                 left join lateral (select * from waybill_product_details wp where wp.waybill_id = w.id order by wp.etsng_code_id, wp.id limit 1) p on wc.net_weight > 0

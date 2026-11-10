@@ -1,3 +1,4 @@
+import { TableReveal } from '../components/TableReveal'
 import { Notification } from '../components/Notification'
 import { RowActions } from '../components/RowActions'
 import { UiInput } from '../components/FormControls'
@@ -21,11 +22,11 @@ export function ContainerRegistryPage() {
   return <section className="registry-page">
     <div className="page-header"><h1>Справочник КТК</h1></div>
     {error && <Notification kind="error">{error}</Notification>}
-    <div className="table-card"><div className="table-wrap"><table><thead><tr><th className="registry-index" scope="col">№</th><th>Номер КТК</th><th>Типоразмер</th><th>Масса тары, кг</th><th>Грузоподъёмность, кг</th><th className="registry-actions" scope="col" aria-label="Действия" /></tr></thead><tbody>
+    <TableReveal loading={loading}><div className="table-wrap"><table><thead><tr><th className="registry-index" scope="col">№</th><th>Номер КТК</th><th>Типоразмер</th><th>Масса тары, кг</th><th>Грузоподъёмность, кг</th><th className="registry-actions" scope="col" aria-label="Действия" /></tr></thead><tbody>
       {loading && <tr><td colSpan={6} className="table-message">Загружаем КТК…</td></tr>}
       {!loading && rows.length === 0 && <tr><td colSpan={6} className="table-message">КТК не найдены</td></tr>}
       {!loading && rows.map((row, index) => <ContainerRow key={row.id} row={row} index={index} />)}
-    </tbody></table></div></div>
+    </tbody></table></div></TableReveal>
   </section>
 }
 function ContainerRow({ row, index }: { row: ReferenceOption; index: number }) {

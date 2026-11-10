@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 import { generateWaybill } from '../api'
 import { Notification } from '../components/Notification'
 import { UiInput } from '../components/FormControls'
@@ -19,7 +19,7 @@ export function WaybillGeneratePage() {
   return <section className="form-page"><form onSubmit={submit}>
     <div className="page-header form-page-header"><h1>Автоматическое создание накладной</h1><div className="header-actions"><Link className="close-button" to="/waybills" aria-label="Закрыть">×</Link><button type="submit" className="primary-button" disabled={!valid||busy}>{busy?'Создаём…':'Создать накладную'}</button></div></div>
     {error&&<Notification kind="error">{error}</Notification>}
-    <div className="form-workspace"><div className="form-section"><h2>Круглое поле → Владивосток</h2><p>Плательщик: ФИТ</p>
+    <div className="form-workspace"><div className="form-section"><h2>Владивосток → Круглое поле</h2><p>Плательщик: ФИТ</p>
       <div className="form-fields-grid"><label className="field"><span>Количество КТК стандарта 20</span><UiInput type="number" min={0} max={200} step={1} required value={twenty} disabled={busy} onChange={e=>setTwenty(e.target.value)}/></label><label className="field"><span>Количество КТК стандарта 40</span><UiInput type="number" min={0} max={200} step={1} required value={forty} disabled={busy} onChange={e=>setForty(e.target.value)}/></label></div>
       <p>Одна накладная, новые КТК. От 1 до 200 контейнеров за один раз.</p>
       <p>Демонстрационный груз: Пшеница · Неопасный груз. Нетто: 10 000 кг для КТК 20 и 20 000 кг для КТК 40. Тара: 3 200 кг.</p>

@@ -1,6 +1,7 @@
+import { preloadNavigation } from '../navigationPreload'
 import { useResponsiveTables } from './useResponsiveTables'
-import { useEffect, useState, type ReactNode } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
+import { Link, NavLink, useLocation } from 'react-router'
 
 const navigationGroups = [
   { title: 'Справочники', icon: 'list', items: [
@@ -30,26 +31,37 @@ const navigation = navigationGroups.flatMap(group => group.items)
 export function AppLayout({ children }: { children: ReactNode }) {
   useResponsiveTables()
   const { pathname } = useLocation()
-  const [expanded, setExpanded] = useState(() => { try { return localStorage.getItem('billing-menu') === 'expanded' } catch { return false } })
-  useEffect(() => { try { localStorage.setItem('billing-menu', expanded ? 'expanded' : 'collapsed') } catch { /* Storage may be unavailable. */ } }, [expanded])
+  const [expanded, setExpanded] = useState(false)
+  const [menuClosing, setMenuClosing] = useState(false)
+  const collapseForNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+    setMenuClosing(expanded && !window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    setExpanded(false)
+  }
+  useEffect(() => {
+    if (!menuClosing) return
+    // Also settle if a resize or reduced-motion change cancels the transition.
+    const timer = window.setTimeout(() => setMenuClosing(false), 350)
+    return () => window.clearTimeout(timer)
+  }, [menuClosing])
   useEffect(() => { document.title = (navigation.find(item => pathname.startsWith(item.path))?.title ?? 'Биллинг') + ' · Биллинг 2.0'; window.scrollTo(0, 0) }, [pathname])
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   const toggleGroup = (title: string) => {
+    setMenuClosing(false)
     if (!expanded) setExpanded(true)
     setOpenGroups(current => {
       const next = window.matchMedia('(max-width: 640px)').matches ? new Set<string>(current.has(title) ? [title] : []) : new Set(current)
-      if (next.has(title)) next.delete(title); else next.add(title)
+      if (expanded && next.has(title)) next.delete(title); else next.add(title)
       return next
     })
   }
   const current = navigation.find(item => pathname.startsWith(item.path))
   const isCreating = pathname.endsWith('/new') || pathname.endsWith('/create') || pathname === '/waybills/generate'
   const isViewing = !isCreating && pathname.split('/').filter(Boolean).length > 1
-  return <div className="app-shell" data-menu-expanded={expanded}>
+  return <div className="app-shell" data-menu-expanded={expanded} data-menu-closing={menuClosing}>
     <a className="skip-link" href="#main-content">Перейти к содержимому</a>
     <aside className="sidebar">
-      <Link className="brand-mark" to="/" aria-label="Биллинг 2.0"><img src="/icons/figma/logo.svg" alt="" /></Link>
-      <button type="button" className="menu-toggle" aria-label={expanded ? 'Свернуть меню' : 'Развернуть меню'} aria-expanded={expanded} aria-controls="main-navigation" onClick={() => setExpanded(value => !value)}>{expanded ? '‹' : '›'}</button>
+      <Link className="brand-mark" to="/" onClick={collapseForNavigation} aria-label="Биллинг 2.0"><img src="/icons/figma/logo.svg" alt="" /></Link>
       <nav id="main-navigation" className="main-nav navigation-tree" aria-label="Основная навигация">
         {navigationGroups.map((group, index) => {
           const open = expanded && openGroups.has(group.title)
@@ -62,9 +74,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <svg className="nav-section-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button> : <div className="nav-section-label" title={group.title}><span className="nav-section-icon" aria-hidden="true" style={{ maskImage: `url(/icons/figma/${group.icon}.svg)` }} /><span className="nav-label">{group.title}</span></div>}
             </h2>
-            {group.items.length > 0 && <div className="nav-children" id={`nav-children-${index}`} hidden={!open}>
-              {group.items.map(item => <div className="nav-entry" key={item.path}><NavLink to={item.path} className={({ isActive }) => isActive ? 'active' : ''} title={item.title} aria-label={item.title}><span className="nav-label">{item.title}</span></NavLink></div>)}
-            </div>}
+            {group.items.length > 0 && <div className="nav-children" id={`nav-children-${index}`} data-open={open} inert={!open} aria-hidden={!open}><div className="nav-children-inner">
+              {group.items.map(item => <div className="nav-entry" key={item.path}><NavLink to={item.path} onPointerEnter={() => preloadNavigation(item.path)} onFocus={() => preloadNavigation(item.path)} onPointerDown={() => preloadNavigation(item.path)} onClick={collapseForNavigation} className={({ isActive }) => isActive ? 'active' : ''} title={item.title} aria-label={item.title}><span className="nav-label">{item.title}</span></NavLink></div>)}
+            </div></div>}
           </section>
         })}
       </nav>
@@ -72,7 +84,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <div className="sidebar-footer" title="Локальная система"><span className="online-dot" /><span className="nav-label">Локальная система</span></div>
       </div>
     </aside>
-    <div className="workspace">
+    <div className="workspace" onTransitionEnd={event => {
+      if (event.target === event.currentTarget && (event.propertyName === 'width' || event.propertyName === 'margin-left')) setMenuClosing(false)
+    }}>
       <header className="topbar">
         <nav className="breadcrumbs" aria-label="Навигационная цепочка"><Link to="/">Главная</Link><span aria-hidden="true">—</span><Link to={current?.path ?? '/'}>{current?.title ?? 'Биллинг'}</Link>{(isCreating || isViewing) && <><span aria-hidden="true">—</span><strong>{isCreating ? 'Создание' : 'Просмотр'}</strong></>}</nav>
         <div className="user-badge" title="Локальный пользователь"><img src="/icons/figma/avatar.svg" alt="Локальный пользователь" /></div>

@@ -1,0 +1,25 @@
+// Mutations only on the prepared return-progress test database.
+const fs=require('fs'),assert=require('node:assert/strict'),{execFileSync}=require('child_process');
+const session=JSON.parse(fs.readFileSync('database/return-progress-20261109-session.json','utf8').replace(/^\uFEFF/,''));assert.match(session.database,/^billing_next_return_progress_\d{8}_\d{6}$/);
+const docker='C:/Users/Green-0482/AppData/Local/Programs/DockerDesktop/resources/bin/docker.exe';const info=JSON.parse(execFileSync(docker,['inspect',session.backend],{windowsHide:true,encoding:'utf8'}))[0];assert.ok(info.Config.Env.includes('DB_NAME='+session.database));assert.ok(info.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort==='8192'));
+const sql=q=>execFileSync(docker,['exec','billing-next-db-1','psql','-U','billing','-d',session.database,'-At','-v','ON_ERROR_STOP=1','-c',q],{windowsHide:true,encoding:'utf8'}).trim();
+async function api(p,body,status=200){const r=await fetch('http://localhost:8192/api'+p,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);const data=await r.json();assert.equal(r.status,status,JSON.stringify(data));return data;}
+const get=id=>api('/comprehensive-service-orders/'+id);
+const counter=(d,created,completed,missing)=>{assert.equal(d.progress.returnCreated,created);assert.equal(d.progress.returnCompleted,completed);assert.equal(d.progress.returnOrderCount,created);assert.equal(d.progress.returnOrdersCompleted,completed);assert.equal(d.progress.returnMissing,missing);};
+(async()=>{
+const service=(await api('/comprehensive-service-orders/available-services'))[0];const pair=JSON.parse(sql("select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where active and complex_service_id='"+service.id+"' limit 1)t"));
+const other=(await api('/shipping-orders/return-contracts')).find(c=>c.clientId!==pair.client_id);assert.ok(other,'Different client with active auto-return tariff');
+const create=async count=>{const bill=await api('/waybills/generate',{standard20:count-1,standard40:1},201);return api('/comprehensive-service-orders',{clientId:pair.client_id,contractId:pair.contract_id,complexServiceId:service.id,defaultContainerOwnerId:pair.client_id,waybillIds:[bill.id]},201)};
+const returns=(id,ids,own)=>api('/comprehensive-service-orders/'+id+'/returns',{containerIds:ids,useCurrentClient:own,...(!own?{clientId:other.clientId,contractId:other.contractId}:{})},201);
+const complete=async(id,section)=>{await api('/comprehensive-service-orders/'+id+'/prepare-transport',{section});await api('/comprehensive-service-orders/'+id+'/complete-section',{section,action:'CONFIRM_ROUTES'});return api('/comprehensive-service-orders/'+id+'/complete-section',{section,action:'COMPLETE_ORDERS'});};
+const mixed=await create(3),id=mixed.order.id,ids=mixed.receivingOrder.containers.map(c=>c.containerId);counter(mixed,0,0,3);
+await returns(id,[ids[0]],true);counter(await get(id),1,0,2);
+const foreign=await returns(id,[ids[1]],false);counter(await get(id),1,0,1);counter(await get(foreign.serviceOrderId),1,0,0);
+await complete(id,'INITIAL_RECEIVING');await complete(id,'SHIPPING');await complete(foreign.serviceOrderId,'RETURN_RECEIVING');
+counter(await get(id),1,0,1);counter(await get(foreign.serviceOrderId),1,1,0);
+await complete(id,'RETURN_RECEIVING');const done=await get(id);counter(done,1,1,1);assert.equal(done.progress.total,3);assert.equal(done.progress.accepted,3);assert.equal(done.progress.shippingCompleted,3);assert.notEqual(done.order.status,'COMPLETED');
+const allForeign=await create(2);const separate=await returns(allForeign.order.id,allForeign.receivingOrder.containers.map(c=>c.containerId),false);counter(await get(allForeign.order.id),0,0,0);counter(await get(separate.serviceOrderId),2,0,0);
+const list=await api('/comprehensive-service-orders?size=100');const comparisons=[];
+for(const row of list.items){const d=await get(row.id);const own=d.returnOrders.filter(r=>r.comprehensiveServiceOrderId===row.id);const ownIds=new Set(own.flatMap(r=>r.containerIds));const completed=new Set(own.filter(r=>r.status==='COMPLETED').flatMap(r=>r.containerIds));assert.equal(d.progress.returnCreated,ownIds.size);assert.equal(d.progress.returnCompleted,completed.size);assert.equal(d.progress.returnOrderCount,own.length);assert.equal(d.progress.returnOrdersCompleted,own.filter(r=>r.status==='COMPLETED').length);comparisons.push({id:row.id,own:ownIds.size,completed:completed.size,missing:d.progress.returnMissing});}
+fs.writeFileSync('database/return-progress-20261109-check.json',JSON.stringify({database:session.database,mixed:id,foreign:foreign.serviceOrderId,allForeign:allForeign.order.id,allForeignTarget:separate.serviceOrderId,comparisons,checks:['unassigned vs own vs foreign','foreign completion excluded from source','own completion counted','initial/shipping totals preserved','all foreign means 0 of 0 and no missing','auto service counts own returns']},null,2));console.log('PASS return counters, full lifecycle, all-foreign scenario and',comparisons.length,'services');
+})().catch(e=>{console.error(e);process.exitCode=1});

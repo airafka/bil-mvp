@@ -5,8 +5,8 @@ import { changeWaybillStation, waybillSelectionChoices, type WaybillSelectionOpt
 import { UiSelect } from './FormControls'
 import { Notification } from './Notification'
 
-export function WaybillFilterFields({ value, onChange, disabled = false }: {
-  value: GroupedWaybillFilter; onChange: (value: GroupedWaybillFilter) => void; disabled?: boolean
+export function WaybillFilterFields({ value, onChange, disabled = false, title = 'Отбор накладных ЭТРАН' }: {
+  value: GroupedWaybillFilter; onChange: (value: GroupedWaybillFilter) => void; disabled?: boolean; title?: string
 }) {
   const [options, setOptions] = useState<WaybillSelectionOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -22,7 +22,7 @@ export function WaybillFilterFields({ value, onChange, disabled = false }: {
   const choices = waybillSelectionChoices(options, value)
   const busy = disabled || loading || !!error
   return <>
-    <div className="form-section-heading ui-section-divider"><h2>Отбор накладных ЭТРАН</h2></div>
+    <div className="form-section-heading ui-section-divider"><h2>{title}</h2></div>
     {error && <Notification kind="error">{error} <button type="button" className="secondary-button" disabled={disabled} onClick={() => { setError(''); setLoading(true); setAttempt(current => current + 1) }}>Повторить</button></Notification>}
     <div className="form-fields-grid waybill-filter-fields">
       <div className="form-fields-column">

@@ -1,5 +1,5 @@
 import { catalogPath } from '../transportCatalogs'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { type TransportType, transportTypeLabel } from '../domain'
 import type { RouteSummary, RouteType } from '../routes'
 import { routeIntervalLabel, routeTypeLabel } from '../routes'

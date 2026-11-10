@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { tableGeometry } from './tableGeometry'
+import { tableGeometry, responsiveColumnGeometry } from './tableGeometry'
 
 describe('table geometry', () => {
   const columns = [{ width: 44, fixed: true }, { width: 140, fixed: false }, { width: 210, fixed: false }]
@@ -14,5 +14,20 @@ describe('table geometry', () => {
     tableGeometry(1000, columns, 800)
     expect(tableGeometry(600, columns, 800)).toEqual(before)
     expect(before.columns.reduce((sum, value) => sum + value, 0)).toBe(800)
+  })
+})
+
+
+describe('browser-resolved column widths', () => {
+  it('keeps selection fixed and distributes the fractional remaining width proportionally', () => {
+    expect(responsiveColumnGeometry([{ width: 44, fixed: true }, { width: 100, fixed: false }, { width: 300, fixed: false }]))
+      .toEqual({ minimum: 444, columns: ['44px', '25%', '75%'] })
+  })
+  it('keeps a readable minimum without measuring the current viewport', () => {
+    expect(responsiveColumnGeometry([{ width: 120, fixed: false }, { width: 120, fixed: false }], 800))
+      .toEqual({ minimum: 800, columns: ['50%', '50%'] })
+  })
+  it('handles fixed-only tables without division by zero', () => {
+    expect(responsiveColumnGeometry([{ width: 44, fixed: true }])).toEqual({ minimum: 44, columns: ['44px'] })
   })
 })

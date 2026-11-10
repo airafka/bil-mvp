@@ -1,3 +1,4 @@
+import { updateResponsiveTable } from '../components/useResponsiveTables'
 import { SidebarActions } from '../components/SidebarActions'
 import { ServiceReturnAction } from '../components/ServiceReturnAction'
 import type { CreatedReturns } from '../api'
@@ -7,9 +8,9 @@ import { Notification } from '../components/Notification'
 import { OrderRouteCell } from '../components/OrderRouteCell'
 import { ServiceProgressCards } from '../components/ServiceProgressCards'
 import { StatusBadge } from '../components/StatusBadge'
-import { BillingCharges } from './BillingChargesPage'
-import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { BillingCharges, BillingChargeTotals } from './BillingChargesPage'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router'
 import { completeServiceSection, prepareServiceTransport, createServiceShippingOrder, getComprehensiveServiceOrder, updateServiceTransportMetadata, getReferenceOptions } from '../api'
 import { UiInput, UiSelect } from '../components/FormControls'
 import type { ComprehensiveServiceOrderDetails, ServiceTransportMetadataChange } from '../comprehensiveServiceOrder'
@@ -18,6 +19,11 @@ import type { ReferenceOption } from '../domain'
 function cargoLabel(value: string) {
   const match = value.match(/^(.+?)\s+[—–-]\s+(.+)$/)
   return match ? `${match[2]} (${match[1]})` : value
+}
+
+// Both auto tabs use the shipping table as their shared column contract.
+function ServiceAutoOrderColumns() {
+  return <colgroup>{[44, 140, 190, 220, 260, 170, 120].map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
 }
 
 const serviceTabs = [
@@ -59,9 +65,9 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
     finally{preparationLock.current=false;setPreparing(false)}
   }
   const [activeTab, setActiveTab] = useState<ServiceTab>('main')
-  const [chargesTotalsTarget, setChargesTotalsTarget] = useState<HTMLDivElement | null>(null)
   const tabButtons = useRef<(HTMLButtonElement | null)[]>([])
   const [data, setData] = useState<ComprehensiveServiceOrderDetails | null>(null)
+  const transportOrders = useMemo(() => new Map(data?.transportOrders.map(order => [order.id, order])), [data?.transportOrders])
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [createdReturn, setCreatedReturns] = useState<CreatedReturns | null>(null)
@@ -145,9 +151,16 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
     finally { setCreatingShipping(false) }
   }
 
+  useLayoutEffect(() => {
+    document.getElementById('service-panel-' + activeTab)?.querySelectorAll<HTMLTableElement>('table').forEach(updateResponsiveTable)
+  }, [activeTab, data])
+
   const isAutoReturn = data?.order.workflow === 'AUTO_RETURN'
-  const visibleServiceTabs = serviceTabs.filter(tab => !isAutoReturn || ['main', 'returns', 'charges'].includes(tab.id))
   const ownReturns = data?.returnOrders.filter(item => item.comprehensiveServiceOrderId === comprehensiveServiceOrderId) ?? []
+  const visibleServiceTabs = serviceTabs.filter(tab =>
+    (!isAutoReturn || ['main', 'returns', 'charges'].includes(tab.id))
+    && (tab.id !== 'returns' || ownReturns.length > 0),
+  )
   const removals = data?.shippingOrders ?? []
   const receiving = data?.receivingOrder
   const waybills = receiving?.waybills ?? []
@@ -158,7 +171,7 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
 
   return <section className="form-page service-dashboard service-table-page">
     <header className="service-header"><div className="view-title"><h1>Заявка на услугу{data ? ` №${data.order.code}` : ''}</h1></div><div className="service-header-actions">{editingMetadata?<><button type="button" className="secondary-button" disabled={metadataBusy} onClick={()=>{setEditingMetadata(false);setMetadataDraft({});setMetadataError('')}}>Отмена</button><button type="button" className="primary-button" disabled={metadataBusy} onClick={saveMetadata}>{metadataBusy?'Сохраняем…':'Сохранить'}</button></>:((!isAutoReturn&&data?.receivingOrder.status==='DRAFT')||data?.shippingOrders.some(o=>o.status==='DRAFT')||ownReturns.some(o=>o.status==='DRAFT'))&&<button type="button" className="secondary-button icon-button" aria-label="Редактировать" title="Редактировать" disabled={preparing||metadataBusy||creatingShipping} onClick={startMetadataEditing}><ActionIcon name="edit"/></button>}<Link className="close-button" to="/comprehensive-service-orders" aria-label="Закрыть" title="Закрыть">×</Link></div></header>
-    {createdReturn && <Notification kind="success">Созданы возвратные заявки: {createdReturn.returns.length}. {!createdReturn.createdService && <button type="button" className="text-action-button" onClick={() => setActiveTab('returns')}>Показать возвраты</button>}{createdReturn.createdService && <> Заявка на автоуслугу <Link to={`/comprehensive-service-orders/${createdReturn.serviceOrderId}`}>№{createdReturn.serviceOrderCode}</Link>.</>}</Notification>}
+    {createdReturn && <Notification kind="success">Созданы возвратные заявки: {createdReturn.returns.length}. {!createdReturn.createdService && ownReturns.length > 0 && <button type="button" className="text-action-button" onClick={() => setActiveTab('returns')}>Показать возвраты</button>}{createdReturn.createdService && <> Заявка на автоуслугу <Link to={`/comprehensive-service-orders/${createdReturn.serviceOrderId}`}>№{createdReturn.serviceOrderCode}</Link>.</>}</Notification>}
     {preparationNotice && <Notification kind="success">{preparationNotice}</Notification>}
     {metadataError && <Notification kind="error">{metadataError}</Notification>}
     {error && <Notification kind="error">{error}<button className="secondary-button" onClick={() => { setError(''); setAttempt(value => value + 1) }}>Попробовать снова</button></Notification>}
@@ -190,10 +203,12 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
           }}
         >{tab.label}</button>)}
       </div>
-      {activeTab === 'charges' && <div className="service-tab-charge-totals" ref={setChargesTotalsTarget} />}
+      <div className="service-tab-context" data-charges={activeTab === 'charges'}>
+      <div className="service-tab-charge-totals" aria-hidden={activeTab !== 'charges'}><BillingChargeTotals totalWithoutVat={data.totalWithoutVat} totalWithVat={data.totalWithVat} /></div>
       {(activeTab === 'receiving' || activeTab === 'shipping' || activeTab === 'returns') && <div className="service-tab-actions service-section-actions">{activeTab === 'shipping' && <ServiceReturnAction service={data.order} disabled={editingMetadata || preparing || metadataBusy || creatingShipping || !removals.length} onCreated={result => void returnCreated(result)} onError={setMetadataError} />}
         <SidebarActions><button type="button" className="secondary-button icon-button" aria-label={sectionActionLabel} title={sectionActionLabel} disabled={preparing||editingMetadata||metadataBusy||creatingShipping||!(activeTab==='receiving'?receiving.status!=='COMPLETED':activeTab==='shipping'?removals.some(o=>o.status!=='COMPLETED'):ownReturns.some(o=>o.status!=='COMPLETED'))} onClick={completeSection}><ActionIcon name="complete" /></button>
         <button type="button" className="secondary-button icon-button" aria-label="Заполнить заявки и создать рейсы" title="Заполнить текущую дату и время, контрагентов и создать рейсы" disabled={preparing||editingMetadata||metadataBusy||creatingShipping||!(activeTab==='receiving'?receiving.status==='DRAFT':activeTab==='shipping'?removals.some(o=>o.status==='DRAFT'):ownReturns.some(o=>o.status==='DRAFT'))} onClick={prepareSection}><ActionIcon name="magic" /></button></SidebarActions></div>}
+      </div>
       </div>
       <div id="service-panel-main" role="tabpanel" aria-labelledby="service-tab-main" tabIndex={0} hidden={activeTab !== 'main'}>
       <section className="service-main-panel" aria-labelledby="service-main-title">
@@ -217,12 +232,12 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
 
       </div>
       <div id="service-panel-charges" role="tabpanel" aria-labelledby="service-tab-charges" tabIndex={0} hidden={activeTab !== 'charges'}>
-        {activeTab === 'charges' && <BillingCharges totalsTarget={chargesTotalsTarget} comprehensiveServiceOrderId={comprehensiveServiceOrderId} refreshKey={data.order.status+':'+routeRevision} />}
+        <BillingCharges active={activeTab === 'charges'} comprehensiveServiceOrderId={comprehensiveServiceOrderId} refreshKey={data.totalWithoutVat+':'+data.totalWithVat+':'+data.progress.returnCompleted} />
       </div>
       <div id="service-panel-receiving" role="tabpanel" aria-labelledby="service-tab-receiving" tabIndex={0} hidden={activeTab !== 'receiving'}>
       <section className="service-order-section" aria-label="Заявки на поставку - ЖД">
 
-        <div className="table-wrap service-compact-table service-receiving-table"><table className="service-metadata-table service-initial-metadata-table" data-responsive-min-width={1000}><colgroup><col style={{width:44}}/><col style={{width:140}}/><col style={{width:220}}/><col style={{width:260}}/><col style={{width:240}}/><col style={{width:170}}/><col style={{width:120}}/></colgroup>
+        <div className="table-wrap service-compact-table service-receiving-table"><table className="service-metadata-table service-initial-metadata-table" data-responsive-min-width={1000}><colgroup>{[44, 120, 180, 190, 180, 156, 130].map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
           <thead><tr><th scope="col" className="composition-index">№</th><th scope="col">Номер заявки</th><th scope="col">Дата и время поставки</th><th scope="col">Грузоотправитель</th><th scope="col">Груз</th><th scope="col">Рейс</th><th scope="col">Статус</th></tr></thead>
           <tbody><tr>
             <td className="composition-index">1</td><td><Link className="order-code" to={`/receiving-orders/${receiving.id}`}>{receiving.code}</Link></td>
@@ -231,7 +246,7 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
             <td>{cargo.length ? cargo.map(name => <span className="service-cargo-item" key={name}>{name}</span>) : '—'}</td>
 
 
-            <td><OrderRouteCell key={routeRevision} disabled={editingMetadata||preparing} id={receiving.id} kind="RECEIVING" /></td>
+            <td><OrderRouteCell key={routeRevision} disabled={editingMetadata||preparing} order={transportOrders.get(receiving.id)} /></td>
             <td><StatusBadge status={receiving.status} /></td>
           </tr></tbody>
         </table></div>
@@ -239,26 +254,26 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
       </div>
       <div id="service-panel-shipping" role="tabpanel" aria-labelledby="service-tab-shipping" tabIndex={0} hidden={activeTab !== 'shipping'}>
       <section className="service-order-section" aria-label="Заявки на вывоз - Авто">
-        <div className="table-wrap service-compact-table"><table className="service-metadata-table" data-responsive-min-width={1000}><colgroup><col style={{width:44}}/><col style={{width:140}}/><col style={{width:190}}/><col style={{width:220}}/><col style={{width:260}}/><col style={{width:170}}/><col style={{width:120}}/></colgroup>
+        <div className="table-wrap service-compact-table"><table className="service-metadata-table" data-responsive-min-width={1000}><ServiceAutoOrderColumns />
           <thead><tr><th scope="col" className="composition-index">№</th><th scope="col">Номер заявки</th><th scope="col">Номер КТК</th><th scope="col">Дата и время вывоза</th><th scope="col">Грузополучатель</th><th scope="col">Рейс</th><th scope="col">Статус</th></tr></thead>
           <tbody>{removals.map((order, index) => <tr key={order.id}><td className="composition-index">{index + 1}</td>
             <td><Link className="order-code" to={`/shipping-orders/${order.id}`}>{order.code}</Link></td>
             <td>{order.containerNames.map(name => <span className="service-cargo-item" key={name}>{name}</span>)}</td>
             {metadataCells('SHIPPING',order,order.consignee)}
-            <td><OrderRouteCell key={routeRevision} disabled={editingMetadata||preparing} id={order.id} kind="SHIPPING" /></td><td><StatusBadge status={order.status} /></td>
+            <td><OrderRouteCell key={routeRevision} disabled={editingMetadata||preparing} order={transportOrders.get(order.id)} /></td><td><StatusBadge status={order.status} /></td>
           </tr>)}</tbody>
         </table></div>
         {removals.length === 0 && <div className="service-section-empty">Заявок на вывоз пока нет</div>}
       </section>
 
       </div>
-      <div id="service-panel-returns" role="tabpanel" aria-labelledby="service-tab-returns" tabIndex={0} hidden={activeTab !== 'returns'}>
+      {ownReturns.length > 0 && <div id="service-panel-returns" role="tabpanel" aria-labelledby="service-tab-returns" tabIndex={0} hidden={activeTab !== 'returns'}>
       <section className="service-order-section" aria-label="Заявки на поставку - Авто">
 
-        {ownReturns.length ? <div className="table-wrap service-compact-table"><table className="service-metadata-table" data-responsive-min-width={1000}><colgroup><col style={{width:44}}/><col style={{width:130}}/><col style={{width:170}}/><col style={{width:220}}/><col style={{width:210}}/><col style={{width:160}}/><col style={{width:120}}/></colgroup><thead><tr><th scope="col" className="composition-index">№</th><th>Номер заявки</th><th>КТК</th><th>Дата и время поставки</th><th>Грузоотправитель</th><th>Рейс</th><th>Статус</th></tr></thead><tbody>{ownReturns.map((item, index) => <tr key={item.id}><td className="composition-index">{index + 1}</td><td><Link className="order-code" to={`/receiving-orders/${item.id}`}>{item.code}</Link></td><td>{item.containerNames.map(name => <span className="service-cargo-item" key={name}>{name}</span>)}</td>{metadataCells('RETURN_RECEIVING',item,item.consignor)}<td><OrderRouteCell key={routeRevision} disabled={editingMetadata||preparing||item.comprehensiveServiceOrderId!==comprehensiveServiceOrderId} id={item.id} kind="RECEIVING" /></td><td><StatusBadge status={item.status} /></td></tr>)}</tbody></table></div> : <div className="service-section-empty">Возвратных поставок пока нет</div>}
+        {ownReturns.length ? <div className="table-wrap service-compact-table"><table className="service-metadata-table" data-responsive-min-width={1000}><ServiceAutoOrderColumns /><thead><tr><th scope="col" className="composition-index">№</th><th>Номер заявки</th><th>Номер КТК</th><th>Дата и время поставки</th><th>Грузоотправитель</th><th>Рейс</th><th>Статус</th></tr></thead><tbody>{ownReturns.map((item, index) => <tr key={item.id}><td className="composition-index">{index + 1}</td><td><Link className="order-code" to={`/receiving-orders/${item.id}`}>{item.code}</Link></td><td>{item.containerNames.map(name => <span className="service-cargo-item" key={name}>{name}</span>)}</td>{metadataCells('RETURN_RECEIVING',item,item.consignor)}<td><OrderRouteCell key={routeRevision} disabled={editingMetadata||preparing||item.comprehensiveServiceOrderId!==comprehensiveServiceOrderId} order={transportOrders.get(item.id)} /></td><td><StatusBadge status={item.status} /></td></tr>)}</tbody></table></div> : <div className="service-section-empty">Возвратных поставок пока нет</div>}
 
       </section>
-      </div>
+      </div>}
     </div>
         {activeTab === 'shipping' && data.selectableContainers.length > 0 && <section className="form-workspace service-pending-containers service-pending-card" aria-label="КТК без заявки на вывоз">
           <div className="bulk-return-heading"><div className="service-pending-intro"><h3>КТК стандарта 20 без заявки на вывоз</h3><p>Выберите один или два КТК для одной машины.</p></div><button type="button" className="primary-button create-action-button" disabled={preparing || editingMetadata || creatingShipping || selectedContainerIds.length === 0 || data.order.status === 'COMPLETED'} onClick={createSelectedShippingOrder}>{creatingShipping ? 'Создаём…' : 'Создать заявку на вывоз'}</button></div>

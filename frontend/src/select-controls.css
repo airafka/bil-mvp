@@ -60,3 +60,6 @@
 @media (max-width: 640px) {
   .app-shell .service-order-main-grid > .form-fields-column:nth-child(2) > .field.horizontal-field { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Align all main left-column controls to the longest service title, with trailing space. */
+.app-shell .service-order-main-grid > .form-fields-column:first-child > .horizontal-field > :last-child { width: min(100%, 504px); }

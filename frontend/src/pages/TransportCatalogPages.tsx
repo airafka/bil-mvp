@@ -1,5 +1,6 @@
+import { TableReveal } from '../components/TableReveal'
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router'
 import { getTransportCatalog, getTransportCatalogEntry, saveTransportCatalogEntry, deleteTransportCatalogEntry } from '../api'
 import type { TransportCatalogEntry, TransportCatalogInput, TransportCatalogKind } from '../transportCatalogs'
 import { transportCatalogTitles, catalogPath, catalogDate } from '../transportCatalogs'
@@ -22,7 +23,7 @@ export function TransportCatalogRegistryPage({kind}:{kind:TransportCatalogKind})
  const columns=kind==='carriers'?4:7
  return <section className="registry-page"><div className="page-header"><h1>{transportCatalogTitles[kind]}</h1><Link className="primary-button create-action-button" to={catalogPath(kind)+'/new'}><ActionIcon name="plus"/> Создать</Link></div>
  {error&&<Notification kind="error">{error}</Notification>}
- <div className="table-card"><div className="table-wrap"><table><thead><tr><th className="registry-index">№</th><th>{nameLabel(kind)}</th>
+ <TableReveal loading={!rows && !error}><div className="table-wrap"><table><thead><tr><th className="registry-index">№</th><th>{nameLabel(kind)}</th>
  {kind==='drivers'&&<><th>Телефон</th><th>Доверенность</th><th>Действительна до</th></>}
  {kind==='vehicles'&&<><th>Страховка</th><th>Наличие прицепа</th><th>Номер прицепа</th></>}
  <th>Активный</th><th className="registry-actions" aria-label="Действия"/></tr></thead><tbody>
@@ -32,7 +33,7 @@ export function TransportCatalogRegistryPage({kind}:{kind:TransportCatalogKind})
  {kind==='drivers'&&<><td>{row.phoneNumber||'—'}</td><td>{row.poaNumber||'—'}</td><td>{catalogDate(row.poaValidTo)}</td></>}
  {kind==='vehicles'&&<><td>{row.insuranceNumber||'—'}</td><td>{row.withTrailer==null?'—':<UiInput type="checkbox" aria-label={'Наличие прицепа: '+row.name} checked={row.withTrailer} disabled/>}</td><td>{row.trailerNumber||'—'}</td></>}
  <td><UiInput type="checkbox" aria-label={'Активный: '+row.name} checked={row.active} disabled/></td><td className="registry-actions"><RowActions disabled={busy} label={'Действия: '+row.name} actions={[{label:'Открыть',to:catalogPath(kind)+'/'+row.id},{label:'Удалить',onClick:()=>void remove(row)}]}/></td></RecordRow>)}
- </tbody></table></div></div></section>
+ </tbody></table></div></TableReveal></section>
 }
 const empty:TransportCatalogInput={name:'',active:true,phoneNumber:null,poaNumber:null,poaValidTo:null,insuranceNumber:null,withTrailer:false,trailerNumber:null}
 export function TransportCatalogCardPage({kind,creating=false}:{kind:TransportCatalogKind;creating?:boolean}) {

@@ -3,7 +3,7 @@
 .order-container-table .container-col-type { width: 150px; }
 .order-container-table--grouped .container-col-number { width: 210px; }
 .order-container-table--grouped .container-col-index { width: 52px; }
-.order-container-table--grouped .container-child-row > td:first-child { padding-left: 48px; text-align: left; }
+.order-container-table--grouped .container-child-row > td:first-child:not(.container-owner-choice) { padding-left: 48px; text-align: left; }
 .order-container-table--grouped .container-child-row > td { font-weight: 400; }
 .order-container-table--grouped .composition-subgroup th { text-align: left; }
 .order-container-table--grouped .ui-control { font-size: 14px; }

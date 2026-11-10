@@ -27,12 +27,14 @@ public record CreateOrderRequest(
     @Size(max = 50) String phone,
     @jakarta.validation.constraints.Email(message = "Укажите корректный email") @Size(max = 254) String email,
     @Size(max = 4000) String comment,
-    @Size(max = 255, message = "Номер транспортной накладной: не более 255 символов") String transportWaybillNumber
+    @Size(max = 255, message = "Номер транспортной накладной: не более 255 символов") String transportWaybillNumber,
+    @Size(max = 10000) List<@NotNull @Valid ContainerOwner> containerOwners
 ) {
+    public record ContainerOwner(@NotNull UUID containerId, @NotNull UUID ownerClientId) {}
     public UUID effectiveDefaultContainerOwnerId() { return defaultContainerOwnerId; }
     public CreateOrderRequest withDefaultContainerOwner(UUID owner) {
         return new CreateOrderRequest(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,
-            fillingType,railwayCarriageQuantities,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,owner,authorizedRepresentative,phone,email,comment,transportWaybillNumber);
+            fillingType,railwayCarriageQuantities,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,owner,authorizedRepresentative,phone,email,comment,transportWaybillNumber,containerOwners);
     }
     public CreateOrderRequest(UUID clientId,UUID contractId,UUID terminalAreaId,TransportType transportType,
             List<OrderContainerRequest> containers,List<UUID> waybillIds,List<ShippingOrderRailwayCarriageRequest> railwayCarriages,
@@ -57,7 +59,17 @@ public record CreateOrderRequest(
             railwayCarriageQuantities,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,defaultContainerOwnerId,
             authorizedRepresentative,phone,email,comment,null);
     }
+    public CreateOrderRequest(UUID clientId, UUID contractId, UUID terminalAreaId, TransportType transportType,
+            List<OrderContainerRequest> containers, List<UUID> waybillIds, List<ShippingOrderRailwayCarriageRequest> railwayCarriages,
+            FillingType fillingType, List<RailwayCarriageQuantityRequest> railwayCarriageQuantities, List<ContainerQuantityRequest> containerQuantities,
+            UUID routeId, LocalDateTime arrivalAt, String consignor, LocalDateTime departureAt, String consignee, UUID defaultContainerOwnerId,
+            String authorizedRepresentative, String phone, String email, String comment, String transportWaybillNumber) {
+        this(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,fillingType,
+            railwayCarriageQuantities,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,defaultContainerOwnerId,
+            authorizedRepresentative,phone,email,comment,transportWaybillNumber,List.of());
+    }
     public CreateOrderRequest {
+        containerOwners = containerOwners == null ? List.of() : List.copyOf(containerOwners);
         transportWaybillNumber = clean(transportWaybillNumber);
         authorizedRepresentative = clean(authorizedRepresentative);
         phone = clean(phone);

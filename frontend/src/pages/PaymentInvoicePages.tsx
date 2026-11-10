@@ -1,3 +1,4 @@
+import { TableReveal } from '../components/TableReveal'
 import { createPortal } from 'react-dom'
 import { RecordRow } from '../components/RecordRow'
 import { Notification } from '../components/Notification'
@@ -5,7 +6,7 @@ import { ActionIcon } from '../components/ActionIcon'
 import { RowActions } from '../components/RowActions'
 import { StatusBadge } from '../components/StatusBadge'
 import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { updatePaymentInvoice, markPaymentInvoicePaid, getInvoiceTariff, createPaymentInvoice, deletePaymentInvoice, getContracts, getInvoiceCandidates, getPaymentInvoice, getPaymentInvoices, getReferenceOptions } from '../api'
 import type { PagedResponse, ReferenceOption } from '../domain'
 import type { ContractOption } from '../comprehensiveServiceOrder'
@@ -74,14 +75,14 @@ export function InvoiceRegistryPage() {
       <h2 id="delete-invoice-title">Удалить счет №{deleting.code}?</h2>
       <div className="header-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setDeleting(null)}>Отмена</button><button type="button" className="primary-button" disabled={busy} onClick={remove}>Удалить</button></div>
     </div></div>}
-    <div className="table-card">
+    <TableReveal loading={!data && !error}>
       {!data && !error && <p className="table-message" role="status">Загружаем счета…</p>}
       {data?.items.length === 0 && <div className="empty-state"><strong>Счетов пока нет</strong><p>Создайте счёт из оказанных услуг выбранного клиента за месяц.</p></div>}
       {!!data?.items.length && <div className="table-wrap"><table><thead><tr><th className="registry-index" scope="col">№</th><th scope="col">Номер счёта</th><th scope="col">Дата создания</th><th scope="col">Клиент</th><th scope="col">Договор</th><th scope="col">Период оказания</th><th scope="col">Сумма с НДС, ₽</th><th scope="col">Статус</th><th className="registry-actions" scope="col" aria-label="Действия" /></tr></thead>
         <tbody>{data.items.map((item, index) => <RecordRow to={`/payment-invoices/${item.id}`} key={item.id}><td className="registry-index">{page * PAGE_SIZE + index + 1}</td><td><Link className="order-code" to={`/payment-invoices/${item.id}`}>{item.code}</Link></td><td>{invoiceDate(item.createdAt, item.timeZone)}</td><td>{item.clientName}</td><td>{item.contractName}</td><td>{invoicePeriod(item.period)}</td><td>{invoiceMoney(item.amountWithVat)}</td><td><StatusBadge status={item.status} /></td><td className="registry-actions"><RowActions label={'Действия со счётом ' + item.code} disabled={busy} actions={[{ label: 'Открыть', to: '/payment-invoices/' + item.id }, ...(item.status === 'DRAFT' ? [{ label: 'Удалить', onClick: () => setDeleting(item) }] : [])]} /></td></RecordRow>)}</tbody>
       </table></div>}
       {data && <Pages page={page} totalPages={data.totalPages} onChange={next => { setData(null); setError(''); setPage(next) }} />}
-    </div>
+    </TableReveal>
   </section>
 }
 

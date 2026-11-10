@@ -1,0 +1,16 @@
+.bulk-owner-toolbar { display: flex; flex-wrap: wrap; width: max-content; max-width: 100%; justify-content: flex-end; align-items: center; gap: var(--ui-gap); margin-bottom: var(--ui-section-gap); }
+.bulk-owner-toolbar > button { flex-shrink: 0; }
+.bulk-owner-message { flex-basis: 100%; overflow-wrap: anywhere; }
+.app-shell .order-container-table .container-owner-choice { width: 44px; text-align: center; padding-left: var(--ui-gap); padding-right: var(--ui-gap); }
+.app-shell .order-container-table tr[data-owner-selected="true"] > td { background: #eef4ff; }
+.app-shell .order-container-table--grouped.has-owner-selection .container-child-row > td:nth-child(2) { padding-left: 36px; text-align: left; }
+
+.bulk-owner-field { flex: 0 1 280px; width: 280px; max-width: 100%; min-width: 0; }
+.bulk-owner-field .ui-select { width: 100%; }
+
+.order-tabs-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ui-section-gap); margin-bottom: 24px; min-width: 0; }
+.order-tabs-toolbar > .stepper { margin: 0; }
+.order-tabs-actions { margin-left: auto; max-width: 100%; min-width: 0; }
+.order-tabs-actions .bulk-owner-toolbar { margin-bottom: 0; }
+.embedded-order .order-tabs-toolbar { margin-top: var(--ui-section-gap); }
+.embedded-order .order-tabs-toolbar > .stepper { margin-top: 0; }

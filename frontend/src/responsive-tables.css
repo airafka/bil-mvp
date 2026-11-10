@@ -4,8 +4,8 @@
 }
 .app-shell .responsive-table-scroll:focus-visible { outline: 2px solid var(--ui-field-focus); outline-offset: 2px; }
 .app-shell table.responsive-table {
-  width: var(--responsive-table-width, 100%) !important;
-  min-width: var(--responsive-table-width, 100%) !important;
+  width: 100% !important;
+  min-width: var(--responsive-table-min-width, 0px) !important;
   max-width: none; table-layout: fixed !important;
 }
 .app-shell table.responsive-table col { width: auto !important; min-width: 0 !important; }
