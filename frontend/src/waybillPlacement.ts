@@ -9,12 +9,17 @@ export const placementCandidates = (query: string, page: number) => request<Page
 export const placementWagons = (query: string) => request<PlacementWagon[]>('/api/waybills/placement/wagons?query='+encodeURIComponent(query))
 export const placementPreview = (waybillIds: string[], layout?: PlacementLayout, addWagonId?: string) => request<PlacementLayout>('/api/waybills/placement/preview', { method: 'POST', body: JSON.stringify({ waybillIds, ...(layout ? { wagonIds: layout.wagons.map(w => w.id), expectedVersion: layout.version, addWagonId } : {}) }) })
 export const savePlacement = (layout: PlacementLayout, positions: PlacementMap) => request<PlacementLayout>('/api/waybills/placement', { method: 'PUT', body: JSON.stringify({ waybillIds: layout.waybills.map(w => w.id), wagonIds: layout.wagons.map(w => w.id), version: layout.version, assignments: layout.containers.filter(c => c.selected).map(c => ({ rowId: c.rowId, wagonId: positions[c.rowId] ?? c.wagonId })) }) })
+export const containerFeet = (type: string): number | null => type === 'STANDARD_20' ? 20 : type === 'STANDARD_40' ? 40 : null
+export function wagonFeet(rows: PlacementContainer[]): number | null {
+  const lengths = rows.map(c => containerFeet(c.type))
+  return lengths.some(n => n == null) ? null : lengths.reduce<number>((sum, n) => sum + (n ?? 0), 0)
+}
 export function wagonIssue(wagon: PlacementWagon, rows: PlacementContainer[]): string | null {
   if (!rows.length) return null
-  if (rows.length > 2) return 'На вагоне может быть не более двух КТК'
-  if (wagon.feet == null || wagon.capacity == null) return 'В справочнике не указана длина или грузоподъёмность'
-  if (rows.reduce((n, c) => n + (c.type === 'STANDARD_20' ? 20 : c.type === 'STANDARD_40' ? 40 : 10000), 0) > wagon.feet) return 'Недостаточно длины платформы'
-  if (rows.reduce((n, c) => n + c.grossWeight, 0) > wagon.capacity + 0.000001) return 'Превышена грузоподъёмность'
+  const feet = wagonFeet(rows)
+  if (feet == null) return 'Не определена футовость КТК'
+  if (wagon.feet == null) return 'В справочнике не указана длина платформы'
+  if (feet > wagon.feet) return 'Суммарная длина КТК превышает длину платформы'
   return null
 }
 export function transfer(positions: PlacementMap, rows: PlacementContainer[], rowId: string, wagonId: string, swapId?: string): PlacementMap {

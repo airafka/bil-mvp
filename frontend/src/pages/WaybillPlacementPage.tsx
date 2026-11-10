@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { UiInput, UiSelect } from '../components/FormControls'
 import { ActionIcon } from '../components/ActionIcon'
 import { getWaybillStationName } from '../waybillOptions'
-import { placementCandidates, placementPreview, placementWagons, savePlacement, transfer, wagonIssue, type PlacementCandidate, type PlacementContainer, type PlacementLayout, type PlacementMap, type PlacementWagon } from '../waybillPlacement'
+import { placementCandidates, placementPreview, placementWagons, savePlacement, transfer, wagonIssue, containerFeet, type PlacementCandidate, type PlacementContainer, type PlacementLayout, type PlacementMap, type PlacementWagon } from '../waybillPlacement'
 import type { PagedResponse } from '../domain'
 import './WaybillPlacementPage.css'
 
@@ -80,20 +80,18 @@ export function WaybillPlacementPage() {
     catch (e) { setError(e instanceof Error ? e.message : String(e)) }
     finally { lock.current = false; setBusy(false) }
   }
-  function containerCard(c: PlacementContainer, index: number) {
-    const color = [...c.waybillId].reduce((n, x) => n + x.charCodeAt(0), 0) % 4
+  function containerCard(c: PlacementContainer) {
     const wagonId = positions[c.rowId] ?? c.wagonId
     return <div key={c.rowId} className={'ktk-unit' + (!c.selected ? ' ktk-locked' : '')} data-row-id={c.rowId} data-wagon-id={wagonId}
       draggable={c.selected && !busy} onDragStart={e => { drag.current = c.rowId; setPicked(c.rowId); e.dataTransfer.setData('text/plain', c.rowId); e.dataTransfer.effectAllowed = 'move' }}
       onDragEnd={() => { drag.current = null; setOver(null) }}
       onDragOver={e => { if (c.selected && drag.current && drag.current !== c.rowId) { e.preventDefault(); e.stopPropagation() } }}
       onDrop={e => { e.preventDefault(); e.stopPropagation(); const source = drag.current; if (source && c.selected) move(source, wagonId, c.rowId); drag.current = null }}>
-      <div className="ktk-waybill"><svg width="14" height="16" viewBox="0 0 14 16" fill="none" aria-hidden="true"><path d="M2 1h6l4 4v10H2zM8 1v4h4M4 8h6M4 11h6" stroke="currentColor" /></svg><span>Накладная <b>{c.waybillNumber}</b></span></div>
-      <button type="button" className="ktk-box" data-tone={color} data-picked={picked === c.rowId} disabled={busy || !c.selected}
-        aria-pressed={picked === c.rowId} aria-label={'Выбрать КТК ' + c.number + ', накладная ' + c.waybillNumber}
+      <div className="ktk-waybill"><svg width="14" height="16" viewBox="0 0 14 16" fill="none" aria-hidden="true"><path d="M2 1h6l4 4v10H2zM8 1v4h4M4 8h6M4 11h6" stroke="currentColor" /></svg><span title={'Накладная ' + c.waybillNumber}>№ <b>{c.waybillNumber}</b></span></div>
+      <button type="button" className="ktk-box" data-picked={picked === c.rowId} disabled={busy || !c.selected}
+        title={'КТК ' + c.number + ' · ' + (containerFeet(c.type) ?? '—') + 'FT · накладная ' + c.waybillNumber + (!c.selected ? ' · Накладная не выбрана' : '')} aria-pressed={picked === c.rowId} aria-label={'Выбрать КТК ' + c.number + ', накладная ' + c.waybillNumber}
         onClick={() => { if (picked && picked !== c.rowId) move(picked, wagonId, c.rowId); else setPicked(picked === c.rowId ? null : c.rowId) }}>
-        <span className="ktk-topline"><span>{c.type === 'STANDARD_40' ? '40' : '20'} FT</span><span aria-hidden="true">⠿</span></span>
-        <strong>{c.number}</strong><span className="ktk-bottomline">{(c.grossWeight / 1000).toLocaleString('ru-RU', { maximumFractionDigits: 3 })} т <span>{!c.selected ? 'Не выбрана' : positions[c.rowId] && positions[c.rowId] !== c.wagonId ? 'Перемещён' : 'Место ' + (index + 1)}</span></span>
+        <strong>{c.number}</strong><span className="ktk-type">{containerFeet(c.type) ?? '—'}FT</span>
         <span className="ktk-door" aria-hidden="true" />
       </button>
     </div>
@@ -115,16 +113,15 @@ export function WaybillPlacementPage() {
       </tbody></table></div><div className="pagination"><button disabled={loading || busy || page === 0} onClick={() => { setPage(page - 1); setLoading(true) }}>Назад</button><span>Страница {page + 1} из {Math.max(1, data?.totalPages ?? 1)}</span><button disabled={loading || busy || page + 1 >= (data?.totalPages ?? 0)} onClick={() => { setPage(page + 1); setLoading(true) }}>Далее</button></div>
     </div> : <>
       <div className="placement-toolbar"><div className="placement-counts"><span><b>{layout.waybills.length}</b> накладных</span><span><b>{layout.wagons.length}</b> вагонов</span><span><b>{layout.containers.filter(c => c.selected).length}</b> КТК</span><span className="placement-changed">Перемещено: {changed}</span></div><button className="secondary-button" disabled={!changed || busy} onClick={() => { setPositions({}); setPicked(null); setError('') }}>Сбросить перемещения</button></div>
-      <p className="placement-help">Перетащите КТК на вагон, а для обмена местами — на другой КТК. Или выберите КТК нажатием и укажите место назначения. Серые КТК из невыбранных накладных остаются на месте.</p>
+      <p className="placement-help">Перетащите КТК на вагон, а для обмена местами — на другой КТК. Или выберите КТК нажатием и укажите место назначения. КТК из невыбранных накладных остаются на месте.</p>
       <div className="placement-add"><label>Добавить вагон<UiInput value={wagonQuery} placeholder="Поиск по номеру вагона" disabled={busy} onChange={e => setWagonQuery(e.target.value)} /></label><UiSelect aria-label="Вагон для добавления" value={addId} disabled={busy} onChange={e => setAddId(e.target.value)}><option value="">Выберите вагон</option>{wagonOptions.filter(w => !layout.wagons.some(old => old.id === w.id)).map(w => <option key={w.id} value={w.id}>{w.number} · {w.feet ?? '?'} футов</option>)}</UiSelect><button className="secondary-button" disabled={busy || !addId || layout.wagons.length >= 200} onClick={addWagon}>Добавить</button>{wagonError && <span role="alert">{wagonError}</span>}</div>
-      <div className="wagon-grid" aria-label="Схема размещения КТК">{layout.wagons.map((w, i) => { const rows = rowsOn(w.id), issue = wagonIssue(w, rows); return <section key={w.id} className="wagon-card" data-wagon={w.id} data-over={over === w.id} data-invalid={!!issue} aria-label={'Вагон ' + w.number}
+      <div className="wagon-grid" aria-label="Схема размещения КТК">{layout.wagons.map(w => { const rows = rowsOn(w.id), issue = wagonIssue(w, rows); return <section key={w.id} className="wagon-card" data-wagon={w.id} data-over={over === w.id} data-invalid={!!issue} aria-label={'Вагон ' + w.number}
         onDragOver={e => { if (drag.current && !busy) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(w.id) } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null) }}
         onDrop={e => { e.preventDefault(); if (drag.current) move(drag.current, w.id); drag.current = null }}>
-        <div className="wagon-meta"><span>ПЛАТФОРМА {String(i + 1).padStart(2, '0')}</span><span>{w.feet ?? '—'} футов · до {w.capacity == null ? '—' : w.capacity / 1000} т</span></div>
-        <div className="wagon-load">{rows.map(containerCard)}{Array.from({ length: Math.max(0, 2 - rows.length) }, (_, index) => <button key={'empty-' + index} type="button" className="wagon-empty-slot" disabled={!picked || busy} onClick={() => { if (picked) move(picked, w.id) }} aria-label={'Переместить выбранный КТК на вагон ' + w.number}><span aria-hidden="true">＋</span>{picked ? 'Разместить здесь' : 'Свободное место'}</button>)}</div>
-        <Chassis /><div className="wagon-caption"><span>ВАГОН</span><strong>{w.number}</strong><span>{rows.length} / 2 КТК</span></div>
+        <div className="wagon-load" style={{ gridTemplateColumns: 'repeat(' + Math.max(1, rows.length) + ', minmax(0, 1fr))' }}>{rows.map(containerCard)}{!rows.length && <button type="button" className="wagon-empty-slot" disabled={!picked || busy} onClick={() => { if (picked) move(picked, w.id) }} aria-label={'Переместить выбранный КТК на вагон ' + w.number}><span aria-hidden="true">＋</span>{picked ? 'Разместить здесь' : 'Нет КТК'}</button>}</div>
+        <Chassis /><div className="wagon-caption"><strong>№{w.number}</strong></div>
         {issue && <p className="wagon-issue" role="status">{issue}</p>}
-        {picked && rows.length >= 2 && <button className="secondary-button" disabled={busy} onClick={() => move(picked, w.id)}>Переместить сюда</button>}
+        {picked && rows.length > 0 && <button className="secondary-button" disabled={busy} onClick={() => move(picked, w.id)}>Переместить сюда</button>}
       </section> })}</div>
       {invalid && <p className="placement-alert">Перед сохранением исправьте размещение на выделенных вагонах.</p>}
     </>}

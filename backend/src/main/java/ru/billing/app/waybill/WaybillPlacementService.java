@@ -136,9 +136,9 @@ public class WaybillPlacementService {
         for(var w:current.wagons()) {
             var rows=current.containers().stream().filter(c->w.id().equals(targets.getOrDefault(c.rowId(),c.wagonId()))).toList();
             if(rows.isEmpty())continue;
-            int feet=rows.stream().mapToInt(c->"STANDARD_20".equals(c.type())?20:"STANDARD_40".equals(c.type())?40:10000).sum();
-            var weight=rows.stream().map(Container::grossWeight).reduce(BigDecimal.ZERO,BigDecimal::add);
-            String issue=WaybillPlacementPolicy.violation(rows.size(),feet,weight,w.feet(),w.capacity());
+            var lengths=rows.stream().mapToInt(c->WaybillPlacementPolicy.containerFeet(c.type())).toArray();
+            int feet=Arrays.stream(lengths).anyMatch(n->n<0)?-1:Arrays.stream(lengths).sum();
+            String issue=WaybillPlacementPolicy.violation(feet,w.feet());
             if(issue!=null)errors.add("Вагон "+w.number()+": "+issue);
         }
         if(!errors.isEmpty())throw conflict("WAGON_CAPACITY_EXCEEDED",String.join("; ",errors));

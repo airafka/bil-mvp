@@ -1,12 +1,14 @@
 package ru.billing.app.waybill;
-import java.math.BigDecimal;
+
 public final class WaybillPlacementPolicy {
     private WaybillPlacementPolicy() {}
-    public static String violation(int count,int feet,BigDecimal gross,Integer capacityFeet,BigDecimal capacityKg) {
-        if(count>2)return "допускается не более двух КТК";
-        if(capacityFeet==null||capacityKg==null)return "не указаны длина платформы или грузоподъёмность";
-        if(feet>capacityFeet)return "суммарная длина КТК превышает длину платформы";
-        if(gross.compareTo(capacityKg)>0)return "превышена грузоподъёмность";
+    public static int containerFeet(String type) {
+        return switch (type) { case "STANDARD_20" -> 20; case "STANDARD_40" -> 40; default -> -1; };
+    }
+    public static String violation(int feet, Integer capacityFeet) {
+        if (feet < 0) return "не определена футовость КТК";
+        if (capacityFeet == null) return "не указана длина платформы";
+        if (feet > capacityFeet) return "суммарная длина КТК превышает длину платформы";
         return null;
     }
 }
