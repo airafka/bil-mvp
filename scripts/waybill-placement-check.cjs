@@ -47,6 +47,6 @@ async function fixture(twenty=4,forty=0){
  assert.equal(sql("select count(*) from shipping_order_source_container where comprehensive_service_order_id='"+order.order.id+"'"),'4');
  const stale=await preview(f.ids);await api('/comprehensive-service-orders/'+order.order.id+'/prepare-transport','POST',{section:'INITIAL_RECEIVING'});await api('/comprehensive-service-orders/'+order.order.id+'/complete-section','POST',{section:'INITIAL_RECEIVING',action:'CONFIRM_ROUTES'});
  assert.equal((await save(stale,{},409)).code,'WAYBILL_PLACEMENT_LOCKED');assert.equal((await api('/waybills/placement/candidates?query='+f.tag)).totalElements,0);
- const ui=await fixture();fs.writeFileSync('backups/wagon-fixtures.json',JSON.stringify({...ui,db}));
+ const ui=await fixture(0,4);fs.writeFileSync('backups/wagon-fixtures.json',JSON.stringify({...ui,db}));
  console.log('PASS: draft delivery composition and owners preserved, confirmation blocks editing; UI fixtures ready');
 })().catch(e=>{console.error(e);process.exitCode=1});

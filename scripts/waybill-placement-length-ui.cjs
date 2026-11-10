@@ -32,11 +32,11 @@ for(let page=0;page<100 && selectedCount<wanted.length;page++){
  await evaljs('document.querySelector(".pagination button:last-child").click()');await wait('document.querySelector("tbody input[type=checkbox]")');
 }
 assert.equal(selectedCount,wanted.length);await evaljs('document.querySelector(".page-header .primary-button").click()');
-await wait('document.querySelectorAll(".wagon-card").length===4');
+await wait('document.querySelectorAll(".wagon-card").length===10');
 assert.equal(await evaljs('document.querySelectorAll(".placement-steps,.placement-toolbar,.placement-help,.placement-add,input:not([type=checkbox]),select").length'),0);
 const card=id=>'document.querySelector('+JSON.stringify('[data-wagon="'+id+'"]')+')';
-const target=card(fixture.target),count=()=>evaljs(target+'.querySelectorAll(".ktk-unit").length');assert.equal(await count(),6);
-assert.ok(await evaljs('[...document.querySelectorAll(".wagon-card")].every(el=>el.getBoundingClientRect().top===document.querySelector(".wagon-card").getBoundingClientRect().top)'));
+const target=card(fixture.target),targetRows='document.querySelectorAll('+JSON.stringify('[data-wagon="'+fixture.target+'"] .ktk-unit')+')',count=()=>evaljs(targetRows+'.length');assert.equal(await count(),6);
+assert.ok(await evaljs('[...document.querySelectorAll(".wagon-card")].slice(0,4).every(el=>el.getBoundingClientRect().top===document.querySelector(".wagon-card").getBoundingClientRect().top)'));
 assert.equal(await evaljs('new Set([...document.querySelectorAll(".ktk-box")].map(el=>getComputedStyle(el).backgroundImage)).size'),1);
 assert.ok(await evaljs('[...document.querySelectorAll(".wagon-caption")].every(el=>/^№[0-9]+[(](?:40|60|80)FT[)]$/.test(el.textContent))'));
 assert.ok(await evaljs('[...document.querySelectorAll(".ktk-box")].every(el=>/^(?:20|40)FT[A-Z0-9]+$/.test(el.textContent))'));
@@ -50,7 +50,7 @@ for(let i=0;i<2;i++){
  await send('Input.dispatchMouseEvent',{type:'mouseMoved',...coords[0]});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...coords[0]});
  for(let j=1;j<=15;j++){await send('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:coords[0].x+(coords[1].x-coords[0].x)*j/15,y:coords[0].y+(coords[1].y-coords[0].y)*j/15});await pause(25)}
  await pause(200);await send('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,...coords[1]});await pause(150);
- await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...coords[1]});await wait(target+'.querySelectorAll(".ktk-unit").length==='+String(5-i));
+ await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...coords[1]});await wait(targetRows+'.length==='+String(5-i));
  const currentWidth=await width();assert.ok(currentWidth>previousWidth);previousWidth=currentWidth;if(i===0){assert.ok(await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));await shot('five')}
 }
 assert.ok(!await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));

@@ -15,7 +15,7 @@
 .ktk-locked .ktk-box:disabled{opacity:1;cursor:default}.ktk-locked .ktk-waybill{opacity:.6}
 .wagon-empty-slot{height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:1px dashed #ccd7e5;border-radius:4px;background:#f3f7fc;color:#7288a5;font-size:11px;cursor:pointer}.wagon-empty-slot>span{font-size:22px;font-weight:300}.wagon-empty-slot:disabled{opacity:.65;cursor:default}
 .wagon-chassis{display:block;width:100%;height:36px;overflow:visible}.wagon-caption{text-align:center;margin-top:5px}.wagon-caption strong{font-size:16px;letter-spacing:.5px;font-weight:600;color:#344761}
-.wagon-issue{color:#b84432;font-size:11px;margin:10px 0 0;line-height:1.5}.wagon-card>.secondary-button{margin-top:10px;width:100%}
+.wagon-issue{color:#b84432;font-size:11px;margin:10px 0 0;line-height:1.5}.wagon-target{display:inline-block;padding:2px 4px;border:1px solid transparent;border-radius:4px;background:transparent;line-height:inherit}.wagon-target:disabled{opacity:1;cursor:default}.wagon-target:not(:disabled){border-color:#a9c4f3;background:#edf4ff;cursor:pointer}.wagon-target:focus-visible{outline:2px solid #397cf0;outline-offset:2px}
 @media(max-width:1199px){.wagon-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:959px){.wagon-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.wagon-grid{grid-template-columns:1fr}.placement-page .page-header{align-items:stretch;flex-direction:column}.placement-page .header-actions{flex-wrap:wrap}}
@@ -24,3 +24,5 @@
 .placement-page .page-header{margin-bottom:20px}
 @container(max-width:70px){.ktk-box{padding-block:3px}}
 .wagon-free-slot{align-self:stretch;min-width:0;border:1px dashed #d5e1ef;border-radius:4px;background:transparent;cursor:pointer}.wagon-free-slot:disabled{opacity:.45;cursor:default}.wagon-free-slot:focus-visible{outline:2px solid #397cf0;outline-offset:2px}
+
+.wagon-other-load{align-self:stretch;min-width:0;border:1px solid #d8e1ec;border-radius:4px;background:repeating-linear-gradient(135deg,#edf2f7 0,#edf2f7 5px,#e4eaf1 5px,#e4eaf1 6px)}

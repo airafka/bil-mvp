@@ -1,8 +1,27 @@
 import { describe, it, expect } from 'vitest'
-import { transfer, wagonIssue, wagonTracks, type PlacementContainer } from './waybillPlacement'
+import { transfer, wagonIssue, wagonTracks, waybillWagons, type PlacementContainer } from './waybillPlacement'
 const a: PlacementContainer = { rowId:'a',containerId:'c1',number:'C1',type:'STANDARD_40',grossWeight:23000,waybillId:'bill1',waybillNumber:'101',wagonId:'w1',selected:true }
 const b: PlacementContainer = { ...a,rowId:'b',containerId:'c2',number:'C2',waybillId:'bill2',waybillNumber:'102',wagonId:'w2' }
 describe('railway placement',()=>{
+ it('shows two invoices on one physical wagon as separate cards and counts their shared load',()=>{
+  const wagon={id:'w1',number:'123',feet:80,capacity:null},second={...b,wagonId:'w1'}
+  const groups=waybillWagons({waybills:[],wagons:[wagon],containers:[a,second],version:'v'}, {})
+  expect(groups).toHaveLength(2);expect(groups.map(g=>g.waybillId)).toEqual(['bill1','bill2'])
+  expect(groups.map(g=>g.rows.map(c=>c.rowId))).toEqual([['a'],['b']])
+  expect(groups.every(g=>g.physicalRows.length===2&&g.occupiedFeet===40)).toBe(true)
+  expect(wagonTracks(wagon,groups[0].rows,groups[0].occupiedFeet)).toEqual({freeFeet:0,columns:'minmax(0,40fr) minmax(0,40fr)'})
+ })
+ it('regroups moved KTK by its original invoice and target wagon without duplicating rows',()=>{
+  const wagons=[{id:'w1',number:'1',feet:80,capacity:null},{id:'w2',number:'2',feet:80,capacity:null}]
+  const groups=waybillWagons({waybills:[],wagons,containers:[a,b],version:'v'},{a:'w2'})
+  expect(groups.filter(g=>g.rows.length).map(g=>[g.waybillId,g.wagon.id])).toEqual([['bill1','w2'],['bill2','w2']])
+  expect(groups.flatMap(g=>g.rows).map(c=>c.rowId)).toEqual(['a','b']);expect(groups[0].rows).toEqual([])
+ })
+ it('checks overload across invoice cards, including unselected invoices',()=>{
+  const wagon={id:'w1',number:'1',feet:80,capacity:null}
+  const groups=waybillWagons({waybills:[],wagons:[wagon],containers:[a,{...b,wagonId:'w1'},{...b,rowId:'c',waybillId:'bill3',wagonId:'w1',selected:false}],version:'v'}, {})
+  expect(groups).toHaveLength(3);expect(groups.every(g=>wagonIssue(wagon,g.physicalRows)!=null)).toBe(true)
+ })
  it('reserves half of an 80ft platform for a single 40ft container',()=>expect(wagonTracks({id:'w',number:'1',feet:80,capacity:null},[a])).toEqual({freeFeet:40,columns:'minmax(0,40fr) minmax(0,40fr)'}))
  it('uses proportional tracks for mixed lengths and preserves the free quarter',()=>expect(wagonTracks({id:'w',number:'1',feet:80,capacity:null},[a,{...b,type:'STANDARD_20'}])).toEqual({freeFeet:20,columns:'minmax(0,40fr) minmax(0,20fr) minmax(0,20fr)'}))
  it('shows every container of an overloaded source without a negative free area',()=>{const tracks=wagonTracks({id:'w',number:'1',feet:80,capacity:null},Array.from({length:6},()=>({...a,type:'STANDARD_20'})));expect(tracks.freeFeet).toBe(0);expect(tracks.columns.split(' ')).toHaveLength(6)})

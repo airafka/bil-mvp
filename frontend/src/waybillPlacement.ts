@@ -15,11 +15,24 @@ export function wagonFeet(rows: PlacementContainer[]): number | null {
   return lengths.some(n => n == null) ? null : lengths.reduce<number>((sum, n) => sum + (n ?? 0), 0)
 }
 // Keep unused platform length visible; compress an erroneous overloaded source so every KTK remains movable.
-export function wagonTracks(wagon: PlacementWagon, rows: PlacementContainer[]) {
+export function wagonTracks(wagon: PlacementWagon, rows: PlacementContainer[], occupiedFeet = 0) {
   const lengths = rows.map(c => containerFeet(c.type) ?? 20)
-  const freeFeet = Math.max(0, (wagon.feet ?? 0) - lengths.reduce((sum, n) => sum + n, 0))
-  const tracks = [...lengths, ...(freeFeet > 0 ? [freeFeet] : [])]
+  const freeFeet = Math.max(0, (wagon.feet ?? 0) - occupiedFeet - lengths.reduce((sum, n) => sum + n, 0))
+  const tracks = [...lengths, ...(occupiedFeet > 0 ? [occupiedFeet] : []), ...(freeFeet > 0 ? [freeFeet] : [])]
   return { freeFeet, columns: tracks.length ? tracks.map(n => 'minmax(0,' + n + 'fr)').join(' ') : '1fr' }
+}
+export type WaybillWagon = { key: string; waybillId: string | null; waybillNumber: string | null; wagon: PlacementWagon; rows: PlacementContainer[]; physicalRows: PlacementContainer[]; occupiedFeet: number }
+export function waybillWagons(layout: PlacementLayout, positions: PlacementMap): WaybillWagon[] {
+  return layout.wagons.flatMap<WaybillWagon>(wagon => {
+    const physicalRows = layout.containers.filter(c => (positions[c.rowId] ?? c.wagonId) === wagon.id)
+    if (!physicalRows.length) return [{ key: 'empty:' + wagon.id, waybillId: null, waybillNumber: null, wagon, rows: [], physicalRows, occupiedFeet: 0 }]
+    const bills = [...new Set(physicalRows.map(c => c.waybillId))]
+    return bills.map(waybillId => {
+      const rows = physicalRows.filter(c => c.waybillId === waybillId)
+      const occupiedFeet = physicalRows.filter(c => c.waybillId !== waybillId).reduce((n, c) => n + (containerFeet(c.type) ?? 20), 0)
+      return { key: waybillId + ':' + wagon.id, waybillId, waybillNumber: rows[0].waybillNumber, wagon, rows, physicalRows, occupiedFeet }
+    })
+  })
 }
 export function wagonIssue(wagon: PlacementWagon, rows: PlacementContainer[]): string | null {
   if (!rows.length) return null

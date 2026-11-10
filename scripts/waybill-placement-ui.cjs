@@ -32,20 +32,25 @@ for(let page=0;page<100 && selectedCount<wanted.length;page++){
  await evaljs('document.querySelector(".pagination button:last-child").click()');await wait('document.querySelector("tbody input[type=checkbox]")');
 }
 assert.equal(selectedCount,wanted.length);await evaljs('document.querySelector(".page-header .primary-button").click()');
-await wait('document.querySelectorAll(".wagon-card").length===2');assert.equal(await evaljs('document.querySelectorAll(".ktk-unit").length'),4);
+await wait('document.querySelectorAll(".wagon-card").length===4');assert.equal(await evaljs('document.querySelectorAll(".ktk-unit").length'),4);
+const groups=await evaljs('[...document.querySelectorAll(".wagon-card")].map(c=>({wagon:c.dataset.wagon,waybill:c.dataset.waybill,rows:[...c.querySelectorAll(".ktk-unit")].map(r=>r.dataset.rowId)}))');
+assert.equal(new Set(groups.map(g=>g.wagon)).size,2);assert.equal(new Set(groups.map(g=>g.waybill)).size,4);assert.ok(groups.every(g=>g.rows.length===1));
+assert.equal(await evaljs('document.querySelectorAll(".wagon-other-load").length'),4);
+assert.ok(await evaljs('[...document.querySelectorAll(".wagon-card")].every(c=>Math.abs(c.querySelector(".ktk-unit").getBoundingClientRect().width-c.querySelector(".wagon-other-load").getBoundingClientRect().width)<1)'));
 await shot('desktop');
 const before=await evaljs('[...document.querySelectorAll(".ktk-unit")].map(el=>({id:el.dataset.rowId,wagon:el.dataset.wagonId,text:el.textContent}))');
 // Real HTML drag events through the browser mouse, not a direct state update.
-const coords=await evaljs('(()=>{const cards=[...document.querySelectorAll(".wagon-card")];return cards.map(c=>{const r=c.querySelector(".ktk-box").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})})()');
+const coords=await evaljs('(()=>{const cards=[...document.querySelectorAll(".wagon-card")];return [cards[0],cards.find(c=>c.dataset.wagon!==cards[0].dataset.wagon)].map(c=>{const r=c.querySelector(".ktk-box").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})})()');
 await send('Input.dispatchMouseEvent',{type:'mouseMoved',...coords[0]});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...coords[0]});
 for(let i=1;i<=15;i++){await send('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:coords[0].x+(coords[1].x-coords[0].x)*i/15,y:coords[0].y+(coords[1].y-coords[0].y)*i/15});await pause(25)}
 await pause(200);await send('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,...coords[1]});await pause(150);
 await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...coords[1]});
 await wait('[...document.querySelectorAll("button")].some(b=>b.textContent.trim()==="Сохранить"&&!b.disabled)');
+assert.equal(await evaljs('document.querySelectorAll(".ktk-unit").length'),4);
 const after=await evaljs('[...document.querySelectorAll(".ktk-unit")].map(el=>({id:el.dataset.rowId,wagon:el.dataset.wagonId}))');assert.equal(after.filter(a=>before.find(b=>b.id===a.id).wagon!==a.wagon).length,2);
 await click('Сохранить');await wait('document.querySelector(".placement-success")');assert.ok(await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));
 console.log('PASS: registry action, four waybill selection, two wagons, real mouse drag swap and database save');
-await evaljs('document.querySelector(".wagon-card .ktk-box").click()');await evaljs('[...document.querySelectorAll(".wagon-card")][1].querySelector(".secondary-button").click()');await wait('document.querySelector(".wagon-issue")');assert.ok(await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));
+await evaljs('document.querySelector(".wagon-card .ktk-box").click()');await evaljs('[...document.querySelectorAll(".wagon-card")].find(c=>c.dataset.wagon!==document.querySelector(".wagon-card").dataset.wagon).querySelector(".wagon-target").click()');await wait('document.querySelector(".wagon-issue")');assert.ok(await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));
 for(const width of [1024,640,360,320]){await send('Emulation.setDeviceMetricsOverride',{width,height:1100,deviceScaleFactor:1,mobile:false});await pause(350);const sizes=await evaljs('({width:innerWidth,scroll:document.documentElement.scrollWidth})');assert.ok(sizes.scroll<=sizes.width,'Horizontal overflow '+JSON.stringify(sizes));if(width===360)await shot('mobile')}
 assert.deepEqual(errors,[]);console.log('PASS: click placement, overload warning/disabled save, responsive widths 320–1440, no browser exceptions');await send('Browser.close');ws.close();
 })().catch(e=>{console.error(e);process.exitCode=1;chrome.kill()});
