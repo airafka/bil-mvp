@@ -18,7 +18,7 @@ async function fixture(twenty=4,forty=0){
 }
 (async()=>{
  const f=await fixture(),l=await preview(f.ids);assert.equal(l.wagons.length,2);assert.equal(l.containers.length,4);assert.ok(l.containers.every(c=>c.selected));
- const candidates=await api('/waybills/placement/candidates?query='+f.tag+'&size=2');assert.equal(candidates.items.length,2);assert.equal(candidates.totalElements,4);
+ const candidates=await api('/waybills/placement/candidates?query='+f.tag+'&size=2');assert.equal(candidates.items.length,2);assert.equal(candidates.totalElements,4);assert.ok(candidates.items.every(c=>c.wagonCount===1&&c.containerCount===1));
  const first=l.containers[0],other=l.containers.find(c=>c.wagonId!==first.wagonId);assert.ok(other);
  const audit=()=>Number(sql("select count(*) from waybill_container_relocation where waybill_id in ('"+f.ids.join("','")+"')"));
  const identity=()=>json("select json_agg(t order by t.id) from (select wc.id,rc.waybill_id,wc.container_id,wc.weight,wc.net_weight,wc.owner,wc.owner_container_id,(select json_agg(z order by z.id) from waybill_zpu z where z.waybill_container_id=wc.id) as seals,(select json_agg(p order by p.id) from waybill_product p where p.waybill_id=rc.waybill_id) as products from waybill_container wc join waybill_railway_carriage rc on rc.id=wc.waybill_railway_carriage_id where rc.waybill_id in ('"+f.ids.join("','")+"'))t");

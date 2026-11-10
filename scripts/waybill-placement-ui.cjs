@@ -19,20 +19,33 @@ const click=async(label)=>{await evaljs('[...document.querySelectorAll("button")
 const shot=async(name)=>{const r=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});fs.writeFileSync(path.join(dir,'../backups/wagon-'+name+'.png'),Buffer.from(r.data,'base64'))};
 await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
 await send('Page.navigate',{url:base+'/waybills'});await wait('document.querySelector("a[href$=edit-placement]")');await evaljs('document.querySelector("a[href$=edit-placement]").click()');await wait('document.querySelector(".placement-selection input")');
-await evaljs(`(()=>{const el=document.querySelector('.placement-selection input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(fixture.tag)});el.dispatchEvent(new Event('input',{bubbles:true}))})()`);
-await wait('document.querySelectorAll("tbody input[type=checkbox]").length===4');await evaljs('document.querySelector("thead input[type=checkbox]").click()');await click('Показать вагоны →');await wait('document.querySelectorAll(".wagon-card").length===2');assert.equal(await evaljs('document.querySelectorAll(".ktk-unit").length'),4);
+await wait('document.querySelector("tbody input[type=checkbox]")');
+assert.equal(await evaljs('document.querySelectorAll(".placement-selection input:not([type=checkbox]),.placement-steps,.placement-subtitle").length'),0);
+assert.deepEqual(await evaljs('[...document.querySelectorAll("thead th")].slice(1).map(el=>el.textContent)'),['Накладная','Кол-во вагонов','Кол-во КТК','Маршрут']);
+assert.ok(await evaljs('[...document.querySelectorAll("tbody tr")].every(tr=>/^\\d+$/.test(tr.cells[2].textContent)&&/^\\d+$/.test(tr.cells[3].textContent))'));
+await shot('selection');
+const wanted=fixture.bills.map(b=>b.number);let selectedCount=0;
+for(let page=0;page<100 && selectedCount<wanted.length;page++){
+ selectedCount+=await evaljs('(()=>{const wanted='+JSON.stringify(wanted)+';let n=0;for(const tr of document.querySelectorAll("tbody tr")){if(wanted.includes(tr.cells[1]?.textContent)){const cb=tr.querySelector("input");if(!cb.checked){cb.click();n++}}}return n})()');
+ if(selectedCount===wanted.length)break;
+ assert.ok(!await evaljs('document.querySelector(".pagination button:last-child").disabled'),'Fixture not found');
+ await evaljs('document.querySelector(".pagination button:last-child").click()');await wait('document.querySelector("tbody input[type=checkbox]")');
+}
+assert.equal(selectedCount,wanted.length);await evaljs('document.querySelector(".page-header .primary-button").click()');
+await wait('document.querySelectorAll(".wagon-card").length===2');assert.equal(await evaljs('document.querySelectorAll(".ktk-unit").length'),4);
 await shot('desktop');
 const before=await evaljs('[...document.querySelectorAll(".ktk-unit")].map(el=>({id:el.dataset.rowId,wagon:el.dataset.wagonId,text:el.textContent}))');
 // Real HTML drag events through the browser mouse, not a direct state update.
 const coords=await evaljs('(()=>{const cards=[...document.querySelectorAll(".wagon-card")];return cards.map(c=>{const r=c.querySelector(".ktk-box").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})})()');
 await send('Input.dispatchMouseEvent',{type:'mouseMoved',...coords[0]});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...coords[0]});
 for(let i=1;i<=15;i++){await send('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:coords[0].x+(coords[1].x-coords[0].x)*i/15,y:coords[0].y+(coords[1].y-coords[0].y)*i/15});await pause(25)}
+await pause(200);await send('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,...coords[1]});await pause(150);
 await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...coords[1]});
-await wait('document.querySelector(".placement-changed").textContent.includes("2")');
+await wait('[...document.querySelectorAll("button")].some(b=>b.textContent.trim()==="Сохранить"&&!b.disabled)');
 const after=await evaljs('[...document.querySelectorAll(".ktk-unit")].map(el=>({id:el.dataset.rowId,wagon:el.dataset.wagonId}))');assert.equal(after.filter(a=>before.find(b=>b.id===a.id).wagon!==a.wagon).length,2);
 await click('Сохранить');await wait('document.querySelector(".placement-success")');assert.ok(await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));
 console.log('PASS: registry action, four waybill selection, two wagons, real mouse drag swap and database save');
-await evaljs('document.querySelector(".wagon-card .ktk-box").click()');await evaljs('[...document.querySelectorAll(".wagon-card")][1].querySelector(".secondary-button").click()');await wait('document.querySelector(".wagon-issue")');assert.ok(await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));await click('Сбросить перемещения');
+await evaljs('document.querySelector(".wagon-card .ktk-box").click()');await evaljs('[...document.querySelectorAll(".wagon-card")][1].querySelector(".secondary-button").click()');await wait('document.querySelector(".wagon-issue")');assert.ok(await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Сохранить").disabled'));
 for(const width of [1024,640,360,320]){await send('Emulation.setDeviceMetricsOverride',{width,height:1100,deviceScaleFactor:1,mobile:false});await pause(350);const sizes=await evaljs('({width:innerWidth,scroll:document.documentElement.scrollWidth})');assert.ok(sizes.scroll<=sizes.width,'Horizontal overflow '+JSON.stringify(sizes));if(width===360)await shot('mobile')}
-assert.deepEqual(errors,[]);console.log('PASS: click placement, overload warning/disabled save, reset, responsive widths 320–1440, no browser exceptions');await send('Browser.close');ws.close();
+assert.deepEqual(errors,[]);console.log('PASS: click placement, overload warning/disabled save, responsive widths 320–1440, no browser exceptions');await send('Browser.close');ws.close();
 })().catch(e=>{console.error(e);process.exitCode=1;chrome.kill()});

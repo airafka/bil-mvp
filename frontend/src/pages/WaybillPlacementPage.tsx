@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { UiInput, UiSelect } from '../components/FormControls'
+import { UiInput } from '../components/FormControls'
 import { ActionIcon } from '../components/ActionIcon'
 import { getWaybillStationName } from '../waybillOptions'
-import { placementCandidates, placementPreview, placementWagons, savePlacement, transfer, wagonIssue, containerFeet, type PlacementCandidate, type PlacementContainer, type PlacementLayout, type PlacementMap, type PlacementWagon } from '../waybillPlacement'
+import { placementCandidates, placementPreview, savePlacement, transfer, wagonIssue, containerFeet, type PlacementCandidate, type PlacementContainer, type PlacementLayout, type PlacementMap } from '../waybillPlacement'
 import type { PagedResponse } from '../domain'
 import './WaybillPlacementPage.css'
 
@@ -20,14 +20,12 @@ function Chassis() {
 
 export function WaybillPlacementPage() {
   const [data, setData] = useState<PagedResponse<PlacementCandidate> | null>(null)
-  const [query, setQuery] = useState(''), [page, setPage] = useState(0)
+  const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Record<string, PlacementCandidate>>({})
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false)
   const [error, setError] = useState(''), [notice, setNotice] = useState('')
   const [layout, setLayout] = useState<PlacementLayout | null>(null), [positions, setPositions] = useState<PlacementMap>({})
   const [picked, setPicked] = useState<string | null>(null), [over, setOver] = useState<string | null>(null)
-  const [wagonQuery, setWagonQuery] = useState(''), [wagonOptions, setWagonOptions] = useState<PlacementWagon[]>([]), [addId, setAddId] = useState('')
-  const [wagonError, setWagonError] = useState('')
   const lock = useRef(false), drag = useRef<string | null>(null)
   const ids = Object.keys(selected)
   const changed = layout?.containers.filter(c => c.selected && positions[c.rowId] && positions[c.rowId] !== c.wagonId).length ?? 0
@@ -36,15 +34,9 @@ export function WaybillPlacementPage() {
   useEffect(() => {
     if (layout) return
     let active = true
-    const timer = setTimeout(() => { placementCandidates(query, page).then(v => { if (active) setData(v) }).catch(e => { if (active) setError(String(e)) }).finally(() => { if (active) setLoading(false) }) }, 200)
-    return () => { active = false; clearTimeout(timer) }
-  }, [query, page, layout])
-  useEffect(() => {
-    if (!layout) return
-    let active = true
-    const timer = setTimeout(() => { placementWagons(wagonQuery).then(v => { if (active) { setWagonOptions(v); setWagonError('') } }).catch(e => { if (active) setWagonError(String(e)) }) }, 200)
-    return () => { active = false; clearTimeout(timer) }
-  }, [wagonQuery, layout])
+    placementCandidates('', page).then(v => { if (active) setData(v) }).catch(e => { if (active) setError(String(e)) }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [page, layout])
   useEffect(() => {
     if (!changed) return
     const handler = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
@@ -59,13 +51,6 @@ export function WaybillPlacementPage() {
     if (lock.current || !ids.length) return
     lock.current = true; setBusy(true); setError(''); setNotice('')
     try { setLayout(await placementPreview(ids)); setPositions({}); setPicked(null) }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
-    finally { lock.current = false; setBusy(false) }
-  }
-  async function addWagon() {
-    if (!layout || !addId || lock.current) return
-    lock.current = true; setBusy(true); setError('')
-    try { setLayout(await placementPreview(ids, layout, addId)); setAddId('') }
     catch (e) { setError(e instanceof Error ? e.message : String(e)) }
     finally { lock.current = false; setBusy(false) }
   }
@@ -97,24 +82,18 @@ export function WaybillPlacementPage() {
     </div>
   }
   return <section className="placement-page">
-    <header className="page-header"><div><h1>Редактировать накладные</h1><p className="placement-subtitle">Размещение контейнеров на вагонах</p></div><div className="header-actions">
-      {layout ? <><button className="secondary-button" disabled={busy} onClick={() => { if (!changed || window.confirm('Изменения не сохранены. Вернуться к выбору накладных?')) { setLayout(null); setLoading(true); setError(''); setNotice('') } }}>Выбрать накладные</button><button className="primary-button" disabled={busy || !changed || invalid} onClick={save}>{busy ? 'Сохраняем…' : 'Сохранить'}</button></> : <button className="primary-button" disabled={busy || !ids.length} onClick={open}>{busy ? 'Загружаем…' : 'Показать вагоны →'}</button>}
+    <header className="page-header"><div><h1>Редактировать накладные</h1></div><div className="header-actions">
+      {layout ? <><button className="secondary-button" disabled={busy} onClick={() => { if (!changed || window.confirm('Изменения не сохранены. Вернуться к выбору накладных?')) { setLayout(null); setLoading(true); setError(''); setNotice('') } }}>Назад</button><button className="primary-button" disabled={busy || !changed || invalid} onClick={save}>{busy ? 'Сохраняем…' : 'Сохранить'}</button></> : <button className="primary-button" disabled={busy || !ids.length} onClick={open}>{busy ? 'Загружаем…' : 'Далее'}</button>}
       <Link className="close-button" to="/waybills" aria-label="Закрыть редактор" onClick={e => { if (busy || (changed && !window.confirm('Изменения не сохранены. Закрыть редактор?'))) e.preventDefault() }}><ActionIcon name="close" /></Link>
     </div></header>
-    <div className="placement-steps" aria-label="Шаги редактирования"><span data-active={!layout}><b>1</b> Выбор накладных</span><i aria-hidden="true" /><span data-active={!!layout}><b>2</b> Размещение КТК</span></div>
     {error && <div className="placement-alert" role="alert">{error}{layout && <button className="secondary-button" disabled={busy} onClick={() => { if (!changed || window.confirm('Загрузить актуальную схему? Несохранённые перемещения будут сброшены.')) open() }}>Загрузить заново</button>}</div>}
     {notice && <div className="placement-success" role="status">{notice}</div>}
-    {!layout ? <div className="table-card placement-selection"><div className="placement-selection-head"><label>Поиск накладной, вагона или КТК<UiInput value={query} placeholder="Введите номер" onChange={e => { setQuery(e.target.value); setPage(0); setLoading(true); setError('') }} /></label><span>Выбрано накладных: <b>{ids.length}</b> / 200</span></div>
-      <p className="placement-help">Доступны свободные накладные и накладные черновых поставок. Можно выбрать документы на нескольких страницах.</p>
-      {!!ids.length && <div className="placement-chips">{Object.values(selected).map(b => <button key={b.id} onClick={() => toggle(b)} aria-label={'Убрать накладную ' + b.number}>№ {b.number} <span>×</span></button>)}</div>}
-      <div className="table-wrap"><table><thead><tr><th><UiInput type="checkbox" aria-label="Выбрать накладные на странице" disabled={loading || busy || !data?.items.length} checked={!!data?.items.length && data.items.every(b => !!selected[b.id])} onChange={e => { const add = e.target.checked; setSelected(prev => { const next = { ...prev }; data?.items.forEach(b => { if (!add) delete next[b.id]; else if (Object.keys(next).length < 200) next[b.id] = b }); return next }) }} /></th><th>Накладная</th><th>Вагоны</th><th>КТК</th><th>Маршрут</th><th>Поставка</th></tr></thead><tbody>
-        {loading ? <tr><td colSpan={6}>Загружаем накладные…</td></tr> : data?.items.map(b => <tr key={b.id}><td><UiInput type="checkbox" disabled={busy || (!selected[b.id] && ids.length >= 200)} checked={!!selected[b.id]} aria-label={'Выбрать накладную ' + b.number} onChange={() => toggle(b)} /></td><td>{b.number}</td><td>{b.wagonNumbers}</td><td>{b.containerCount}</td><td>{getWaybillStationName(Number(b.departure))} → {getWaybillStationName(Number(b.destination))}</td><td>{b.receivingNumber ? 'Черновик №' + b.receivingNumber : 'Свободная'}</td></tr>)}
-        {!loading && !data?.items.length && <tr><td colSpan={6}>Подходящих накладных нет</td></tr>}
+    {!layout ? <div className="table-card placement-selection">
+      <div className="table-wrap"><table><thead><tr><th><UiInput type="checkbox" aria-label="Выбрать накладные на странице" disabled={loading || busy || !data?.items.length} checked={!!data?.items.length && data.items.every(b => !!selected[b.id])} onChange={e => { const add = e.target.checked; setSelected(prev => { const next = { ...prev }; data?.items.forEach(b => { if (!add) delete next[b.id]; else if (Object.keys(next).length < 200) next[b.id] = b }); return next }) }} /></th><th>Накладная</th><th>Кол-во вагонов</th><th>Кол-во КТК</th><th>Маршрут</th></tr></thead><tbody>
+        {loading ? <tr><td colSpan={5}>Загружаем накладные…</td></tr> : data?.items.map(b => <tr key={b.id}><td><UiInput type="checkbox" disabled={busy || (!selected[b.id] && ids.length >= 200)} checked={!!selected[b.id]} aria-label={'Выбрать накладную ' + b.number} onChange={() => toggle(b)} /></td><td>{b.number}</td><td>{b.wagonCount}</td><td>{b.containerCount}</td><td>{getWaybillStationName(Number(b.departure))} → {getWaybillStationName(Number(b.destination))}</td></tr>)}
+        {!loading && !data?.items.length && <tr><td colSpan={5}>Подходящих накладных нет</td></tr>}
       </tbody></table></div><div className="pagination"><button disabled={loading || busy || page === 0} onClick={() => { setPage(page - 1); setLoading(true) }}>Назад</button><span>Страница {page + 1} из {Math.max(1, data?.totalPages ?? 1)}</span><button disabled={loading || busy || page + 1 >= (data?.totalPages ?? 0)} onClick={() => { setPage(page + 1); setLoading(true) }}>Далее</button></div>
     </div> : <>
-      <div className="placement-toolbar"><div className="placement-counts"><span><b>{layout.waybills.length}</b> накладных</span><span><b>{layout.wagons.length}</b> вагонов</span><span><b>{layout.containers.filter(c => c.selected).length}</b> КТК</span><span className="placement-changed">Перемещено: {changed}</span></div><button className="secondary-button" disabled={!changed || busy} onClick={() => { setPositions({}); setPicked(null); setError('') }}>Сбросить перемещения</button></div>
-      <p className="placement-help">Перетащите КТК на вагон, а для обмена местами — на другой КТК. Или выберите КТК нажатием и укажите место назначения. КТК из невыбранных накладных остаются на месте.</p>
-      <div className="placement-add"><label>Добавить вагон<UiInput value={wagonQuery} placeholder="Поиск по номеру вагона" disabled={busy} onChange={e => setWagonQuery(e.target.value)} /></label><UiSelect aria-label="Вагон для добавления" value={addId} disabled={busy} onChange={e => setAddId(e.target.value)}><option value="">Выберите вагон</option>{wagonOptions.filter(w => !layout.wagons.some(old => old.id === w.id)).map(w => <option key={w.id} value={w.id}>{w.number} · {w.feet ?? '?'} футов</option>)}</UiSelect><button className="secondary-button" disabled={busy || !addId || layout.wagons.length >= 200} onClick={addWagon}>Добавить</button>{wagonError && <span role="alert">{wagonError}</span>}</div>
       <div className="wagon-grid" aria-label="Схема размещения КТК">{layout.wagons.map(w => { const rows = rowsOn(w.id), issue = wagonIssue(w, rows); return <section key={w.id} className="wagon-card" data-wagon={w.id} data-over={over === w.id} data-invalid={!!issue} aria-label={'Вагон ' + w.number}
         onDragOver={e => { if (drag.current && !busy) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(w.id) } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null) }}
         onDrop={e => { e.preventDefault(); if (drag.current) move(drag.current, w.id); drag.current = null }}>

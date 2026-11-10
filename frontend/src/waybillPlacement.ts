@@ -1,6 +1,6 @@
 import { request } from './http'
 import type { PagedResponse } from './domain'
-export type PlacementCandidate = { id: string; number: string; receivingNumber: number | null; wagonNumbers: string; containerCount: number; departure: string; destination: string }
+export type PlacementCandidate = { id: string; number: string; receivingNumber: number | null; wagonCount: number; containerCount: number; departure: string; destination: string }
 export type PlacementWagon = { id: string; number: string; feet: number | null; capacity: number | null }
 export type PlacementContainer = { rowId: string; containerId: string; number: string; type: string; grossWeight: number; waybillId: string; waybillNumber: string; wagonId: string; selected: boolean }
 export type PlacementLayout = { waybills: { id: string; number: string }[]; wagons: PlacementWagon[]; containers: PlacementContainer[]; version: string }

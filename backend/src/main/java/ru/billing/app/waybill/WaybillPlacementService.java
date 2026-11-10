@@ -28,7 +28,7 @@ public class WaybillPlacementService {
         @NotEmpty @Size(max=2000) List<@NotNull @Valid Assignment> assignments) {}
     public record Bill(UUID id,String number,UUID receivingId,Integer receivingNumber,String status,
         UUID parent,UUID route,String departure,String destination,String payer) {}
-    public record Candidate(UUID id,String number,Integer receivingNumber,String wagonNumbers,int containerCount,String departure,String destination) {}
+    public record Candidate(UUID id,String number,Integer receivingNumber,int wagonCount,int containerCount,String departure,String destination) {}
     public record Wagon(UUID id,String number,Integer feet,BigDecimal capacity) {}
     public record Container(UUID rowId,UUID containerId,String number,String type,BigDecimal grossWeight,
         UUID waybillId,String waybillNumber,UUID wagonId,boolean selected) {}
@@ -59,10 +59,9 @@ public class WaybillPlacementService {
           """;
         long total=jdbc.queryForObject("select count(*) "+from,Long.class,query,query,query,query);
         var items=jdbc.query("""
-          select w.id,w.number,r.number, (select string_agg(distinct c.code,', ' order by c.code) from waybill_railway_carriage rc
-            join railway_carriage c on c.id=rc.railway_carriage_id where rc.waybill_id=w.id),
+          select w.id,w.number,r.number, (select count(distinct rc.railway_carriage_id) from waybill_railway_carriage rc where rc.waybill_id=w.id),
           (select count(*) from waybill_railway_carriage rc join waybill_container wc on wc.waybill_railway_carriage_id=rc.id where rc.waybill_id=w.id),ds.esr_code,ts.esr_code
-          """+from+" order by w.number desc,w.id limit ? offset ?",(rs,n)->new Candidate(rs.getObject(1,UUID.class),rs.getString(2),rs.getObject(3,Integer.class),rs.getString(4),rs.getInt(5),rs.getString(6),rs.getString(7)),query,query,query,query,size,page*size);
+          """+from+" order by w.number desc,w.id limit ? offset ?",(rs,n)->new Candidate(rs.getObject(1,UUID.class),rs.getString(2),rs.getObject(3,Integer.class),rs.getInt(4),rs.getInt(5),rs.getString(6),rs.getString(7)),query,query,query,query,size,page*size);
         return PagedResponse.of(items,page,size,total);
     }
     private static final String WAGON_SQL="""

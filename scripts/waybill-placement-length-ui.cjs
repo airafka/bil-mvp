@@ -19,8 +19,21 @@ const click=async(label)=>{await evaljs('[...document.querySelectorAll("button")
 const shot=async(name)=>{const r=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});fs.writeFileSync(path.join(dir,'../backups/wagon-compact-'+name+'.png'),Buffer.from(r.data,'base64'))};
 await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
 await send('Page.navigate',{url:base+'/waybills/edit-placement'});await wait('document.querySelector(".placement-selection input")');
-await evaljs('(()=>{const el=document.querySelector(".placement-selection input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(el,'+JSON.stringify(fixture.tag)+');el.dispatchEvent(new Event("input",{bubbles:true}))})()');
-await wait('document.querySelectorAll("tbody input[type=checkbox]").length===8');await evaljs('document.querySelector("thead input[type=checkbox]").click()');await click('Показать вагоны →');await wait('document.querySelectorAll(".wagon-card").length===4');
+await wait('document.querySelector("tbody input[type=checkbox]")');
+assert.equal(await evaljs('document.querySelectorAll(".placement-selection input:not([type=checkbox]),.placement-steps,.placement-subtitle").length'),0);
+assert.deepEqual(await evaljs('[...document.querySelectorAll("thead th")].slice(1).map(el=>el.textContent)'),['Накладная','Кол-во вагонов','Кол-во КТК','Маршрут']);
+assert.ok(await evaljs('[...document.querySelectorAll("tbody tr")].every(tr=>/^\\d+$/.test(tr.cells[2].textContent)&&/^\\d+$/.test(tr.cells[3].textContent))'));
+await shot('selection');
+const wanted=fixture.bills.map(b=>b.number);let selectedCount=0;
+for(let page=0;page<100 && selectedCount<wanted.length;page++){
+ selectedCount+=await evaljs('(()=>{const wanted='+JSON.stringify(wanted)+';let n=0;for(const tr of document.querySelectorAll("tbody tr")){if(wanted.includes(tr.cells[1]?.textContent)){const cb=tr.querySelector("input");if(!cb.checked){cb.click();n++}}}return n})()');
+ if(selectedCount===wanted.length)break;
+ assert.ok(!await evaljs('document.querySelector(".pagination button:last-child").disabled'),'Fixture not found');
+ await evaljs('document.querySelector(".pagination button:last-child").click()');await wait('document.querySelector("tbody input[type=checkbox]")');
+}
+assert.equal(selectedCount,wanted.length);await evaljs('document.querySelector(".page-header .primary-button").click()');
+await wait('document.querySelectorAll(".wagon-card").length===4');
+assert.equal(await evaljs('document.querySelectorAll(".placement-steps,.placement-toolbar,.placement-help,.placement-add,input:not([type=checkbox]),select").length'),0);
 const card=id=>'document.querySelector('+JSON.stringify('[data-wagon="'+id+'"]')+')';
 const target=card(fixture.target),count=()=>evaljs(target+'.querySelectorAll(".ktk-unit").length');assert.equal(await count(),6);
 assert.ok(await evaljs('[...document.querySelectorAll(".wagon-card")].every(el=>el.getBoundingClientRect().top===document.querySelector(".wagon-card").getBoundingClientRect().top)'));
