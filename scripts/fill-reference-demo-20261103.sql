@@ -1,5 +1,5 @@
 \set ON_ERROR_STOP on
--- One-off, explicitly requested demo data. See reference-fill-20261103.md.
+-- One-off, explicitly requested demo data. See docs/equipment-number-formats.md.
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 LOCK TABLE container, railway_carriage, railway_carriage_model IN SHARE ROW EXCLUSIVE MODE;
