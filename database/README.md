@@ -1,6 +1,6 @@
 # Перенос bil-next на другой компьютер
 
-Проверено10.11.2026: свежий снимок рабочей billing_next содержит схемуV28. Код и снимок опубликованы вместе в ветке codex/standardize-billing-ui. Инструкция предназначена только для нового пустого окружения; текущую рабочую БД не восстанавливать и не очищать.
+В ветке `main` хранятся код проекта и переносимый снимок `billing_next` со схемой V28. Восстанавливайте снимок только в пустую БД нового окружения.
 
 Актуальный переносимый снимок: `billing-next-snapshot.dump`, 10.11.2026, PostgreSQL16, схемаV28. Содержит схему, все данные приложения, последовательности номеров и историю Flyway. Контрольная сумма SHA256 и результаты проверки: [billing-next-snapshot.json](billing-next-snapshot.json).
 
@@ -11,7 +11,7 @@
 Нужны Git, Docker Desktop с Linux containers и Docker Compose v2. Java, Node.js и PostgreSQL на компьютере устанавливать отдельно не требуется. Запустите Docker Desktop. Порты3001/8081/5433 должны быть свободны.
 
 ```powershell
-git clone --branch codex/standardize-billing-ui --single-branch https://github.com/airafka/bil.git bil-next
+git clone --branch main --single-branch https://github.com/airafka/bil.git bil-next
 cd bil-next
 Copy-Item .env.example .env
 powershell -NoProfile -ExecutionPolicy Bypass -File .\restore-snapshot.ps1
@@ -24,6 +24,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
 
 Скрипты находят Docker через PATH или стандартные пути установки; имя пользователя Windows и расположение клона могут быть любыми. При занятом порте измените `FRONTEND_PORT`, `BACKEND_PORT`, `DB_PORT` в `.env` перед восстановлением. Имя БД оставьте `billing_next`. Локальный пароль можно изменить в `.env` до первого создания volume; файл `.env` не публикуется.
 
+## Обновление существующей копии
+
+Из корня рабочего репозитория проверьте `git status` и сохраните локальные изменения. Перед обновлением сделайте резервную копию рабочей БД, если обновление включает миграции. Если копия была клонирована со старой ветки, переключите её на `main`.
+
+```powershell
+git remote set-branches origin main
+git fetch origin
+git switch main
+git branch --set-upstream-to=origin/main main
+git pull --ff-only
+powershell -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
+```
+
+При обновлении используйте существующую локальную БД. `start.ps1` пересобирает приложение, а Flyway применяет новые миграции при запуске backend.
+
 ## Проверка запуска
 
 - Интерфейс: http://localhost:3001
@@ -35,7 +50,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
 
 ## Linux / macOS
 
-После клонирования ветки codex/standardize-billing-ui скопируйте `.env.example` в `.env`. В **новом пустом окружении**, до запуска backend/frontend:
+После клонирования ветки `main` скопируйте `.env.example` в `.env`. Для нового пустого окружения выполните команды до запуска backend и frontend.
 
 ```sh
 docker compose -p billing-next up -d --wait db
@@ -51,7 +66,7 @@ docker compose -p billing-next up -d --build
 
 ## Старые снимки
 
-`billing-snapshot.dump` от29.10.2026 — историческая версия V1–V44, несовместимая с текущей схемой. Для этого переноса не использовать. Локальный `billing-next-initial.dump` от04.11.2026 также не является актуальным снимком и не публикуется. Используйте только `billing-next-snapshot.dump` вместе с кодом ветки codex/standardize-billing-ui.
+`billing-snapshot.dump` от29.10.2026 — историческая версия V1–V44, несовместимая с текущей схемой. Для этого переноса не использовать. Локальный `billing-next-initial.dump` от04.11.2026 также не является актуальным снимком и не публикуется. Для развёртывания используйте `billing-next-snapshot.dump` вместе с кодом ветки `main`.
 
 ## Изменение рабочей базы 06.11.2026
 
