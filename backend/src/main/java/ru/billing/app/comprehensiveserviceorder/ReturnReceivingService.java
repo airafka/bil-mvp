@@ -38,6 +38,8 @@ public class ReturnReceivingService {
                         rs.getObject("terminal_area_catalog_id", UUID.class)), shippingId);
         if (sources.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "SHIPPING_ORDER_NOT_FOUND", "Заявка на вывоз не найдена");
         Source source = sources.getFirst();
+        if("CANCELLED".equals(jdbc.queryForObject("select order_status from shipping_order where id=?",String.class,shippingId)))
+            throw new ApiException(HttpStatus.CONFLICT,"ORDER_CANCELLED","Нельзя создать возврат по отменённому вывозу");
         if (source.serviceId() == null) throw new ApiException(HttpStatus.BAD_REQUEST, "SERVICE_SHIPPING_REQUIRED", "Возврат доступен только для вывоза в заявке на услугу");
         Boolean railway = jdbc.queryForObject("select workflow='RAILWAY_RETURN' from comprehensive_service_order where id=?", Boolean.class, source.serviceId());
         if (!Boolean.TRUE.equals(railway)) throw new ApiException(HttpStatus.BAD_REQUEST,"RAILWAY_SERVICE_REQUIRED","Возврат доступен для вывоза исходной ЖД-услуги");

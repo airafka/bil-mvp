@@ -90,7 +90,7 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
     [order],
   )
   const isRailwayReceiving = config.kind === 'receiving' && order?.transportType === 'RAILWAY'
-  const isRailwayShipping = config.kind === 'shipping' && order?.transportType === 'RAILWAY'
+  const isRailwayShipping = config.kind === 'shipping' && order?.status !== 'CANCELLED' && order?.transportType === 'RAILWAY'
 
   const isRailway = isRailwayReceiving || isRailwayShipping
   const tabs = isRailwayReceiving
@@ -103,7 +103,7 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
   const contentTab = activeTab === 2 ? 0 : activeTab > 2 ? activeTab - 1 : activeTab
   const [returnDialogOpen, setReturnDialogOpen] = useState(false)
   const [returnNotice, setReturnNotice] = useState<import('../api').CreatedReturns | null>(null)
-  const returnedContainerIds = new Set(order?.returnOrders?.flatMap(item => item.containerIds) ?? [])
+  const returnedContainerIds = new Set(order?.returnOrders?.filter(item => item.status !== 'CANCELLED').flatMap(item => item.containerIds) ?? [])
   const canCreateReturn = config.kind === 'shipping' && order?.transportType === 'VEHICLE' && order.comprehensiveServiceOrderId && order.containers.some(item => !returnedContainerIds.has(item.containerId))
   const returnButton = canCreateReturn && !editing && <button type="button" className="secondary-button" onClick={() => setReturnDialogOpen(true)}>Создать возврат</button>
   const numberedContainers = order ? [...order.containers, ...order.railwayCarriages.flatMap(w => w.containers)] : []

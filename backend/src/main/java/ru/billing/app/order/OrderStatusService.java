@@ -99,16 +99,16 @@ public class OrderStatusService {
             jdbc.update("""
                 update route r set status='COMPLETED'
                 where r.id=(select route_id from %s where id=?) and r.status='CONFIRMED'
-                  and not exists (select 1 from receiving_order where route_id=r.id and order_status<>'COMPLETED')
-                  and not exists (select 1 from shipping_order where route_id=r.id and order_status<>'COMPLETED')
+                  and not exists (select 1 from receiving_order where route_id=r.id and order_status not in ('COMPLETED','CANCELLED'))
+                  and not exists (select 1 from shipping_order where route_id=r.id and order_status not in ('COMPLETED','CANCELLED'))
                 """.formatted(table), id);
         }
         if (!resource.equals("comprehensive-service-orders") && request.status() == Status.COMPLETED) {
             jdbc.update("""
                 update comprehensive_service_order s set status='COMPLETED'
-                where s.id in (select comprehensive_service_order_id from %s where id=? union select source_service_order_id from comprehensive_service_order where id=(select comprehensive_service_order_id from %s where id=?)) and s.status<>'COMPLETED'
-                  and not exists(select 1 from receiving_order where comprehensive_service_order_id=s.id and order_status<>'COMPLETED')
-                  and not exists(select 1 from shipping_order where comprehensive_service_order_id=s.id and order_status<>'COMPLETED')
+                where s.id in (select comprehensive_service_order_id from %s where id=? union select source_service_order_id from comprehensive_service_order where id=(select comprehensive_service_order_id from %s where id=?)) and s.status not in ('COMPLETED','CANCELLED')
+                  and not exists(select 1 from receiving_order where comprehensive_service_order_id=s.id and order_status not in ('COMPLETED','CANCELLED'))
+                  and not exists(select 1 from shipping_order where comprehensive_service_order_id=s.id and order_status not in ('COMPLETED','CANCELLED'))
                   and (exists(select 1 from receiving_order where comprehensive_service_order_id=s.id and service_role='RETURN_RECEIVING') or exists(select 1 from receiving_order r join shipping_order sh on sh.id=r.source_shipping_order_id where sh.comprehensive_service_order_id=s.id and r.service_role='RETURN_RECEIVING'))
                     and not exists(select 1 from shipping_order_source_container link where link.comprehensive_service_order_id=s.id
                       and not exists(select 1 from receiving_order r join receiving_order_container rc on rc.receiving_order_id=r.id
@@ -141,9 +141,9 @@ public class OrderStatusService {
         if(!routes.getFirst().equals("DRAFT")) throw new ApiException(HttpStatus.CONFLICT,"ROUTE_NOT_DRAFT","Рейс уже подтверждён. Обновите страницу");
         record Order(String resource, UUID id, int number, String status, boolean dateMissing, boolean partyMissing) {}
         var orders=new java.util.ArrayList<Order>();
-        orders.addAll(jdbc.query("select id,number,order_status,plan_receiving_date_time,consignor from receiving_order where route_id=? order by id for update",
+        orders.addAll(jdbc.query("select id,number,order_status,plan_receiving_date_time,consignor from receiving_order where route_id=? and order_status<>'CANCELLED' order by id for update",
             (rs,n)->new Order("receiving-orders",rs.getObject(1,UUID.class),rs.getInt(2),rs.getString(3),rs.getObject(4)==null,rs.getString(5)==null||rs.getString(5).isBlank()),routeId));
-        orders.addAll(jdbc.query("select s.id,s.number,s.order_status,s.planned_shipping_date_time,(select name from client_related_entity where id=s.consignee_id) from shipping_order s where s.route_id=? order by s.id for update of s",
+        orders.addAll(jdbc.query("select s.id,s.number,s.order_status,s.planned_shipping_date_time,(select name from client_related_entity where id=s.consignee_id) from shipping_order s where s.route_id=? and s.order_status<>'CANCELLED' order by s.id for update of s",
             (rs,n)->new Order("shipping-orders",rs.getObject(1,UUID.class),rs.getInt(2),rs.getString(3),rs.getObject(4)==null,rs.getString(5)==null||rs.getString(5).isBlank()),routeId));
         if(orders.isEmpty()) throw new ApiException(HttpStatus.CONFLICT,"ROUTE_EMPTY","Добавьте заявки в рейс");
         var errors=new java.util.ArrayList<String>();

@@ -313,7 +313,7 @@ export const orderConfigs: Record<OrderKind, OrderConfig> = {
 }
 
 export function statusLabel(status: string) {
-  return ({ DRAFT: 'Черновик', PAID: 'Оплачен', CONFIRMED: 'Подтверждено', COMPLETED: 'Выполнено' } as Record<string, string>)[status] ?? status
+  return ({ DRAFT: 'Черновик', CANCELLED: 'Отменено', PAID: 'Оплачен', CONFIRMED: 'Подтверждено', COMPLETED: 'Выполнено' } as Record<string, string>)[status] ?? status
 }
 
 export function transportTypeLabel(transportType: TransportType | null) {

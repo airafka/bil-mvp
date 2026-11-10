@@ -159,6 +159,8 @@ public class ReceivingOrderStore {
     }
 
     public OrderDetails findById(UUID id) {
+        var archived = OrderCancellationArchive.find(jdbcTemplate, "receiving-orders", id);
+        if (archived != null) return archived;
         List<OrderHeader> headers = jdbcTemplate.query(
                 """
                 select o.id, o.number as code, o.client_id, c.name as client_name,
@@ -201,7 +203,7 @@ public class ReceivingOrderStore {
                 select oc.container_id, c.code as container_name, oc.empty,
                        oc.owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
                        oc.seal_type_id, st.code as seal_type_name, oc.danger_class_id, hc.code as danger_class_name,
-                       item.etsng_code_id, e.code as etsng_code_name, item.wight_net, stock.status as container_status
+                       item.etsng_code_id, e.code as etsng_code_name, item.wight_net, coalesce(stock.status,'DEPARTED') as container_status
                 from receiving_order_container oc
                 join container c on c.id = oc.container_id
                 left join container_owner stock on stock.container_id = oc.container_id
@@ -237,7 +239,7 @@ public class ReceivingOrderStore {
               wc.owner_container_id as owner_container_id,
               owner.name as owner_container_name,wc.seal_numbers,wc.seal_type_id,wc.seal_type_name,
               hazard.danger_class_id,hc.code as danger_class_name,
-              null::uuid as etsng_code_id,null::text as etsng_code_name,null::numeric as wight_net,stock.status as container_status
+              null::uuid as etsng_code_id,null::text as etsng_code_name,null::numeric as wight_net,coalesce(stock.status,'DEPARTED') as container_status
             from receiving_order r join waybill w on w.receiving_order_id=r.id
             join waybill_railway_carriage rc on rc.waybill_id=w.id
             join waybill_container_details wc on wc.waybill_railway_carriage_id=rc.id

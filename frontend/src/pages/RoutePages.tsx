@@ -1,5 +1,6 @@
 import { TableReveal } from '../components/TableReveal'
 import { RouteLogisticsFields } from '../components/RouteLogisticsFields'
+import { OrderCancellationDialog } from '../components/OrderCancellationDialog'
 import { confirmRoute, updateRoute } from '../api'
 import { RecordRow } from '../components/RecordRow'
 import { Notification } from '../components/Notification'
@@ -113,6 +114,7 @@ export function RouteCreatePage() {
 }
 
 export function RouteViewPage() {
+  const [cancelling, setCancelling] = useState(false)
   const { routeId = '' } = useParams()
   const [details, setDetails] = useState<RouteDetails | null>(null)
   const [error, setError] = useState('')
@@ -156,7 +158,7 @@ export function RouteViewPage() {
     finally { setSaving(false) }
   }
   return <section className="form-page route-page">
-    <div className="page-header"><h1>Рейс {route?.code ?? ''}</h1><div className="view-header-actions"><Link className="close-button" to="/routes" aria-label="Закрыть" title="Закрыть">×</Link>{route && <>{editing && <><button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelected([]); setError('') }}>Отмена</button><button type="button" className="primary-button" disabled={saving || loadingAvailable} onClick={addOrders}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></>}{route.status === 'DRAFT' && !editing && <button type="button" className="primary-button" disabled={saving} onClick={confirm}>{saving ? 'Сохраняем…' : 'Подтвердить'}</button>}{route.status === 'DRAFT' && !editing && <button type="button" className="secondary-button icon-button" aria-label="Редактировать" title="Редактировать" onClick={() => { setSelected([]); setAvailable([]); setLoadingAvailable(true); setError(''); setEditTab('main'); setDate(new Date(new Date(route.departureAt).getTime()-new Date(route.departureAt).getTimezoneOffset()*60000).toISOString().slice(0,16)); setCarrier(route.carrierId??''); setDriver(route.driverId??''); setVehicle(route.vehicleId??''); setComment(route.comment??''); setEditing(true) }}><ActionIcon name="edit" /></button>}</>}</div></div>
+    <div className="page-header"><h1>Рейс {route?.code ?? ''}</h1><div className="view-header-actions"><Link className="close-button" to="/routes" aria-label="Закрыть" title="Закрыть">×</Link>{route && <>{!editing && route.status !== 'CANCELLED' && <button type="button" className="secondary-button" disabled={saving} onClick={() => setCancelling(true)}>Отменить рейс</button>}{cancelling && <OrderCancellationDialog apiPath="/api/routes" id={routeId} status={route.status} onClose={() => setCancelling(false)} onChanged={() => { getRoute(routeId).then(setDetails).catch(e => setError(String(e))) }} />}{editing && <><button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelected([]); setError('') }}>Отмена</button><button type="button" className="primary-button" disabled={saving || loadingAvailable} onClick={addOrders}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></>}{route.status === 'DRAFT' && !editing && <button type="button" className="primary-button" disabled={saving} onClick={confirm}>{saving ? 'Сохраняем…' : 'Подтвердить'}</button>}{route.status === 'DRAFT' && !editing && <button type="button" className="secondary-button icon-button" aria-label="Редактировать" title="Редактировать" onClick={() => { setSelected([]); setAvailable([]); setLoadingAvailable(true); setError(''); setEditTab('main'); setDate(new Date(new Date(route.departureAt).getTime()-new Date(route.departureAt).getTimezoneOffset()*60000).toISOString().slice(0,16)); setCarrier(route.carrierId??''); setDriver(route.driverId??''); setVehicle(route.vehicleId??''); setComment(route.comment??''); setEditing(true) }}><ActionIcon name="edit" /></button>}</>}</div></div>
     {error && <Notification kind="error">{error}</Notification>}
     {!details && !error && <div className="service-loading" role="status">Загружаем рейс…</div>}
     {route && <><div className="stepper view-tabs" aria-label="Разделы рейса"><button type="button" className={`step ${editTab === 'main' ? 'current' : ''}`} onClick={() => setEditTab('main')}>Основное</button><button type="button" className={`step ${editTab === 'orders' ? 'current' : ''}`} onClick={() => setEditTab('orders')}>Заявки</button></div><section hidden={editTab !== 'main'} className="service-main-panel">{editing?<form id="route-edit-main" onSubmit={event=>{event.preventDefault();void addOrders()}}>

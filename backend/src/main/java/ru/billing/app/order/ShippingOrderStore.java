@@ -102,6 +102,8 @@ public class ShippingOrderStore {
     }
 
     public OrderDetails findById(UUID id) {
+        var archived = OrderCancellationArchive.find(jdbcTemplate, "shipping-orders", id);
+        if (archived != null) return archived;
         List<OrderHeader> headers = jdbcTemplate.query(
                 """
                 select o.id, o.number as code, o.client_id, c.name as client_name,
@@ -233,7 +235,7 @@ public class ShippingOrderStore {
                 select oc.container_id, c.code as container_name, oc.empty,
                        case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end as owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
                        oc.seal_type_id, st.code as seal_type_name, oc.danger_class_id, hc.code as danger_class_name,
-                       item.etsng_code_id, e.code as etsng_code_name, item.wight_net, stock.status as container_status
+                       item.etsng_code_id, e.code as etsng_code_name, item.wight_net, coalesce(stock.status,'DEPARTED') as container_status
                   from shipping_order_container oc
                   join container c on c.id = oc.container_id
                   left join shipping_order so on so.id = oc.shipping_order_id
@@ -259,7 +261,7 @@ public class ShippingOrderStore {
                        oc.container_id, c.code as container_name, oc.empty,
                        case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end as owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
                        oc.seal_type_id, st.code as seal_type_name, oc.danger_class_id, hc.code as danger_class_name,
-                       item.etsng_code_id, e.code as etsng_code_name, item.wight_net, stock.status as container_status
+                       item.etsng_code_id, e.code as etsng_code_name, item.wight_net, coalesce(stock.status,'DEPARTED') as container_status
                   from shipping_order_railway_carriage sorc
                   join railway_carriage rc on rc.id = sorc.railway_carriage_id
                   left join shipping_order_container oc

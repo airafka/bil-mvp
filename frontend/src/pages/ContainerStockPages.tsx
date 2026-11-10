@@ -36,6 +36,6 @@ export function ContainerHistoryPage() {
     {error && <Notification kind="error">{error}</Notification>}
     <div className="table-card"><div className="table-wrap"><table><thead><tr><th>Дата</th><th>Заявка</th><th>Прежний собственник</th><th>Новый собственник</th><th>Прежнее состояние</th><th>Новое состояние</th></tr></thead><tbody>
       {!rows && !error && <tr><td colSpan={6}>Загружаем историю…</td></tr>}{rows?.length === 0 && <tr><td colSpan={6}>Записей истории нет</td></tr>}
-      {rows?.map(row => <tr key={row.id}><td>{new Date(row.createdAt + 'Z').toLocaleString('ru-RU')}</td><td><Link to={historyOrderPath(row)}>{row.orderType === 'SERVICE_ORDER' ? 'Смена собственника' : row.orderType === 'RECEIVING_ORDER' ? 'Поставка' : 'Вывоз'} № {row.orderNumber}</Link></td><td>{row.oldClientName || '—'}</td><td>{row.newClientName || '—'}</td><td><ContainerStatusBadge status={row.oldStatus} /></td><td><ContainerStatusBadge status={row.newStatus} /></td></tr>)}
+      {rows?.map(row => <tr key={row.id}><td>{new Date(row.createdAt + 'Z').toLocaleString('ru-RU')}</td><td><Link to={historyOrderPath(row)}>{row.cancellation ? 'Отмена: ' : ''}{row.orderType === 'SERVICE_ORDER' ? 'Смена собственника' : row.orderType === 'RECEIVING_ORDER' ? 'Поставка' : 'Вывоз'} № {row.orderNumber}</Link></td><td>{row.oldClientName || '—'}</td><td>{row.newClientName || '—'}</td><td><ContainerStatusBadge status={row.oldStatus} /></td><td><ContainerStatusBadge status={row.newStatus} /></td></tr>)}
     </tbody></table></div></div></section>
 }

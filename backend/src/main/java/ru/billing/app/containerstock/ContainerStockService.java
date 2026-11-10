@@ -20,7 +20,7 @@ public class ContainerStockService {
     public List<Lookup> lookup(List<UUID> containerIds) {
         var ids = containerIds.stream().distinct().toList();
         String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
-        var result = jdbc.query("select c.id, o.client_id, cl.name, o.status from container c "
+        var result = jdbc.query("select c.id, o.client_id, cl.name, coalesce(o.status,'DEPARTED') from container c "
             + "left join container_owner o on o.container_id=c.id left join client cl on cl.id=o.client_id "
             + "where c.id in (" + placeholders + ") order by c.code",
             (rs,n) -> new Lookup(rs.getObject(1,UUID.class), rs.getObject(2,UUID.class), rs.getString(3), rs.getString(4)), ids.toArray());
@@ -29,7 +29,7 @@ public class ContainerStockService {
     }
     public record History(UUID id, UUID containerId, UUID oldClientId, String oldClientName,
             UUID newClientId, String newClientName, String oldStatus, String newStatus,
-            UUID orderId, String orderType, Long orderNumber, LocalDateTime createdAt) {}
+            UUID orderId, String orderType, Long orderNumber, LocalDateTime createdAt, boolean cancellation) {}
     record State(UUID id, UUID client, String status, UUID receiving, UUID shipping) {}
 
     public void lockContainers(Collection<UUID> ids) {
@@ -84,8 +84,25 @@ public class ContainerStockService {
             return;
         }
         lockContainers(rows.stream().map(Row::container).toList());
+        var conflicts = new ArrayList<String>();
+        var owners = new HashMap<UUID,UUID>();
+        for (var row:rows) {
+            State old = state(row.container());
+            if (!completed) {
+                if (receiving && row.owner()==null) conflicts.add(containerName(row.container())+": не указан собственник");
+                UUID previous = owners.putIfAbsent(row.container(),row.owner());
+                if (receiving && previous!=null && !previous.equals(row.owner())) conflicts.add(containerName(row.container())+": указаны разные собственники");
+                String problem=ContainerStockPolicy.reservationConflict(receiving,old==null?null:old.status());
+                if(problem!=null) conflicts.add(describe(row.container(),old,problem));
+            }
+        }
+        if(!conflicts.isEmpty()) throw error("CONTAINER_RESERVATION_CONFLICT",String.join("; ",conflicts));
         for(var row:rows) {
             State old=state(row.container());
+            if(!completed) jdbc.update("""
+                insert into container_stock_reservation(order_id,order_type,container_id,previous_client_id,previous_receiving_id,previous_shipping_id)
+                values(?,?,?,?,?,?) on conflict do nothing
+                """,order,receiving?"RECEIVING_ORDER":"SHIPPING_ORDER",row.container(),old==null?null:old.client(),old==null?null:old.receiving(),old==null?null:old.shipping());
             if(receiving) {
                 if(!completed) {
                     if(row.owner()==null) throw error("RECEIVING_OWNER_REQUIRED","Укажите собственника каждого КТК в заявке на поставку");
@@ -111,6 +128,50 @@ public class ContainerStockService {
                 on conflict(order_id,container_id,event_code) do nothing
                 """.formatted(receiving?"receiving_order":"shipping_order"),UUID.randomUUID(),order,row.container(),receiving?"UNLOAD_FINISH":"LOAD_FINISH",order);
         }
+    }
+    private String containerName(UUID id) {
+        return jdbc.queryForObject("select code from container where id=?",String.class,id);
+    }
+    private String describe(UUID id, State state, String problem) {
+        UUID related=state==null?null:("RESERVED_OUT".equals(state.status())||"DEPARTED".equals(state.status())?state.shipping():state.receiving());
+        boolean shipping=state!=null&&("RESERVED_OUT".equals(state.status())||"DEPARTED".equals(state.status()));
+        var number=related==null?List.<Integer>of():jdbc.query("select number from "+(shipping?"shipping_order":"receiving_order")+" where id=?",(rs,n)->rs.getInt(1),related);
+        return containerName(id)+": "+problem+(number.isEmpty()?"":" ("+(shipping?"вывоз":"поставка")+" №"+number.getFirst()+")");
+    }
+    public void cancel(String resource,UUID order,String previousStatus) {
+        if("DRAFT".equals(previousStatus))return;
+        boolean receiving=resource.equals("receiving-orders");
+        String type=receiving?"RECEIVING_ORDER":"SHIPPING_ORDER";
+        var ids=jdbc.query("""
+            select container_id from container_stock_reservation where order_id=? and order_type=? order by container_id
+            """,(rs,n)->rs.getObject(1,UUID.class),order,type);
+        // Fail closed for pre-register legacy orders; never guess how to reverse physical stock.
+        Integer expected=receiving?jdbc.queryForObject("""
+            select count(distinct container_id) from (
+              select container_id from receiving_order_container where receiving_order_id=?
+              union select wc.container_id from waybill w join waybill_railway_carriage rc on rc.waybill_id=w.id
+              join waybill_container wc on wc.waybill_railway_carriage_id=rc.id where w.receiving_order_id=?) q
+            """,Integer.class,order,order):jdbc.queryForObject("select count(distinct container_id) from shipping_order_container where shipping_order_id=?",Integer.class,order);
+        if(expected!=ids.size())throw error("STOCK_HISTORY_REQUIRED","Недостаточно истории резервирования для отмены. Требуется сверка остатков");
+        lockContainers(ids);
+        var conflicts=new ArrayList<String>();
+        for(UUID id:ids) {
+            State old=state(id);
+            if(old==null || !ContainerStockPolicy.canCancel(receiving,"COMPLETED".equals(previousStatus),old.status(),receiving?old.receiving():old.shipping(),order))
+                conflicts.add(describe(id,old,"отмена невозможна: КТК уже участвует в другой операции; сначала отмените последующие заявки"));
+        }
+        if(!conflicts.isEmpty())throw error("CANCELLATION_STOCK_CONFLICT",String.join("; ",conflicts));
+        for(UUID id:ids) {
+            State old=state(id);
+            var previous=jdbc.queryForObject("select previous_client_id,previous_receiving_id,previous_shipping_id from container_stock_reservation where order_id=? and order_type=? and container_id=?",
+                (rs,n)->new State(null,rs.getObject(1,UUID.class),null,rs.getObject(2,UUID.class),rs.getObject(3,UUID.class)),order,type,id);
+            // Receiving restores the owner before acceptance. Shipping preserves any later owner change.
+            transition(id,receiving&&previous.client()!=null?previous.client():old.client(),receiving?"DEPARTED":"ON_TERMINAL",
+                receiving?previous.receiving():old.receiving(),receiving?old.shipping():previous.shipping(),order,type);
+            jdbc.update("update container_owner_history set cancellation=true where container_id=? and order_id=? and order_type=? and new_status=?",
+                id,order,type,receiving?"DEPARTED":"ON_TERMINAL");
+        }
+        jdbc.update("update container_movement set active=false,updated_at=clock_timestamp() at time zone 'UTC' where order_id=?",order);
     }
     static final String OWNER_SELECT="""
         select o.*,c.code as container_name,c.container_type,cl.name as client_name
@@ -142,12 +203,12 @@ public class ContainerStockService {
             left join receiving_order r on h.order_type='RECEIVING_ORDER' and r.id=h.order_id
             left join shipping_order s on h.order_type='SHIPPING_ORDER' and s.id=h.order_id
             left join service_order so on h.order_type='SERVICE_ORDER' and so.id=h.order_id
-            where h.container_id=? and (? or (h.new_status in ('ON_TERMINAL','DEPARTED')
-                and (r.order_status='COMPLETED' or s.order_status='COMPLETED' or so.status='DONE')))
+            where h.container_id=? and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
+                and (r.order_status in ('COMPLETED','CANCELLED') or s.order_status in ('COMPLETED','CANCELLED') or so.status='DONE')))
             order by h.created_at desc,h.id desc
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("old_client_id",UUID.class),rs.getString("old_name"),
                 rs.getObject("new_client_id",UUID.class),rs.getString("new_name"),rs.getString("old_status"),rs.getString("new_status"),
-                rs.getObject("order_id",UUID.class),rs.getString("order_type"),rs.getObject("order_number",Long.class),rs.getObject("created_at",LocalDateTime.class)),container,all);
+                rs.getObject("order_id",UUID.class),rs.getString("order_type"),rs.getObject("order_number",Long.class),rs.getObject("created_at",LocalDateTime.class),rs.getBoolean("cancellation")),container,all);
     }
     ApiException error(String code,String message){return new ApiException(HttpStatus.CONFLICT,code,message);}
 }

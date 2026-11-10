@@ -13,13 +13,17 @@ describe('учёт собственников и ручные движения',
   })
   it('подтверждение транспортных заявок доступно только через рейс', () => {
     for (const apiPath of ['/api/receiving-orders', '/api/shipping-orders']) {
-      expect(renderToStaticMarkup(<OrderStatusAction apiPath={apiPath} id="test" status="DRAFT" onChanged={() => {}} />)).not.toContain('<button')
-      expect(renderToStaticMarkup(<OrderStatusAction apiPath={apiPath} id="test" status="COMPLETED" onChanged={() => {}} />)).not.toContain('<button')
+      expect(renderToStaticMarkup(<OrderStatusAction apiPath={apiPath} id="test" status="DRAFT" onChanged={() => {}} />)).not.toContain('Подтвердить')
+      expect(renderToStaticMarkup(<OrderStatusAction apiPath={apiPath} id="test" status="COMPLETED" onChanged={() => {}} />)).not.toContain('Подтвердить')
     }
   })
   it('предлагает вручную завершить разгрузку и погрузку подтверждённых заявок', () => {
     expect(renderToStaticMarkup(<OrderStatusAction apiPath="/api/receiving-orders" id="r" status="CONFIRMED" onChanged={() => {}} />)).toContain('Выполнить')
     expect(renderToStaticMarkup(<OrderStatusAction apiPath="/api/shipping-orders" id="s" status="CONFIRMED" onChanged={() => {}} />)).toContain('Выполнить')
+  })
+  it('отменённая транспортная заявка не предлагает выполнение и повторную отмену', () => {
+    const html = renderToStaticMarkup(<OrderStatusAction apiPath="/api/shipping-orders" id="order" status="CANCELLED" onChanged={() => {}} />)
+    expect(html).not.toContain('<button')
   })
   it('открывает для истории SERVICE_ORDER процесс смены собственника', () => {
     expect(historyOrderPath({ orderId: 'id', orderType: 'SERVICE_ORDER' })).toBe('/service-orders/id')

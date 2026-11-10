@@ -89,7 +89,7 @@ public class ComprehensiveServiceOrderService {
     public ComprehensiveServiceOrderDetails createShippingForTwentyFootContainers(UUID serviceId, List<UUID> containerIds) {
         if (containerIds == null || containerIds.isEmpty() || containerIds.size() > 2
                 || containerIds.contains(null) || new LinkedHashSet<>(containerIds).size() != containerIds.size()) {
-            throw error(HttpStatus.BAD_REQUEST, "INVALID_CONTAINER_SELECTION", "Выберите один или два разных КТК стандарта 20");
+            throw error(HttpStatus.BAD_REQUEST, "INVALID_CONTAINER_SELECTION", "Выберите один КТК40 либо один или два КТК20");
         }
         List<ServiceHeader> services = jdbc.query(
                 "select client_id, contract_id, status from comprehensive_service_order where id = ? for update",
@@ -97,7 +97,7 @@ public class ComprehensiveServiceOrderService {
                         rs.getObject("contract_id", UUID.class), rs.getString("status")), serviceId);
         if (services.isEmpty()) throw error(HttpStatus.NOT_FOUND, "COMPREHENSIVE_SERVICE_ORDER_NOT_FOUND", "Заявка на услугу не найдена");
         ServiceHeader service = services.getFirst();
-        if ("COMPLETED".equals(service.status())) throw error(HttpStatus.CONFLICT, "COMPREHENSIVE_SERVICE_ORDER_COMPLETED",
+        if ("COMPLETED".equals(service.status()) || "CANCELLED".equals(service.status())) throw error(HttpStatus.CONFLICT, "COMPREHENSIVE_SERVICE_ORDER_COMPLETED",
                 "Нельзя создавать заявки на вывоз для выполненной услуги");
         UUID deliveryId = jdbc.queryForObject(
                 "select id from receiving_order where comprehensive_service_order_id = ? and service_role = 'INITIAL_RECEIVING'",
@@ -109,8 +109,8 @@ public class ComprehensiveServiceOrderService {
                 sources.stream().map(SourceRow::cargo).toList())) planned.put(container.containerId(), container);
         List<OrderContainerRequest> selected = new ArrayList<>();
         for (UUID containerId : containerIds) {
-            if (!"STANDARD_20".equals(types.get(containerId)) || !planned.containsKey(containerId)) {
-                throw error(HttpStatus.BAD_REQUEST, "CONTAINER_NOT_AVAILABLE", "Выберите КТК стандарта 20 из данной поставки");
+            if (!("STANDARD_20".equals(types.get(containerId)) || "STANDARD_40".equals(types.get(containerId))) || !planned.containsKey(containerId) || ("STANDARD_40".equals(types.get(containerId)) && containerIds.size()!=1)) {
+                throw error(HttpStatus.BAD_REQUEST, "CONTAINER_NOT_AVAILABLE", "Выберите один КТК40 либо один или два КТК20 из данной поставки");
             }
             Integer assigned = jdbc.queryForObject("select count(*) from shipping_order_source_container "
                     + "where comprehensive_service_order_id = ? and container_id = ?", Integer.class, serviceId, containerId);
@@ -241,7 +241,7 @@ public class ComprehensiveServiceOrderService {
         List<ServiceShippingOrder> removals = jdbc.query("""
                 select sh.id, sh.number as code, sh.order_status as status, sh.planned_shipping_date_time, (select name from client_related_entity where id=sh.consignee_id) as consignee, array_agg(c.code order by c.code) as container_names
                 from shipping_order sh
-                join shipping_order_source_container link on link.shipping_order_id = sh.id
+                join shipping_order_container link on link.shipping_order_id = sh.id
                 join container c on c.id = link.container_id
                 where sh.comprehensive_service_order_id = ?
                 group by sh.id, sh.number, sh.order_status order by sh.number
@@ -256,7 +256,7 @@ public class ComprehensiveServiceOrderService {
                 join container c on c.id = wc.container_id
                 left join shipping_order_source_container link
                     on link.comprehensive_service_order_id = ? and link.container_id = c.id
-                where w.receiving_order_id = ? and c.container_type = 'STANDARD_20' and link.container_id is null
+                where w.receiving_order_id = ? and c.container_type in ('STANDARD_20','STANDARD_40') and link.container_id is null
                 order by c.code
                 """, (rs, row) -> new ServiceSelectableContainer(rs.getObject("id", UUID.class),
                         rs.getString("code"), rs.getString("type")), id, deliveryId);
@@ -288,7 +288,7 @@ public class ComprehensiveServiceOrderService {
                     select rc.container_id, r.order_status as status, r.id, r.comprehensive_service_order_id as service_id from receiving_order r
                     join receiving_order_container rc on rc.receiving_order_id = r.id
                     join shipping sh on sh.id = r.source_shipping_order_id and sh.container_id = rc.container_id
-                    where r.service_role = 'RETURN_RECEIVING'
+                    where r.service_role = 'RETURN_RECEIVING' and r.order_status<>'CANCELLED'
                 ), own_returns as (
                     select * from returns where service_id = ?
                 )
@@ -329,8 +329,8 @@ public class ComprehensiveServiceOrderService {
                    count(distinct r.id) as orders,
                    count(distinct r.id) filter(where r.order_status='COMPLETED') as done
             from comprehensive_service_order s join complex_service_catalog c on c.id=s.selected_complex_service_id
-            join receiving_order r on r.comprehensive_service_order_id=s.id
-            join receiving_order_container rc on rc.receiving_order_id=r.id
+            left join receiving_order r on r.comprehensive_service_order_id=s.id and r.order_status<>'CANCELLED'
+            left join receiving_order_container rc on rc.receiving_order_id=r.id
             where s.id=? group by c.name
             """,(rs,n)->new ServiceProgress(rs.getString("name"),0,0,0,rs.getInt("total"),rs.getInt("completed"),
             rs.getInt("total"),0,0,0,rs.getInt("orders"),rs.getInt("done"),0),id);

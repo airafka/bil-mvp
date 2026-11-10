@@ -7,7 +7,7 @@ import { UiInput, UiSelect } from './FormControls'
 import { Notification } from './Notification'
 
 export function CreateReturnDialog({ order, onClose, onCreated }: { order: OrderDetails; onClose: () => void; onCreated: (result: CreatedReturns) => void }) {
-  const returned = new Set(order.returnOrders?.flatMap(item => item.containerIds) ?? [])
+  const returned = new Set(order.returnOrders?.filter(item => item.status !== 'CANCELLED').flatMap(item => item.containerIds) ?? [])
   const available = order.containers.filter(item => !returned.has(item.containerId))
   return <ReturnSelectionDialog context={order} serviceId={order.comprehensiveServiceOrderId!} containers={available} selectInitially onClose={onClose} onCreated={onCreated} />
 }

@@ -30,7 +30,7 @@ public class ServiceSectionCompletion {
             throw new ApiException(HttpStatus.NOT_FOUND,"COMPREHENSIVE_SERVICE_ORDER_NOT_FOUND","Заявка на услугу не найдена");
         boolean shipping=section==ServiceTransportPreparation.Section.SHIPPING;
         String table=shipping?"shipping_order":"receiving_order";
-        String query="select id,number,order_status,route_id from "+table+" where comprehensive_service_order_id=?"
+        String query="select id,number,order_status,route_id from "+table+" where comprehensive_service_order_id=? and order_status<>'CANCELLED'"
                 +(shipping?"":" and service_role=?")+" order by id";
         Object[] args=shipping?new Object[]{id}:new Object[]{id,section.name()};
         org.springframework.jdbc.core.RowMapper<Order> mapper=(rs,n)->new Order(rs.getObject(1,UUID.class),rs.getInt(2),rs.getString(3),rs.getObject(4,UUID.class));
@@ -52,7 +52,7 @@ public class ServiceSectionCompletion {
         if(action==Action.CONFIRM_ROUTES) for(var route:routeIds) {
             var status=jdbc.queryForObject("select status from route where id=?",String.class,route);
             if(!"DRAFT".equals(status))continue;
-            var members=jdbc.query("select id from receiving_order where route_id=? union all select id from shipping_order where route_id=?",
+            var members=jdbc.query("select id from receiving_order where route_id=? and order_status<>'CANCELLED' union all select id from shipping_order where route_id=? and order_status<>'CANCELLED'",
                     (rs,n)->rs.getObject(1,UUID.class),route,route);
             if(!selected.containsAll(members)) throw error("SHARED_ROUTE_OUTSIDE_SECTION",
                     "В рейсе есть заявки другого раздела или услуги. Подтвердите такой рейс отдельно в его карточке");
