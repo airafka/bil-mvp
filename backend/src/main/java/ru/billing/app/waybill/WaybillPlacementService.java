@@ -22,7 +22,7 @@ public class WaybillPlacementService {
     public WaybillPlacementService(JdbcTemplate jdbc){this.jdbc=jdbc;}
     public record Selection(@NotEmpty @Size(max=200) List<@NotNull UUID> waybillIds,
         @Size(max=200) List<@NotNull UUID> wagonIds,String expectedVersion,UUID addWagonId) {}
-    public record Assignment(@NotNull UUID rowId,@NotNull UUID wagonId) {}
+    public record Assignment(@NotNull UUID rowId,@NotNull UUID wagonId,UUID waybillId) {}
     public record Save(@NotEmpty @Size(max=200) List<@NotNull UUID> waybillIds,
         @NotEmpty @Size(max=200) List<@NotNull UUID> wagonIds,@NotBlank String version,
         @NotEmpty @Size(max=2000) List<@NotNull @Valid Assignment> assignments) {}
@@ -123,17 +123,34 @@ public class WaybillPlacementService {
         Layout current=load(request.waybillIds(),request.wagonIds());
         if(!current.version().equals(request.version()))throw stale();
         var selected=current.containers().stream().filter(Container::selected).toList();
-        Map<UUID,UUID> targets=new HashMap<>();
+        Map<UUID,Assignment> targets=new HashMap<>();
+        Map<UUID,Bill> billsById=new HashMap<>();
+        current.waybills().forEach(b->billsById.put(b.id(),b));
         Set<UUID> allowed=new HashSet<>(current.wagons().stream().map(Wagon::id).toList());
-        for(var item:request.assignments())if(targets.put(item.rowId(),item.wagonId())!=null||!allowed.contains(item.wagonId()))
-            throw conflict("INVALID_PLACEMENT","Повтор КТК или неизвестный вагон в схеме");
+        for(var item:request.assignments())if(targets.put(item.rowId(),item)!=null||!allowed.contains(item.wagonId())
+            ||(item.waybillId()!=null&&!billsById.containsKey(item.waybillId())))
+            throw conflict("INVALID_PLACEMENT","Повтор КТК, неизвестный вагон или невыбранная накладная в схеме");
         if(!targets.keySet().equals(new HashSet<>(selected.stream().map(Container::rowId).toList())))
             throw conflict("INVALID_PLACEMENT","Состав КТК должен совпадать с выбранными накладными");
+        for(var c:selected) {
+            var target=targets.get(c.rowId());
+            if(target.waybillId()==null)target=new Assignment(target.rowId(),target.wagonId(),c.waybillId());
+            targets.put(c.rowId(),target);
+            if(!Objects.equals(billsById.get(c.waybillId()).receivingId(),billsById.get(target.waybillId()).receivingId()))
+                throw conflict("WAYBILL_RECEIVING_MISMATCH","Перенос между накладными разных поставок недоступен. Выберите свободные накладные или накладные одной черновой поставки");
+        }
+        // A multi-product bill cannot describe several containers unambiguously.
+        for(var bill:current.waybills()) {
+            boolean receives=selected.stream().anyMatch(c->!c.waybillId().equals(bill.id())&&targets.get(c.rowId()).waybillId().equals(bill.id()));
+            if(receives&&targets.values().stream().filter(t->t.waybillId().equals(bill.id())).count()>1
+                &&jdbc.queryForObject("select count(*) from waybill_product where waybill_id=?",Integer.class,bill.id())>1)
+                throw conflict("WAYBILL_MULTIPLE_PRODUCTS","Накладная №"+bill.number()+" содержит несколько грузов и может включать только один КТК");
+        }
         var physical=new HashSet<UUID>();
         for(var c:current.containers())if(!physical.add(c.containerId()))throw conflict("DUPLICATE_CONTAINER","КТК "+c.number()+" встречается в нескольких накладных схемы. Сначала устраните дублирование");
         var errors=new ArrayList<String>();
         for(var w:current.wagons()) {
-            var rows=current.containers().stream().filter(c->w.id().equals(targets.getOrDefault(c.rowId(),c.wagonId()))).toList();
+            var rows=current.containers().stream().filter(c->w.id().equals((targets.containsKey(c.rowId())?targets.get(c.rowId()).wagonId():c.wagonId()))).toList();
             if(rows.isEmpty())continue;
             var lengths=rows.stream().mapToInt(c->WaybillPlacementPolicy.containerFeet(c.type())).toArray();
             int feet=Arrays.stream(lengths).anyMatch(n->n<0)?-1:Arrays.stream(lengths).sum();
@@ -143,13 +160,13 @@ public class WaybillPlacementService {
         if(!errors.isEmpty())throw conflict("WAGON_CAPACITY_EXCEEDED",String.join("; ",errors));
         UUID batch=UUID.randomUUID();
         for(var c:selected) {
-            UUID target=targets.get(c.rowId());if(target.equals(c.wagonId()))continue;
-            var links=jdbc.query("select id from waybill_railway_carriage where waybill_id=? and railway_carriage_id=? order by id limit 1",(rs,n)->rs.getObject(1,UUID.class),c.waybillId(),target);
+            var target=targets.get(c.rowId());if(target.wagonId().equals(c.wagonId())&&target.waybillId().equals(c.waybillId()))continue;
+            var links=jdbc.query("select id from waybill_railway_carriage where waybill_id=? and railway_carriage_id=? order by id limit 1",(rs,n)->rs.getObject(1,UUID.class),target.waybillId(),target.wagonId());
             UUID link=links.isEmpty()?UUID.randomUUID():links.getFirst();
-            if(links.isEmpty())jdbc.update("insert into waybill_railway_carriage(id,waybill_id,railway_carriage_id) values(?,?,?)",link,c.waybillId(),target);
+            if(links.isEmpty())jdbc.update("insert into waybill_railway_carriage(id,waybill_id,railway_carriage_id) values(?,?,?)",link,target.waybillId(),target.wagonId());
             jdbc.update("update waybill_container set waybill_railway_carriage_id=? where id=?",link,c.rowId());
-            jdbc.update("insert into waybill_container_relocation(id,batch_id,waybill_id,waybill_container_id,container_id,from_railway_carriage_id,to_railway_carriage_id) values(?,?,?,?,?,?,?)",
-                UUID.randomUUID(),batch,c.waybillId(),c.rowId(),c.containerId(),c.wagonId(),target);
+            jdbc.update("insert into waybill_container_relocation(id,batch_id,waybill_id,waybill_container_id,container_id,from_railway_carriage_id,to_railway_carriage_id,to_waybill_id) values(?,?,?,?,?,?,?,?)",
+                UUID.randomUUID(),batch,c.waybillId(),c.rowId(),c.containerId(),c.wagonId(),target.wagonId(),target.waybillId());
         }
         jdbc.update("delete from waybill_railway_carriage rc where rc.waybill_id in ("+marks(request.waybillIds())+") and not exists(select 1 from waybill_container where waybill_railway_carriage_id=rc.id)",request.waybillIds().toArray());
         return load(request.waybillIds(),request.wagonIds());

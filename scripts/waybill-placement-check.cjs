@@ -40,11 +40,32 @@ async function fixture(twenty=4,forty=0){
  extended=await save(extended,Object.fromEntries(moving.map(c=>[c.rowId,emptyWagon])));assert.equal(extended.wagons.length,3);assert.equal(extended.containers.filter(c=>c.wagonId===sourceWagon).length,0);
  assert.equal(sql("select count(*) from waybill_railway_carriage where railway_carriage_id='"+sourceWagon+"' and waybill_id in ('"+f.ids.join("','")+"')"),'0');
  console.log('PASS: adding an empty wagon and cleaning empty document associations');
+ // Moving between two waybills on the same physical wagon changes only the WC link.
+ const cross=await fixture(0,4),cl=await preview(cross.ids),ca=cl.containers[0],cb=cl.containers.find(c=>c.wagonId===ca.wagonId&&c.rowId!==ca.rowId);
+ const crossPayload=payload(cl);crossPayload.assignments.find(a=>a.rowId===ca.rowId).waybillId=cb.waybillId;
+ const frozen=()=>json("select json_agg(t order by t.id) from (select wc.id,to_jsonb(wc)-'waybill_railway_carriage_id' as data,(select jsonb_agg(z order by z.id) from waybill_zpu z where z.waybill_container_id=wc.id) as seals from waybill_container wc where wc.id in ('"+cl.containers.map(c=>c.rowId).join("','")+"'))t");
+ const originalRows=frozen(),oldLink=sql("select waybill_railway_carriage_id from waybill_container where id='"+ca.rowId+"'"),targetLink=sql("select waybill_railway_carriage_id from waybill_container where id='"+cb.rowId+"'");
+ const outside=structuredClone(crossPayload);outside.assignments[0].waybillId=f.ids[0];assert.equal((await api('/waybills/placement','PUT',outside,409)).code,'INVALID_PLACEMENT');
+ const product=crypto.randomUUID();sql("insert into waybill_product(id,waybill_id,etsng_code_id,weight) select '"+product+"',waybill_id,etsng_code_id,weight from waybill_product where waybill_id='"+cb.waybillId+"' limit 1");
+ assert.equal((await api('/waybills/placement','PUT',crossPayload,409)).code,'WAYBILL_MULTIPLE_PRODUCTS');sql("delete from waybill_product where id='"+product+"'");
+ const moved=await api('/waybills/placement','PUT',crossPayload);assert.equal(moved.containers.find(c=>c.rowId===ca.rowId).waybillId,cb.waybillId);assert.equal(moved.containers.find(c=>c.rowId===ca.rowId).wagonId,ca.wagonId);
+ assert.notEqual(oldLink,targetLink);assert.equal(sql("select waybill_railway_carriage_id from waybill_container where id='"+ca.rowId+"'"),targetLink);assert.deepEqual(frozen(),originalRows);
+ assert.equal(sql("select count(*) from waybill_container_relocation where waybill_container_id='"+ca.rowId+"' and waybill_id='"+ca.waybillId+"' and to_waybill_id='"+cb.waybillId+"' and from_railway_carriage_id=to_railway_carriage_id"),'1');
+ await save(moved);assert.equal((await api('/waybills/placement','PUT',crossPayload,409)).code,'WAYBILL_PLACEMENT_CHANGED');
+ const restore=payload(moved);restore.assignments.find(a=>a.rowId===ca.rowId).waybillId=ca.waybillId;const restored=await api('/waybills/placement','PUT',restore);assert.equal(restored.containers.find(c=>c.rowId===ca.rowId).waybillId,ca.waybillId);
+ const swap=payload(restored);swap.assignments.find(a=>a.rowId===ca.rowId).waybillId=cb.waybillId;swap.assignments.find(a=>a.rowId===cb.rowId).waybillId=ca.waybillId;const cs=await api('/waybills/placement','PUT',swap);assert.equal(cs.containers.find(c=>c.rowId===cb.rowId).waybillId,ca.waybillId);assert.deepEqual(frozen(),originalRows);
+ console.log('PASS: same-wagon waybill reassignment changes exactly WC foreign key, audit, stale/unknown destination guards, empty source return and swap, cargo invariant');
  // Existing draft delivery sees the change automatically, while its source container links remain intact.
  const service=(await api('/comprehensive-service-orders/available-services'))[0],tariff=json("select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where complex_service_id='"+service.id+"' and active limit 1)t");
  const order=await api('/comprehensive-service-orders','POST',{clientId:tariff.client_id,contractId:tariff.contract_id,complexServiceId:service.id,defaultContainerOwnerId:tariff.client_id,waybillIds:f.ids},201);
  const draft=await preview(f.ids),one=draft.containers[0],two=draft.containers.find(c=>c.wagonId!==one.wagonId),withOwners=identity();await save(draft,{[one.rowId]:two.wagonId,[two.rowId]:one.wagonId});assert.deepEqual(identity(),withOwners);
  assert.equal(sql("select count(*) from shipping_order_source_container where comprehensive_service_order_id='"+order.order.id+"'"),'4');
+ const sameDraft=await preview(f.ids),da=sameDraft.containers[0],dbrow=sameDraft.containers.find(c=>c.wagonId===da.wagonId&&c.rowId!==da.rowId);
+ const sourceLinks=sql("select json_agg(t order by to_jsonb(t)::text) from shipping_order_source_container t where comprehensive_service_order_id='"+order.order.id+"'");
+ const draftPayload=payload(sameDraft);draftPayload.assignments.find(a=>a.rowId===da.rowId).waybillId=dbrow.waybillId;draftPayload.assignments.find(a=>a.rowId===dbrow.rowId).waybillId=da.waybillId;await api('/waybills/placement','PUT',draftPayload);
+ assert.equal(sql("select json_agg(t order by to_jsonb(t)::text) from shipping_order_source_container t where comprehensive_service_order_id='"+order.order.id+"'"),sourceLinks);
+ const mixed=await preview([...f.ids,...cross.ids]),mismatch=payload(mixed);mismatch.assignments.find(a=>a.rowId===da.rowId).waybillId=cross.ids[0];assert.equal((await api('/waybills/placement','PUT',mismatch,409)).code,'WAYBILL_RECEIVING_MISMATCH');
+ console.log('PASS: same-draft reassignment preserves source links; cross-delivery reassignment rejected');
  const stale=await preview(f.ids);await api('/comprehensive-service-orders/'+order.order.id+'/prepare-transport','POST',{section:'INITIAL_RECEIVING'});await api('/comprehensive-service-orders/'+order.order.id+'/complete-section','POST',{section:'INITIAL_RECEIVING',action:'CONFIRM_ROUTES'});
  assert.equal((await save(stale,{},409)).code,'WAYBILL_PLACEMENT_LOCKED');assert.equal((await api('/waybills/placement/candidates?query='+f.tag)).totalElements,0);
  const ui=await fixture(0,4);fs.writeFileSync('backups/wagon-fixtures.json',JSON.stringify({...ui,db}));

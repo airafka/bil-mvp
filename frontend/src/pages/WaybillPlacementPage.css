@@ -1,4 +1,4 @@
-/* Interactive railway composition: document identity travels with its container. */
+/* Interactive railway composition: cards represent a waybill/wagon assignment. */
 .placement-page{min-width:0}.placement-alert,.placement-success{padding:14px 18px;border-radius:6px;margin:14px 0;line-height:1.5;overflow-wrap:anywhere}.placement-alert{background:#fff1ef;color:#a33427;border:1px solid #f1cdc6}.placement-alert button{margin-left:12px}.placement-success{color:#24614c;background:#eaf7f0;border:1px solid #b9dfcb}
 .wagon-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start}
 .wagon-card{background:linear-gradient(160deg,#fff,#f9fbfe);border:1px solid #dee5ee;border-radius:10px;padding:14px 10px 12px;min-width:0;transition:background .15s,border-color .15s,box-shadow .15s}
@@ -26,3 +26,5 @@
 .wagon-free-slot{align-self:stretch;min-width:0;border:1px dashed #d5e1ef;border-radius:4px;background:transparent;cursor:pointer}.wagon-free-slot:disabled{opacity:.45;cursor:default}.wagon-free-slot:focus-visible{outline:2px solid #397cf0;outline-offset:2px}
 
 .wagon-other-load{align-self:stretch;min-width:0;border:1px solid #d8e1ec;border-radius:4px;background:repeating-linear-gradient(135deg,#edf2f7 0,#edf2f7 5px,#e4eaf1 5px,#e4eaf1 6px)}
+
+.wagon-load[data-empty=true]{min-height:64px}.wagon-load[data-empty=true] .wagon-empty-slot{grid-column:1/-1;grid-row:1;z-index:1;background:#f3f7fcd9}.wagon-load[data-empty=true] .wagon-other-load{grid-column:1/-1;grid-row:1;pointer-events:none}.wagon-empty-slot>span:not([aria-hidden]){font-size:11px}

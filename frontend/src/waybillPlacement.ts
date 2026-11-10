@@ -4,11 +4,13 @@ export type PlacementCandidate = { id: string; number: string; receivingNumber: 
 export type PlacementWagon = { id: string; number: string; feet: number | null; capacity: number | null }
 export type PlacementContainer = { rowId: string; containerId: string; number: string; type: string; grossWeight: number; waybillId: string; waybillNumber: string; wagonId: string; selected: boolean }
 export type PlacementLayout = { waybills: { id: string; number: string }[]; wagons: PlacementWagon[]; containers: PlacementContainer[]; version: string }
-export type PlacementMap = Record<string, string>
+export type PlacementPosition = { wagonId: string; waybillId: string }
+export type PlacementMap = Record<string, PlacementPosition>
+export const positionOf = (c: PlacementContainer, positions: PlacementMap): PlacementPosition => positions[c.rowId] ?? { wagonId: c.wagonId, waybillId: c.waybillId }
 export const placementCandidates = (query: string, page: number) => request<PagedResponse<PlacementCandidate>>('/api/waybills/placement/candidates?query='+encodeURIComponent(query)+'&page='+page)
 export const placementWagons = (query: string) => request<PlacementWagon[]>('/api/waybills/placement/wagons?query='+encodeURIComponent(query))
 export const placementPreview = (waybillIds: string[], layout?: PlacementLayout, addWagonId?: string) => request<PlacementLayout>('/api/waybills/placement/preview', { method: 'POST', body: JSON.stringify({ waybillIds, ...(layout ? { wagonIds: layout.wagons.map(w => w.id), expectedVersion: layout.version, addWagonId } : {}) }) })
-export const savePlacement = (layout: PlacementLayout, positions: PlacementMap) => request<PlacementLayout>('/api/waybills/placement', { method: 'PUT', body: JSON.stringify({ waybillIds: layout.waybills.map(w => w.id), wagonIds: layout.wagons.map(w => w.id), version: layout.version, assignments: layout.containers.filter(c => c.selected).map(c => ({ rowId: c.rowId, wagonId: positions[c.rowId] ?? c.wagonId })) }) })
+export const savePlacement = (layout: PlacementLayout, positions: PlacementMap) => request<PlacementLayout>('/api/waybills/placement', { method: 'PUT', body: JSON.stringify({ waybillIds: layout.waybills.map(w => w.id), wagonIds: layout.wagons.map(w => w.id), version: layout.version, assignments: layout.containers.filter(c => c.selected).map(c => ({ rowId: c.rowId, ...positionOf(c, positions) })) }) })
 export const containerFeet = (type: string): number | null => type === 'STANDARD_20' ? 20 : type === 'STANDARD_40' ? 40 : null
 export function wagonFeet(rows: PlacementContainer[]): number | null {
   const lengths = rows.map(c => containerFeet(c.type))
@@ -23,14 +25,17 @@ export function wagonTracks(wagon: PlacementWagon, rows: PlacementContainer[], o
 }
 export type WaybillWagon = { key: string; waybillId: string | null; waybillNumber: string | null; wagon: PlacementWagon; rows: PlacementContainer[]; physicalRows: PlacementContainer[]; occupiedFeet: number }
 export function waybillWagons(layout: PlacementLayout, positions: PlacementMap): WaybillWagon[] {
+  const numbers = new Map([...layout.containers.map(c => [c.waybillId, c.waybillNumber] as const), ...layout.waybills.map(b => [b.id, b.number] as const)])
+  const assigned = layout.containers.map(c => { const target = positionOf(c, positions); return { ...c, ...target, waybillNumber: numbers.get(target.waybillId) ?? c.waybillNumber } })
   return layout.wagons.flatMap<WaybillWagon>(wagon => {
-    const physicalRows = layout.containers.filter(c => (positions[c.rowId] ?? c.wagonId) === wagon.id)
-    if (!physicalRows.length) return [{ key: 'empty:' + wagon.id, waybillId: null, waybillNumber: null, wagon, rows: [], physicalRows, occupiedFeet: 0 }]
-    const bills = [...new Set(physicalRows.map(c => c.waybillId))]
+    const physicalRows = assigned.filter(c => c.wagonId === wagon.id)
+    // Keep vacated source cards until save so the user can move a KTK back.
+    const bills = [...new Set([...layout.containers.filter(c => c.wagonId === wagon.id).map(c => c.waybillId), ...physicalRows.map(c => c.waybillId)])]
+    if (!bills.length) return [{ key: 'empty:' + wagon.id, waybillId: null, waybillNumber: null, wagon, rows: [], physicalRows, occupiedFeet: 0 }]
     return bills.map(waybillId => {
       const rows = physicalRows.filter(c => c.waybillId === waybillId)
       const occupiedFeet = physicalRows.filter(c => c.waybillId !== waybillId).reduce((n, c) => n + (containerFeet(c.type) ?? 20), 0)
-      return { key: waybillId + ':' + wagon.id, waybillId, waybillNumber: rows[0].waybillNumber, wagon, rows, physicalRows, occupiedFeet }
+      return { key: waybillId + ':' + wagon.id, waybillId, waybillNumber: numbers.get(waybillId) ?? null, wagon, rows, physicalRows, occupiedFeet }
     })
   })
 }
@@ -42,11 +47,14 @@ export function wagonIssue(wagon: PlacementWagon, rows: PlacementContainer[]): s
   if (feet > wagon.feet) return 'Суммарная длина КТК превышает длину платформы'
   return null
 }
-export function transfer(positions: PlacementMap, rows: PlacementContainer[], rowId: string, wagonId: string, swapId?: string): PlacementMap {
+export function transfer(positions: PlacementMap, rows: PlacementContainer[], rowId: string, wagonId: string, swapId?: string, waybillId?: string | null): PlacementMap {
   const source = rows.find(c => c.rowId === rowId)
   const target = swapId ? rows.find(c => c.rowId === swapId) : null
   if (!source?.selected || (swapId && !target?.selected)) return positions
-  const next = { ...positions, [rowId]: wagonId }
-  if (target && target.rowId !== source.rowId) next[target.rowId] = positions[rowId] ?? source.wagonId
+  const from = positionOf(source, positions)
+  const to = target ? positionOf(target, positions) : { wagonId, waybillId: waybillId ?? from.waybillId }
+  if (!rows.some(c => c.selected && c.waybillId === to.waybillId)) return positions
+  const next = { ...positions, [rowId]: to }
+  if (target && target.rowId !== source.rowId) next[target.rowId] = from
   return next
 }

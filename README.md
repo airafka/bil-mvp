@@ -2,7 +2,7 @@
 
 Локальное приложение для оформления услуг контейнерной площадки: поставка КТК, вывоз, возврат, учёт собственников, начисления и счета на оплату. Репозиторий — [airafka/bil](https://github.com/airafka/bil), общая ветка — **main**. Название локальной папки bil-next не является названием ветки.
 
-Документация сверена с кодом 10.11.2026. На этом компьютере также проверены frontend HTTP 200, backend UP, работающие контейнеры billing-next и схема Flyway V30. Это результат проверки на указанную дату, а не постоянная гарантия состояния окружения.
+Документация сверена с кодом 10.11.2026. На этом компьютере также проверены frontend HTTP 200, backend UP, работающие контейнеры billing-next и схема Flyway V31. Это результат проверки на указанную дату, а не постоянная гарантия состояния окружения.
 
 ## Документация
 
@@ -62,7 +62,7 @@
 
 - Frontend: React, TypeScript, React Router, Vite; зависимости фиксирует [package-lock.json](frontend/package-lock.json).
 - Backend: Java 21, Spring Boot 4.1.0, Spring JDBC, Bean Validation.
-- БД: PostgreSQL 16, Flyway; активный каталог миграций — [db/baseline](backend/src/main/resources/db/baseline), V1–V30.
+- БД: PostgreSQL 16, Flyway; активный каталог миграций — [db/baseline](backend/src/main/resources/db/baseline), V1–V31.
 - Сборка и запуск: Docker Compose; frontend раздаёт Nginx.
 
 [Backend Dockerfile](backend/Dockerfile) выполняет Maven package с тестами; [frontend Dockerfile](frontend/Dockerfile) — ESLint, Vitest и TypeScript/Vite build. Локально: mvn test из backend; npm ci, npm run lint, npm run test, npm run build из frontend. Для frontend dev доступен npm run dev.

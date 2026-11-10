@@ -35,7 +35,7 @@ assert.equal(selectedCount,wanted.length);await evaljs('document.querySelector("
 await wait('document.querySelectorAll(".wagon-card").length===10');
 assert.equal(await evaljs('document.querySelectorAll(".placement-steps,.placement-toolbar,.placement-help,.placement-add,input:not([type=checkbox]),select").length'),0);
 const card=id=>'document.querySelector('+JSON.stringify('[data-wagon="'+id+'"]')+')';
-const target=card(fixture.target),targetRows='document.querySelectorAll('+JSON.stringify('[data-wagon="'+fixture.target+'"] .ktk-unit')+')',count=()=>evaljs(targetRows+'.length');assert.equal(await count(),6);
+const target='document.querySelector('+JSON.stringify('[data-wagon="'+fixture.target+'"]:has(.ktk-box)')+')',targetRows='document.querySelectorAll('+JSON.stringify('[data-wagon="'+fixture.target+'"] .ktk-unit')+')',count=()=>evaljs(targetRows+'.length');assert.equal(await count(),6);
 assert.ok(await evaljs('[...document.querySelectorAll(".wagon-card")].slice(0,4).every(el=>el.getBoundingClientRect().top===document.querySelector(".wagon-card").getBoundingClientRect().top)'));
 assert.equal(await evaljs('new Set([...document.querySelectorAll(".ktk-box")].map(el=>getComputedStyle(el).backgroundImage)).size'),1);
 assert.ok(await evaljs('[...document.querySelectorAll(".wagon-caption")].every(el=>/^№[0-9]+[(](?:40|60|80)FT[)]$/.test(el.textContent))'));
