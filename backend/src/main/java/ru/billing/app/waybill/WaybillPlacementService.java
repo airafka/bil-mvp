@@ -100,15 +100,13 @@ public class WaybillPlacementService {
         if(wagonIds.isEmpty()||wagonIds.size()>200)throw conflict("WAGON_SELECTION_LIMIT","Выберите от 1 до 200 вагонов");
         var wagons=jdbc.query(WAGON_SQL+" where c.id in ("+marks(wagonIds)+") order by c.id for share of c",WaybillPlacementService::wagon,wagonIds.toArray());
         if(wagons.size()!=wagonIds.size())throw conflict("WAGON_NOT_FOUND","Один из вагонов не найден");
-        var args=new ArrayList<Object>(wagonIds);args.addAll(ids);
         var containers=jdbc.query("""
           select wc.id,wc.container_id,c.code,c.container_type,wc.weight,w.id,w.number,rc.railway_carriage_id
           from waybill_container wc join waybill_railway_carriage rc on rc.id=wc.waybill_railway_carriage_id
           join waybill w on w.id=rc.waybill_id join container c on c.id=wc.container_id
-          left join receiving_order r on r.id=w.receiving_order_id
-          where rc.railway_carriage_id in (%s) and (w.receiving_order_id is null or r.order_status in ('DRAFT','CONFIRMED') or w.id in (%s))
+          where w.id in (%s)
           order by wc.id
-          """.formatted(marks(wagonIds),marks(ids)),(rs,n)->new Container(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),rs.getString(3),rs.getString(4),rs.getBigDecimal(5),rs.getObject(6,UUID.class),rs.getString(7),rs.getObject(8,UUID.class),ids.contains(rs.getObject(6,UUID.class))),args.toArray());
+          """.formatted(marks(ids)),(rs,n)->new Container(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),rs.getString(3),rs.getString(4),rs.getBigDecimal(5),rs.getObject(6,UUID.class),rs.getString(7),rs.getObject(8,UUID.class),true),ids.toArray());
         if(containers.stream().noneMatch(Container::selected))throw conflict("WAYBILL_EMPTY","В выбранных накладных нет КТК");
         return new Layout(selected,wagons,containers,version(selected,wagons,containers));
     }

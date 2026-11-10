@@ -24,6 +24,20 @@ assert.equal(await evaljs('document.querySelectorAll(".placement-selection input
 assert.deepEqual(await evaljs('[...document.querySelectorAll("thead th")].slice(1).map(el=>el.textContent)'),['Накладная','Кол-во вагонов','Кол-во КТК','Маршрут']);
 assert.ok(await evaljs('[...document.querySelectorAll("tbody tr")].every(tr=>/^\\d+$/.test(tr.cells[2].textContent)&&/^\\d+$/.test(tr.cells[3].textContent))'));
 await shot('selection');
+// A shared wagon must show only the selected invoice and leave the other half free.
+const scopeBill=fixture.bills[0].number;
+for(let page=0;page<100;page++){
+ const found=await evaljs('(()=>{const cb=[...document.querySelectorAll("tbody tr")].find(tr=>tr.cells[1]?.textContent==='+JSON.stringify(scopeBill)+')?.querySelector("input");if(cb){cb.click();return true}return false})()');
+ if(found)break;
+ assert.ok(!await evaljs('document.querySelector(".pagination button:last-child").disabled'),'Scope fixture not found');
+ await evaljs('document.querySelector(".pagination button:last-child").click()');await wait('document.querySelector("tbody input[type=checkbox]")');
+}
+await evaljs('document.querySelector(".page-header .primary-button").click()');await wait('document.querySelector(".wagon-card")');
+assert.equal(await evaljs('document.querySelectorAll(".wagon-card").length'),1);assert.equal(await evaljs('document.querySelectorAll(".ktk-unit").length'),1);
+assert.equal(await evaljs('document.querySelectorAll(".wagon-other-load,.wagon-issue").length'),0);assert.equal(await evaljs('document.querySelectorAll(".wagon-free-slot").length'),1);
+assert.ok(await evaljs('Math.abs(document.querySelector(".ktk-unit").getBoundingClientRect().width-document.querySelector(".wagon-free-slot").getBoundingClientRect().width)<1'));
+console.log('PASS: only selected invoice shown; unselected KTK on the same wagon leave half of 80FT platform free');
+await send('Page.navigate',{url:base+'/waybills/edit-placement'});await wait('document.querySelector("tbody input[type=checkbox]")');
 const wanted=fixture.bills.map(b=>b.number);let selectedCount=0;
 for(let page=0;page<100 && selectedCount<wanted.length;page++){
  selectedCount+=await evaljs('(()=>{const wanted='+JSON.stringify(wanted)+';let n=0;for(const tr of document.querySelectorAll("tbody tr")){if(wanted.includes(tr.cells[1]?.textContent)){const cb=tr.querySelector("input");if(!cb.checked){cb.click();n++}}}return n})()');

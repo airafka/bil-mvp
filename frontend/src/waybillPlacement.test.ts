@@ -17,10 +17,16 @@ describe('railway placement',()=>{
   expect(groups.filter(g=>g.rows.length).map(g=>[g.waybillId,g.wagon.id]).sort()).toEqual([['bill1','w2'],['bill2','w2']])
   expect(groups.flatMap(g=>g.rows).map(c=>c.rowId).sort()).toEqual(['a','b']);expect(groups[0].rows).toEqual([])
  })
- it('checks overload across invoice cards, including unselected invoices',()=>{
+ it('counts only selected invoices across cards of a shared wagon',()=>{
   const wagon={id:'w1',number:'1',feet:80,capacity:null}
   const groups=waybillWagons({waybills:[],wagons:[wagon],containers:[a,{...b,wagonId:'w1'},{...b,rowId:'c',waybillId:'bill3',wagonId:'w1',selected:false}],version:'v'}, {})
-  expect(groups).toHaveLength(3);expect(groups.every(g=>wagonIssue(wagon,g.physicalRows)!=null)).toBe(true)
+  expect(groups).toHaveLength(2);expect(groups.every(g=>wagonIssue(wagon,g.physicalRows)===null)).toBe(true);expect(groups.every(g=>g.physicalRows.length===2&&g.occupiedFeet===40)).toBe(true)
+ })
+ it('does not fill free space with an unselected invoice',()=>{
+  const wagon={id:'w1',number:'123',feet:80,capacity:null}
+  const groups=waybillWagons({waybills:[{id:'bill1',number:'101'}],wagons:[wagon],containers:[a,{...b,wagonId:'w1',selected:false}],version:'v'}, {})
+  expect(groups).toHaveLength(1);expect(groups[0].occupiedFeet).toBe(0)
+  expect(wagonTracks(wagon,groups[0].rows,groups[0].occupiedFeet).freeFeet).toBe(40)
  })
  it('reserves half of an 80ft platform for a single 40ft container',()=>expect(wagonTracks({id:'w',number:'1',feet:80,capacity:null},[a])).toEqual({freeFeet:40,columns:'minmax(0,40fr) minmax(0,40fr)'}))
  it('uses proportional tracks for mixed lengths and preserves the free quarter',()=>expect(wagonTracks({id:'w',number:'1',feet:80,capacity:null},[a,{...b,type:'STANDARD_20'}])).toEqual({freeFeet:20,columns:'minmax(0,40fr) minmax(0,20fr) minmax(0,20fr)'}))
@@ -39,7 +45,7 @@ describe('railway placement',()=>{
   expect(waybillWagons(layout,undone).map(g=>g.rows.length)).toEqual([1,1])
  })
  it('cannot transfer into an unselected waybill',()=>expect(transfer({},[a,{...b,selected:false}],'a','w2',undefined,'bill2')).toEqual({}))
- it('counts length of unselected containers',()=>{expect(wagonIssue({id:'w',number:'123',feet:80,capacity:70000},[a,b,{...a,rowId:'c',selected:false}])).toContain('длина')})
+ it('ignores length of unselected containers',()=>{expect(wagonIssue({id:'w',number:'123',feet:80,capacity:70000},[a,b,{...a,rowId:'c',selected:false}])).toBeNull()})
  it('allows four 20ft containers regardless of mass or lifting capacity',()=>{const rows=Array.from({length:4},(_,i)=>({...a,rowId:String(i),type:'STANDARD_20',grossWeight:99000}));expect(wagonIssue({id:'w',number:'123',feet:80,capacity:1},rows)).toBeNull();expect(wagonIssue({id:'w',number:'123',feet:80,capacity:null},rows)).toBeNull();expect(wagonIssue({id:'w',number:'123',feet:80,capacity:null},[...rows,rows[0]])).toContain('длина')})
  it('accepts mixed lengths and rejects lengths above platform capacity',()=>{const twenty={...a,type:'STANDARD_20'};expect(wagonIssue({id:'w',number:'123',feet:80,capacity:null},[a,twenty,twenty])).toBeNull();expect(wagonIssue({id:'w',number:'123',feet:60,capacity:null},[a,b])).toContain('длина')})
  it('rejects unknown platform or container length',()=>{expect(wagonIssue({id:'w',number:'123',feet:null,capacity:null},[a])).toContain('длина');expect(wagonIssue({id:'w',number:'123',feet:80,capacity:null},[{...a,type:'OTHER'}])).toContain('футовость')})

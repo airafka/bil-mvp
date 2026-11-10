@@ -28,11 +28,18 @@ async function fixture(twenty=4,forty=0){
  const swapped=await save(l,{[first.rowId]:other.wagonId,[other.rowId]:first.wagonId});assert.equal(audit(),2);assert.deepEqual(identity(),before);
  assert.equal(swapped.containers.find(c=>c.rowId===first.rowId).waybillNumber,first.waybillNumber);assert.equal(swapped.containers.find(c=>c.rowId===first.rowId).wagonId,other.wagonId);
  assert.equal((await save(l,{},409)).code,'WAYBILL_PLACEMENT_CHANGED');await save(swapped);assert.equal(audit(),2,'no-change save produces no duplicate history');
- let partial=await preview([first.waybillId]);assert.equal(partial.containers.length,2);assert.equal(partial.containers.filter(c=>!c.selected).length,1);
- partial=await preview([first.waybillId],{wagonIds:partial.wagons.map(w=>w.id),expectedVersion:partial.version,addWagonId:first.wagonId});assert.equal(partial.containers.length,4);assert.equal((await save(partial,{[first.rowId]:first.wagonId},409)).code,'WAGON_CAPACITY_EXCEEDED');
- const forged=payload(partial);forged.assignments.push({rowId:partial.containers.find(c=>!c.selected).rowId,wagonId:first.wagonId});assert.equal((await api('/waybills/placement','PUT',forged,409)).code,'INVALID_PLACEMENT');
+ let partial=await preview([first.waybillId]);assert.equal(partial.containers.length,1);assert.ok(partial.containers.every(c=>c.selected));
+ partial=await preview([first.waybillId],{wagonIds:partial.wagons.map(w=>w.id),expectedVersion:partial.version,addWagonId:first.wagonId});assert.equal(partial.containers.length,1);
+ const forged=payload(partial);forged.assignments.push({rowId:other.rowId,wagonId:first.wagonId});assert.equal((await api('/waybills/placement','PUT',forged,409)).code,'INVALID_PLACEMENT');
+ const outsideBefore=sql("select to_jsonb(wc)::text from waybill_container wc where id='"+other.rowId+"'");
+ const scoped=await save(partial,{[first.rowId]:first.wagonId});assert.equal(scoped.containers[0].wagonId,first.wagonId);
+ assert.equal(sql("select to_jsonb(wc)::text from waybill_container wc where id='"+other.rowId+"'"),outsideBefore);
+ // Unselected documents do not participate in capacity or the editor version, even on the same wagon.
+ sql("update waybill_container set weight=weight+1 where id='"+other.rowId+"'");
+ const unchanged=await preview([first.waybillId],{wagonIds:scoped.wagons.map(w=>w.id)});assert.equal(unchanged.version,scoped.version);await save(scoped);
+ sql("update waybill_container set weight=weight-1 where id='"+other.rowId+"'");
  const fresh=await preview(f.ids),back={[first.rowId]:first.wagonId,[other.rowId]:other.wagonId};const outcomes=await Promise.all([raw('/waybills/placement','PUT',payload(fresh,back)),raw('/waybills/placement','PUT',payload(fresh,back))]);assert.deepEqual(outcomes.map(r=>r.status).sort(),[200,409]);
- console.log('PASS: multi-bill/multi-wagon layout, shared wagon, swap, identity/cargo/seal preservation, overload rollback, hidden loads, stale/concurrent edits');
+ console.log('PASS: multi-bill/multi-wagon layout, shared wagon, swap, identity/cargo/seal preservation, selected-scope overload rollback, unrelated loads ignored/untouched, stale/concurrent edits');
  // Empty platform can be added, and source associations disappear only after all their KTK move.
  const empty=await fixture(0,2),emptyWagon=empty.rows[0].wagon;for(const id of empty.ids)sql("delete from waybill where id='"+id+"'");
  let extended=await preview(f.ids);extended=await preview(f.ids,{wagonIds:extended.wagons.map(w=>w.id),expectedVersion:extended.version,addWagonId:emptyWagon});
