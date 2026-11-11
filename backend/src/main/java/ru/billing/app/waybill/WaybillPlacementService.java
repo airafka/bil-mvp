@@ -52,7 +52,6 @@ public class WaybillPlacementService {
           from waybill w left join receiving_order r on r.id=w.receiving_order_id
           join railway_station ds on ds.id=w.departure_station_id join railway_station ts on ts.id=w.destination_station_id
           where (w.receiving_order_id is null or r.order_status='DRAFT')
-          and exists(select 1 from waybill_railway_carriage rc join waybill_container wc on wc.waybill_railway_carriage_id=rc.id where rc.waybill_id=w.id)
           and (?='' or w.number ilike '%'||?||'%' or exists(select 1 from waybill_railway_carriage rc
             join railway_carriage c on c.id=rc.railway_carriage_id left join waybill_container wc on wc.waybill_railway_carriage_id=rc.id
             left join container k on k.id=wc.container_id where rc.waybill_id=w.id and (c.code ilike '%'||?||'%' or k.code ilike '%'||?||'%')))
@@ -97,8 +96,8 @@ public class WaybillPlacementService {
         var wagonIds=new TreeSet<UUID>();
         wagonIds.addAll(jdbc.query("select distinct railway_carriage_id from waybill_railway_carriage where waybill_id in ("+marks(ids)+")",(rs,n)->rs.getObject(1,UUID.class),ids.toArray()));
         if(extra!=null)wagonIds.addAll(extra);
-        if(wagonIds.isEmpty()||wagonIds.size()>200)throw conflict("WAGON_SELECTION_LIMIT","Выберите от 1 до 200 вагонов");
-        var wagons=jdbc.query(WAGON_SQL+" where c.id in ("+marks(wagonIds)+") order by c.id for share of c",WaybillPlacementService::wagon,wagonIds.toArray());
+        if(wagonIds.size()>200)throw conflict("WAGON_SELECTION_LIMIT","Выберите не более 200 вагонов");
+        List<Wagon> wagons=wagonIds.isEmpty()?List.of():jdbc.query(WAGON_SQL+" where c.id in ("+marks(wagonIds)+") order by c.id for share of c",WaybillPlacementService::wagon,wagonIds.toArray());
         if(wagons.size()!=wagonIds.size())throw conflict("WAGON_NOT_FOUND","Один из вагонов не найден");
         var containers=jdbc.query("""
           select wc.id,wc.container_id,c.code,c.container_type,wc.weight,w.id,w.number,rc.railway_carriage_id
@@ -107,7 +106,6 @@ public class WaybillPlacementService {
           where w.id in (%s)
           order by wc.id
           """.formatted(marks(ids)),(rs,n)->new Container(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),rs.getString(3),rs.getString(4),rs.getBigDecimal(5),rs.getObject(6,UUID.class),rs.getString(7),rs.getObject(8,UUID.class),true),ids.toArray());
-        if(containers.stream().noneMatch(Container::selected))throw conflict("WAYBILL_EMPTY","В выбранных накладных нет КТК");
         return new Layout(selected,wagons,containers,version(selected,wagons,containers));
     }
     private String version(Object... values) {
@@ -148,6 +146,9 @@ public class WaybillPlacementService {
             if(issue!=null)errors.add("Вагон "+w.number()+": "+issue);
         }
         if(!errors.isEmpty())throw conflict("WAGON_CAPACITY_EXCEEDED",String.join("; ",errors));
+        // Only links that had KTK before this save can become obsolete through relocation.
+        // Pre-existing empty wagons belong to their waybills and must remain available.
+        var occupiedLinks=jdbc.query("select distinct rc.id from waybill_railway_carriage rc join waybill_container wc on wc.waybill_railway_carriage_id=rc.id where rc.waybill_id in ("+marks(request.waybillIds())+")",(rs,n)->rs.getObject(1,UUID.class),request.waybillIds().toArray());
         var links=assignCarriageLinks(request.waybillIds(),targets.values());
         UUID batch=UUID.randomUUID();
         for(var c:selected) {
@@ -158,7 +159,7 @@ public class WaybillPlacementService {
             jdbc.update("insert into waybill_container_relocation(id,batch_id,waybill_id,waybill_container_id,container_id,from_railway_carriage_id,to_railway_carriage_id,to_waybill_id) values(?,?,?,?,?,?,?,?)",
                 UUID.randomUUID(),batch,c.waybillId(),c.rowId(),c.containerId(),c.wagonId(),target.wagonId(),c.waybillId());
         }
-        jdbc.update("delete from waybill_railway_carriage rc where rc.waybill_id in ("+marks(request.waybillIds())+") and not exists(select 1 from waybill_container where waybill_railway_carriage_id=rc.id)",request.waybillIds().toArray());
+        if(!occupiedLinks.isEmpty())jdbc.update("delete from waybill_railway_carriage rc where rc.id in ("+marks(occupiedLinks)+") and not exists(select 1 from waybill_container where waybill_railway_carriage_id=rc.id)",occupiedLinks.toArray());
         return load(request.waybillIds(),request.wagonIds());
     }
     private record Position(UUID waybillId,UUID wagonId) {}

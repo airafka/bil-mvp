@@ -90,6 +90,26 @@ async function fixture(twenty=4,forty=0){
  console.log('PASS: draft wagon swap preserves source links and each container waybill');
  const stale=await preview(f.ids);await api('/comprehensive-service-orders/'+order.order.id+'/prepare-transport','POST',{section:'INITIAL_RECEIVING'});await api('/comprehensive-service-orders/'+order.order.id+'/complete-section','POST',{section:'INITIAL_RECEIVING',action:'CONFIRM_ROUTES'});
  assert.equal((await save(stale,{},409)).code,'WAYBILL_PLACEMENT_LOCKED');assert.equal((await api('/waybills/placement/candidates?query='+f.tag)).totalElements,0);
+ // Empty waybills stay selectable; their empty wagon links survive another bill's relocation.
+ const emptyBills=await fixture(0,4),emptyIds=emptyBills.ids.slice(0,2);
+ sql("delete from waybill_container where waybill_railway_carriage_id in (select id from waybill_railway_carriage where waybill_id in ('"+emptyIds.join("','")+"'))");
+ const emptyLink=sql("select id from waybill_railway_carriage where waybill_id='"+emptyIds[0]+"'");
+ sql("delete from waybill_railway_carriage where waybill_id='"+emptyIds[1]+"'");
+ const emptyCandidates=await api('/waybills/placement/candidates?query='+emptyBills.tag);
+ assert.equal(emptyCandidates.totalElements,4);
+ assert.equal(emptyCandidates.items.find(b=>b.id===emptyIds[0]).containerCount,0);
+ assert.equal(emptyCandidates.items.find(b=>b.id===emptyIds[0]).wagonCount,1);
+ assert.equal(emptyCandidates.items.find(b=>b.id===emptyIds[1]).wagonCount,0);
+ const onlyEmpty=await preview([emptyIds[0]]);assert.equal(onlyEmpty.containers.length,0);assert.equal(onlyEmpty.wagons.length,1);
+ const noWagon=await preview([emptyIds[1]]);assert.equal(noWagon.containers.length,0);assert.equal(noWagon.wagons.length,0);
+ const mixed=await preview(emptyBills.ids),movingEmpty=mixed.containers[0];
+ const intoEmpty=await save(mixed,{[movingEmpty.rowId]:onlyEmpty.wagons[0].id});
+ assert.equal(intoEmpty.containers.find(c=>c.rowId===movingEmpty.rowId).waybillId,movingEmpty.waybillId);
+ assert.equal(sql("select count(*) from waybill_railway_carriage where id='"+emptyLink+"' and waybill_id='"+emptyIds[0]+"'"),'1');
+ assert.equal((await preview([emptyIds[0]])).containers.length,0);
+ assert.equal((await preview([emptyIds[0]])).wagons.length,1);
+ fs.writeFileSync('backups/wagon-empty-fixtures.json',JSON.stringify({db,bills:emptyBills.bills.slice(0,2)}));
+ console.log('PASS: zero-KTK candidates, empty wagon/no-wagon preview, move to empty wagon preserves original invoice and existing empty association');
  const ui=await fixture(0,4);fs.writeFileSync('backups/wagon-fixtures.json',JSON.stringify({...ui,db}));
  console.log('PASS: draft delivery composition and owners preserved, confirmation blocks editing; UI fixtures ready');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -17,6 +17,24 @@ const inspected=JSON.parse(execFileSync(process.env.DOCKER_EXE||'docker',['inspe
 const errors=[];ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails)});
 const click=async(label)=>{await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==='+JSON.stringify(label)+'&&!b.disabled).click()');await pause(100)};
 const shot=async(name)=>{const r=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});fs.writeFileSync(path.join(dir,'../backups/wagon-'+name+'.png'),Buffer.from(r.data,'base64'))};
+const emptyFixture=JSON.parse(fs.readFileSync(path.join(dir,'../backups/wagon-empty-fixtures.json'),'utf8'));assert.equal(emptyFixture.db,fixture.db);
+for(let i=0;i<emptyFixture.bills.length;i++){
+ await send('Page.navigate',{url:base+'/waybills/edit-placement'});await wait('document.querySelector("tbody input[type=checkbox]")');
+ let found=false;
+ for(let page=0;page<100;page++){
+  found=await evaljs('(()=>{const tr=[...document.querySelectorAll("tbody tr")].find(tr=>tr.cells[1]?.textContent==='+JSON.stringify(emptyFixture.bills[i].number)+');if(!tr)return false;if(tr.cells[3].textContent!=="0")throw Error("Expected zero KTK");tr.querySelector("input").click();return true})()');
+  if(found)break;
+  assert.ok(!await evaljs('document.querySelector(".pagination button:last-child").disabled'),'Empty fixture not found');
+  await evaljs('document.querySelector(".pagination button:last-child").click()');await wait('document.querySelector("tbody input[type=checkbox]")');
+ }
+ assert.ok(found);await evaljs('document.querySelector(".page-header .primary-button").click()');
+ await wait(i===0?'document.querySelector(".wagon-empty-slot")':'document.querySelector(".placement-page p[role=status]")');
+ assert.equal(await evaljs('document.querySelectorAll(".placement-alert,.ktk-unit").length'),0);
+ assert.equal(await evaljs('document.querySelectorAll(".wagon-card").length'),i===0?1:0);
+ assert.ok(await evaljs('document.querySelector(".page-header .primary-button").disabled'));
+ await click('Назад');await wait('document.querySelector("tbody input[type=checkbox]")');
+}
+console.log('PASS: empty waybills selectable in browser, empty wagon card/no-wagon message, return to list without errors');
 await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
 await send('Page.navigate',{url:base+'/waybills'});await wait('document.querySelector("a[href$=edit-placement]")');await evaljs('document.querySelector("a[href$=edit-placement]").click()');await wait('document.querySelector(".placement-selection input")');
 await wait('document.querySelector("tbody input[type=checkbox]")');

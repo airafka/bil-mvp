@@ -94,6 +94,7 @@ export function WaybillPlacementPage() {
         {!loading && !data?.items.length && <tr><td colSpan={5}>Подходящих накладных нет</td></tr>}
       </tbody></table></div><div className="pagination"><button disabled={loading || busy || page === 0} onClick={() => { setPage(page - 1); setLoading(true) }}>Назад</button><span>Страница {page + 1} из {Math.max(1, data?.totalPages ?? 1)}</span><button disabled={loading || busy || page + 1 >= (data?.totalPages ?? 0)} onClick={() => { setPage(page + 1); setLoading(true) }}>Далее</button></div>
     </div> : <>
+      {!layout.wagons.length && <p role="status">В выбранных накладных нет вагонов для размещения КТК.</p>}
       <div className="wagon-grid" aria-label="Схема размещения КТК">{placementWagonGroups(layout, positions).map(group => { const { wagon: w, rows } = group, issue = wagonIssue(w, rows), tracks = wagonTracks(w, rows); return <section key={w.id} className="wagon-card" data-wagon={w.id} data-over={over === w.id} data-invalid={!!issue} aria-label={'Вагон ' + w.number}
         onDragOver={e => { if (drag.current && !busy) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(w.id) } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null) }}
         onDrop={e => { e.preventDefault(); if (drag.current) move(drag.current, w.id); drag.current = null }}>
