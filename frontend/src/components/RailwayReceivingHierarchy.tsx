@@ -23,5 +23,5 @@ export function RailwayReceivingHierarchy({waybills,containers,defaultOwnerId,on
         containerType:source.type,loadCapacity:source.loadCapacity,tareWeight:source.tareWeight,grossWeight:source.grossWeight}
     })
   }))}))
-  return <section className="form-section composition-section" aria-label="КТК по накладным и вагонам"><OrderContainerTable rows={groups.flatMap(group=>group.children?.flatMap(wagon=>wagon.rows)??group.rows)} groups={groups} onBulkOwnerChange={onBulkOwnerChange} bulkOwnerDisabled={bulkOwnerDisabled} bulkOwnerActionTarget={bulkOwnerActionTarget} attributesReadOnly showPhysicalAttributes defaultOwnerId={defaultOwnerId} onChange={onChange}/></section>
+  return <section className="form-section composition-section" aria-label="КТК по накладным и вагонам"><OrderContainerTable rows={groups.flatMap(group=>group.children?.flatMap(wagon=>wagon.rows)??group.rows)} groups={groups} onBulkOwnerChange={onBulkOwnerChange} bulkOwnerDisabled={bulkOwnerDisabled} bulkOwnerActionTarget={bulkOwnerActionTarget} attributesReadOnly showPhysicalAttributes columnWidths={[44,136,128,80,88,140,144,84,76,80,112,108]} defaultOwnerId={defaultOwnerId} onChange={onChange}/></section>
 }

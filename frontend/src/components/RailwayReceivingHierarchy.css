@@ -7,3 +7,9 @@
 .order-container-table--grouped .container-child-row > td { font-weight: 400; }
 .order-container-table--grouped .composition-subgroup th { text-align: left; }
 .order-container-table--grouped .ui-control { font-size: 14px; }
+
+/* Keep identifiers intact; hierarchy indentation belongs to group headings. */
+.app-shell table.order-container-table--physical.order-container-table--grouped .container-child-row > td.container-number-cell { padding-left: 12px; text-align: left; white-space: nowrap; overflow-wrap: normal; }
+.app-shell table.order-container-table--physical .container-status-badge,
+.app-shell table.order-container-table--physical .container-status-empty { max-width: 100%; white-space: normal; overflow-wrap: normal; }
+.app-shell table.order-container-table--physical thead th { overflow-wrap: normal; }

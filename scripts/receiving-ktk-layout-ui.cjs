@@ -1,0 +1,34 @@
+const fs=require('fs'),path=require('path'),assert=require('node:assert/strict'),{spawn}=require('node:child_process');
+const dir=__dirname,profile=path.join(dir,'../backups/ktk-layout-profile-'+Date.now());fs.mkdirSync(profile);
+const chrome=spawn('C:/Program Files/Google/Chrome/Application/chrome.exe',['--headless=new','--disable-gpu','--disable-background-timer-throttling','--disable-renderer-backgrounding','--no-first-run','--no-default-browser-check','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{windowsHide:true,stdio:'ignore'});
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{
+let port;for(let i=0;i<80;i++){try{port=fs.readFileSync(path.join(profile,'DevToolsActivePort'),'utf8').split('\n')[0];break}catch{}await pause(100)}assert.ok(port,'Headless browser startup');
+const target=(await(await fetch('http://127.0.0.1:'+port+'/json/list')).json()).find(x=>x.type==='page');const ws=new WebSocket(target.webSocketDebuggerUrl);await new Promise((r,j)=>{ws.addEventListener('open',r,{once:true});ws.addEventListener('error',j,{once:true})});
+let seq=0;const pending=new Map();ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(pending.has(m.id)){const {resolve,reject}=pending.get(m.id);pending.delete(m.id);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result)}});
+function send(method,params={}){return new Promise((resolve,reject)=>{const id=++seq;const timeout=setTimeout(()=>reject(Error('CDP timeout: '+method)),15000);pending.set(id,{resolve:r=>{clearTimeout(timeout);resolve(r)},reject:e=>{clearTimeout(timeout);reject(e)}});ws.send(JSON.stringify({id,method,params}))})}
+async function evaljs(expression){const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value}
+async function wait(expression){for(let i=0;i<70;i++){if(await evaljs('Boolean('+expression+')'))return;await pause(100)}throw Error('Timeout: '+expression)}
+await send('Page.enable');await send('Runtime.enable');await send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+
+const base=process.env.KTK_UI_URL||'http://localhost:3195';
+// Read-only UI audit: prevent writes even if an unexpected handler attempts them.
+await send('Page.addScriptToEvaluateOnNewDocument',{source:"window.__writes=[];const originalFetch=window.fetch.bind(window);window.fetch=(input,init)=>{const method=(init?.method||(input instanceof Request?input.method:'GET')).toUpperCase();if(!['GET','HEAD'].includes(method)){window.__writes.push(method);return Promise.reject(Error('Read-only layout check blocked a write'))}return originalFetch(input,init)}"});
+const list=await(await fetch(base+'/api/receiving-orders?size=100')).json(),order=list.items.find(o=>String(o.code)==='29010')||list.items.find(o=>o.transportType==='RAILWAY');assert.ok(order,'Railway order required');
+const errors=[];ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails)});
+const click=async(label)=>{await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==='+JSON.stringify(label)+'&&!b.disabled).click()');await pause(150)};
+const metrics=()=>evaljs('(()=>{const table=document.querySelector(".order-container-table"),frame=table.parentElement;return {page:document.documentElement.scrollWidth,viewport:innerWidth,frame:frame.clientWidth,scroll:frame.scrollWidth,table:table.getBoundingClientRect().width,heads:[...table.tHead.rows[0].cells].map(c=>({text:c.textContent,x:c.getBoundingClientRect().x,width:c.getBoundingClientRect().width,overflow:c.scrollWidth>c.clientWidth+1})),numbers:[...table.querySelectorAll("td.container-number-cell")].map(c=>{const s=c.querySelector("span"),r=s.getBoundingClientRect(),t=c.getBoundingClientRect();return {text:s.textContent,height:r.height,width:r.width,cell:t.width,inside:r.left>=t.left&&r.right<=t.right}})}})()');
+async function check(width,label){await pause(600);const m=await metrics();assert.ok(m.page<=m.viewport+1,label+' page overflow');assert.ok(m.numbers.every(n=>n.height<25&&n.inside),label+' number wrapping '+JSON.stringify(m.numbers));assert.ok(m.heads.every(h=>!h.overflow),label+' header overflow '+JSON.stringify(m.heads));if(width>=1440)assert.ok(m.scroll<=m.frame+1,label+' desktop scrollbar '+JSON.stringify(m));return m}
+for(const width of [1920,1440,1024,640,360,320]){
+ await send('Emulation.setDeviceMetricsOverride',{width,height:1100,deviceScaleFactor:1,mobile:false});await send('Page.navigate',{url:base+'/receiving-orders/'+order.id});await wait('document.querySelector(".view-tabs button")');await evaljs('[...document.querySelectorAll(".view-tabs button")].find(b=>b.textContent.trim()==="КТК").click()');await wait('document.querySelector(".container-number-cell")');
+ const viewing=await check(width,width+' viewing');
+ if(width===1440){const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});fs.writeFileSync(path.join(dir,'../backups/receiving-ktk-1440.png'),Buffer.from(shot.data,'base64'));}
+ await click('Изменить собственника');await wait('document.querySelector("thead input[type=checkbox]")');await check(width,width+' selection');await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await wait('!document.querySelector("thead input[type=checkbox]")');
+ await evaljs('document.querySelector("button[aria-label=Редактировать]").click()');await wait('document.querySelector(".container-child-row select")');const editing=await check(width,width+' editing');assert.deepEqual(editing.heads.map(h=>Math.round(h.width)),viewing.heads.map(h=>Math.round(h.width)),'Edit column widths changed');
+ await click('Отмена');
+ const count=await evaljs('document.querySelectorAll(".container-number-cell").length');await evaljs('document.querySelector(".composition-subgroup button").click()');assert.ok(await evaljs('document.querySelectorAll(".container-number-cell").length')<count);await evaljs('document.querySelector(".composition-subgroup button").click()');assert.equal(await evaljs('document.querySelectorAll(".container-number-cell").length'),count);
+ if(width===1440){await evaljs('document.documentElement.style.zoom="0.9"');await check(width,'90 percent zoom');await evaljs('document.documentElement.style.zoom=""');}
+ assert.equal(await evaljs('window.__writes.length'),0);console.log('PASS: '+width+'px, single-line KTK numbers, aligned viewing/editing columns, owner selection and groups');
+}
+assert.deepEqual(errors,[]);await send('Browser.close');ws.close();console.log('PASS: no writes, no browser exceptions');
+})().catch(e=>{console.error(e);process.exitCode=1;chrome.kill()});
