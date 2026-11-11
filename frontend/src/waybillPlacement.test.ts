@@ -1,32 +1,31 @@
 import { describe, it, expect } from 'vitest'
-import { transfer, wagonIssue, wagonTracks, waybillWagons, type PlacementContainer } from './waybillPlacement'
+import { transfer, wagonIssue, wagonTracks, placementWagonGroups, type PlacementContainer } from './waybillPlacement'
 const a: PlacementContainer = { rowId:'a',containerId:'c1',number:'C1',type:'STANDARD_40',grossWeight:23000,waybillId:'bill1',waybillNumber:'101',wagonId:'w1',selected:true }
 const b: PlacementContainer = { ...a,rowId:'b',containerId:'c2',number:'C2',waybillId:'bill2',waybillNumber:'102',wagonId:'w2' }
 describe('railway placement',()=>{
- it('shows two invoices on one physical wagon as separate cards and counts their shared load',()=>{
+ it('shows KTK from two invoices together on one physical wagon',()=>{
   const wagon={id:'w1',number:'123',feet:80,capacity:null},second={...b,wagonId:'w1'}
-  const groups=waybillWagons({waybills:[],wagons:[wagon],containers:[a,second],version:'v'}, {})
-  expect(groups).toHaveLength(2);expect(groups.map(g=>g.waybillId)).toEqual(['bill1','bill2'])
-  expect(groups.map(g=>g.rows.map(c=>c.rowId))).toEqual([['a'],['b']])
-  expect(groups.every(g=>g.physicalRows.length===2&&g.occupiedFeet===40)).toBe(true)
-  expect(wagonTracks(wagon,groups[0].rows,groups[0].occupiedFeet)).toEqual({freeFeet:0,columns:'minmax(0,40fr) minmax(0,40fr)'})
+  const groups=placementWagonGroups({waybills:[],wagons:[wagon],containers:[a,second],version:'v'}, {})
+  expect(groups).toHaveLength(1);expect(groups[0].rows.map(c=>c.waybillNumber)).toEqual(['101','102'])
+  expect(groups[0].rows.map(c=>c.rowId)).toEqual(['a','b'])
+  expect(wagonTracks(wagon,groups[0].rows)).toEqual({freeFeet:0,columns:'minmax(0,40fr) minmax(0,40fr)'})
  })
  it('regroups moved KTK by its original invoice and target wagon without duplicating rows',()=>{
   const wagons=[{id:'w1',number:'1',feet:80,capacity:null},{id:'w2',number:'2',feet:80,capacity:null}]
-  const groups=waybillWagons({waybills:[],wagons,containers:[a,b],version:'v'},{a:{wagonId:'w2',waybillId:'bill1'}})
-  expect(groups.filter(g=>g.rows.length).map(g=>[g.waybillId,g.wagon.id]).sort()).toEqual([['bill1','w2'],['bill2','w2']])
+  const groups=placementWagonGroups({waybills:[],wagons,containers:[a,b],version:'v'},{a:{wagonId:'w2',waybillId:'bill1'}})
+  expect(groups.filter(g=>g.rows.length).map(g=>g.wagon.id)).toEqual(['w2']);expect(groups[1].rows.map(c=>c.waybillId)).toEqual(['bill1','bill2'])
   expect(groups.flatMap(g=>g.rows).map(c=>c.rowId).sort()).toEqual(['a','b']);expect(groups[0].rows).toEqual([])
  })
- it('counts only selected invoices across cards of a shared wagon',()=>{
+ it('shows only selected invoices on a shared wagon',()=>{
   const wagon={id:'w1',number:'1',feet:80,capacity:null}
-  const groups=waybillWagons({waybills:[],wagons:[wagon],containers:[a,{...b,wagonId:'w1'},{...b,rowId:'c',waybillId:'bill3',wagonId:'w1',selected:false}],version:'v'}, {})
-  expect(groups).toHaveLength(2);expect(groups.every(g=>wagonIssue(wagon,g.physicalRows)===null)).toBe(true);expect(groups.every(g=>g.physicalRows.length===2&&g.occupiedFeet===40)).toBe(true)
+  const groups=placementWagonGroups({waybills:[],wagons:[wagon],containers:[a,{...b,wagonId:'w1'},{...b,rowId:'c',waybillId:'bill3',wagonId:'w1',selected:false}],version:'v'}, {})
+  expect(groups).toHaveLength(1);expect(wagonIssue(wagon,groups[0].rows)).toBeNull();expect(groups[0].rows).toHaveLength(2)
  })
  it('does not fill free space with an unselected invoice',()=>{
   const wagon={id:'w1',number:'123',feet:80,capacity:null}
-  const groups=waybillWagons({waybills:[{id:'bill1',number:'101'}],wagons:[wagon],containers:[a,{...b,wagonId:'w1',selected:false}],version:'v'}, {})
-  expect(groups).toHaveLength(1);expect(groups[0].occupiedFeet).toBe(0)
-  expect(wagonTracks(wagon,groups[0].rows,groups[0].occupiedFeet).freeFeet).toBe(40)
+  const groups=placementWagonGroups({waybills:[{id:'bill1',number:'101'}],wagons:[wagon],containers:[a,{...b,wagonId:'w1',selected:false}],version:'v'}, {})
+  expect(groups).toHaveLength(1);expect(groups[0].rows).toHaveLength(1)
+  expect(wagonTracks(wagon,groups[0].rows).freeFeet).toBe(40)
  })
  it('reserves half of an 80ft platform for a single 40ft container',()=>expect(wagonTracks({id:'w',number:'1',feet:80,capacity:null},[a])).toEqual({freeFeet:40,columns:'minmax(0,40fr) minmax(0,40fr)'}))
  it('uses proportional tracks for mixed lengths and preserves the free quarter',()=>expect(wagonTracks({id:'w',number:'1',feet:80,capacity:null},[a,{...b,type:'STANDARD_20'}])).toEqual({freeFeet:20,columns:'minmax(0,40fr) minmax(0,20fr) minmax(0,20fr)'}))
@@ -37,13 +36,13 @@ describe('railway placement',()=>{
  it('keeps each waybill when moving onto another waybill wagon and when swapping back',()=>{
   const moved=transfer({},[a,b],'a','w2')
   expect(moved.a).toEqual({wagonId:'w2',waybillId:'bill1'})
-  const groups=waybillWagons({waybills:[{id:'bill1',number:'101'},{id:'bill2',number:'102'}],wagons:[{id:'w2',number:'2',feet:80,capacity:null}],containers:[a,b],version:'v'},moved)
-  expect(groups.map(g=>g.waybillNumber)).toEqual(['101','102']);expect(groups.map(g=>g.rows.length)).toEqual([1,1])
+  const groups=placementWagonGroups({waybills:[{id:'bill1',number:'101'},{id:'bill2',number:'102'}],wagons:[{id:'w2',number:'2',feet:80,capacity:null}],containers:[a,b],version:'v'},moved)
+  expect(groups).toHaveLength(1);expect(groups[0].rows.map(c=>c.waybillNumber)).toEqual(['101','102'])
   const swapped=transfer({},[a,b],'a','w2','b')
   const restored=transfer(swapped,[a,b],'a','w1','b')
   expect(restored).toEqual({a:{wagonId:'w1',waybillId:'bill1'},b:{wagonId:'w2',waybillId:'bill2'}})
  })
- it('does not reassign waybills between cards of the same physical wagon',()=>{
+ it('does not reassign waybills between containers on the same physical wagon',()=>{
   const rows=[a,{...b,wagonId:'w1'}]
   expect(transfer({},rows,'a','w1')).toEqual({})
   expect(transfer({},rows,'a','w1','b')).toEqual({})

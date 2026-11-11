@@ -32,7 +32,7 @@ for(let page=0;page<100 && selectedCount<wanted.length;page++){
  await evaljs('document.querySelector(".pagination button:last-child").click()');await wait('document.querySelector("tbody input[type=checkbox]")');
 }
 assert.equal(selectedCount,wanted.length);await evaljs('document.querySelector(".page-header .primary-button").click()');
-await wait('document.querySelectorAll(".wagon-card").length===10');
+await wait('document.querySelectorAll(".wagon-card").length===4');
 assert.equal(await evaljs('document.querySelectorAll(".placement-steps,.placement-toolbar,.placement-help,.placement-add,input:not([type=checkbox]),select").length'),0);
 const card=id=>'document.querySelector('+JSON.stringify('[data-wagon="'+id+'"]')+')';
 const target='document.querySelector('+JSON.stringify('[data-wagon="'+fixture.target+'"]:has(.ktk-box)')+')',targetRows='document.querySelectorAll('+JSON.stringify('[data-wagon="'+fixture.target+'"] .ktk-unit')+')',count=()=>evaljs(targetRows+'.length');assert.equal(await count(),6);

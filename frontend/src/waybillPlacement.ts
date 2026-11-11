@@ -17,26 +17,16 @@ export function wagonFeet(rows: PlacementContainer[]): number | null {
   return lengths.some(n => n == null) ? null : lengths.reduce<number>((sum, n) => sum + (n ?? 0), 0)
 }
 // Keep unused platform length visible; compress an erroneous overloaded source so every KTK remains movable.
-export function wagonTracks(wagon: PlacementWagon, rows: PlacementContainer[], occupiedFeet = 0) {
+export function wagonTracks(wagon: PlacementWagon, rows: PlacementContainer[]) {
   const lengths = rows.filter(c => c.selected).map(c => containerFeet(c.type) ?? 20)
-  const freeFeet = Math.max(0, (wagon.feet ?? 0) - occupiedFeet - lengths.reduce((sum, n) => sum + n, 0))
-  const tracks = [...lengths, ...(occupiedFeet > 0 ? [occupiedFeet] : []), ...(freeFeet > 0 ? [freeFeet] : [])]
+  const freeFeet = Math.max(0, (wagon.feet ?? 0) - lengths.reduce((sum, n) => sum + n, 0))
+  const tracks = [...lengths, ...(freeFeet > 0 ? [freeFeet] : [])]
   return { freeFeet, columns: tracks.length ? tracks.map(n => 'minmax(0,' + n + 'fr)').join(' ') : '1fr' }
 }
-export type WaybillWagon = { key: string; waybillId: string | null; waybillNumber: string | null; wagon: PlacementWagon; rows: PlacementContainer[]; physicalRows: PlacementContainer[]; occupiedFeet: number }
-export function waybillWagons(layout: PlacementLayout, positions: PlacementMap): WaybillWagon[] {
-  const numbers = new Map([...layout.containers.map(c => [c.waybillId, c.waybillNumber] as const), ...layout.waybills.map(b => [b.id, b.number] as const)])
-  const assigned = layout.containers.filter(c => c.selected).map(c => { const target = positionOf(c, positions); return { ...c, ...target, waybillNumber: numbers.get(target.waybillId) ?? c.waybillNumber } })
-  return layout.wagons.flatMap<WaybillWagon>(wagon => {
-    const physicalRows = assigned.filter(c => c.wagonId === wagon.id)
-    const bills = [...new Set(physicalRows.map(c => c.waybillId))]
-    if (!bills.length) return [{ key: 'empty:' + wagon.id, waybillId: null, waybillNumber: null, wagon, rows: [], physicalRows, occupiedFeet: 0 }]
-    return bills.map(waybillId => {
-      const rows = physicalRows.filter(c => c.waybillId === waybillId)
-      const occupiedFeet = physicalRows.filter(c => c.waybillId !== waybillId).reduce((n, c) => n + (containerFeet(c.type) ?? 20), 0)
-      return { key: waybillId + ':' + wagon.id, waybillId, waybillNumber: numbers.get(waybillId) ?? null, wagon, rows, physicalRows, occupiedFeet }
-    })
-  })
+export type WagonGroup = { wagon: PlacementWagon; rows: PlacementContainer[] }
+export function placementWagonGroups(layout: PlacementLayout, positions: PlacementMap): WagonGroup[] {
+  const selected = layout.containers.filter(c => c.selected)
+  return layout.wagons.map(wagon => ({ wagon, rows: selected.filter(c => positionOf(c, positions).wagonId === wagon.id) }))
 }
 export function wagonIssue(wagon: PlacementWagon, rows: PlacementContainer[]): string | null {
   if (!rows.some(c => c.selected)) return null
