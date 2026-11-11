@@ -132,17 +132,9 @@ public class WaybillPlacementService {
             throw conflict("INVALID_PLACEMENT","Состав КТК должен совпадать с выбранными накладными");
         for(var c:selected) {
             var target=targets.get(c.rowId());
-            if(target.waybillId()==null)target=new Assignment(target.rowId(),target.wagonId(),c.waybillId());
-            targets.put(c.rowId(),target);
-            if(!Objects.equals(billsById.get(c.waybillId()).receivingId(),billsById.get(target.waybillId()).receivingId()))
-                throw conflict("WAYBILL_RECEIVING_MISMATCH","Перенос между накладными разных поставок недоступен. Выберите свободные накладные или накладные одной черновой поставки");
-        }
-        // A multi-product bill cannot describe several containers unambiguously.
-        for(var bill:current.waybills()) {
-            boolean receives=selected.stream().anyMatch(c->!c.waybillId().equals(bill.id())&&targets.get(c.rowId()).waybillId().equals(bill.id()));
-            if(receives&&targets.values().stream().filter(t->t.waybillId().equals(bill.id())).count()>1
-                &&jdbc.queryForObject("select count(*) from waybill_product where waybill_id=?",Integer.class,bill.id())>1)
-                throw conflict("WAYBILL_MULTIPLE_PRODUCTS","Накладная №"+bill.number()+" содержит несколько грузов и может включать только один КТК");
+            if(target.waybillId()!=null&&!target.waybillId().equals(c.waybillId()))
+                throw conflict("WAYBILL_IDENTITY_CHANGED","При перемещении КТК должен сохранять свою накладную. Загрузите схему заново");
+            targets.put(c.rowId(),new Assignment(c.rowId(),target.wagonId(),c.waybillId()));
         }
         var physical=new HashSet<UUID>();
         for(var c:current.containers())if(!physical.add(c.containerId()))throw conflict("DUPLICATE_CONTAINER","КТК "+c.number()+" встречается в нескольких накладных схемы. Сначала устраните дублирование");
@@ -156,17 +148,49 @@ public class WaybillPlacementService {
             if(issue!=null)errors.add("Вагон "+w.number()+": "+issue);
         }
         if(!errors.isEmpty())throw conflict("WAGON_CAPACITY_EXCEEDED",String.join("; ",errors));
+        var links=assignCarriageLinks(request.waybillIds(),targets.values());
         UUID batch=UUID.randomUUID();
         for(var c:selected) {
-            var target=targets.get(c.rowId());if(target.wagonId().equals(c.wagonId())&&target.waybillId().equals(c.waybillId()))continue;
-            var links=jdbc.query("select id from waybill_railway_carriage where waybill_id=? and railway_carriage_id=? order by id limit 1",(rs,n)->rs.getObject(1,UUID.class),target.waybillId(),target.wagonId());
-            UUID link=links.isEmpty()?UUID.randomUUID():links.getFirst();
-            if(links.isEmpty())jdbc.update("insert into waybill_railway_carriage(id,waybill_id,railway_carriage_id) values(?,?,?)",link,target.waybillId(),target.wagonId());
-            jdbc.update("update waybill_container set waybill_railway_carriage_id=? where id=?",link,c.rowId());
+            var target=targets.get(c.rowId());
+            UUID link=links.get(new Position(c.waybillId(),target.wagonId()));
+            jdbc.update("update waybill_container set waybill_railway_carriage_id=? where id=? and waybill_railway_carriage_id<>?",link,c.rowId(),link);
+            if(target.wagonId().equals(c.wagonId()))continue;
             jdbc.update("insert into waybill_container_relocation(id,batch_id,waybill_id,waybill_container_id,container_id,from_railway_carriage_id,to_railway_carriage_id,to_waybill_id) values(?,?,?,?,?,?,?,?)",
-                UUID.randomUUID(),batch,c.waybillId(),c.rowId(),c.containerId(),c.wagonId(),target.wagonId(),target.waybillId());
+                UUID.randomUUID(),batch,c.waybillId(),c.rowId(),c.containerId(),c.wagonId(),target.wagonId(),c.waybillId());
         }
         jdbc.update("delete from waybill_railway_carriage rc where rc.waybill_id in ("+marks(request.waybillIds())+") and not exists(select 1 from waybill_container where waybill_railway_carriage_id=rc.id)",request.waybillIds().toArray());
         return load(request.waybillIds(),request.wagonIds());
+    }
+    private record Position(UUID waybillId,UUID wagonId) {}
+    private record CarriageLink(UUID id,UUID waybillId,UUID wagonId) {}
+
+    private Map<Position,UUID> assignCarriageLinks(List<UUID> waybillIds,Collection<Assignment> targets) {
+        var existing=jdbc.query("select id,waybill_id,railway_carriage_id from waybill_railway_carriage where waybill_id in ("+marks(waybillIds)+") order by id for update",
+            (rs,n)->new CarriageLink(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),rs.getObject(3,UUID.class)),waybillIds.toArray());
+        var needed=new LinkedHashSet<Position>();
+        targets.stream().sorted(Comparator.comparing(Assignment::rowId)).forEach(t->needed.add(new Position(t.waybillId(),t.wagonId())));
+        Map<Position,UUID> result=new HashMap<>();
+        Set<UUID> used=new HashSet<>();
+        // Reserve every pair still needed by any KTK before reassigning a vacated link.
+        for(var link:existing) {
+            var position=new Position(link.waybillId(),link.wagonId());
+            if(needed.contains(position)&&!result.containsKey(position)) {
+                result.put(position,link.id());used.add(link.id());
+            }
+        }
+        for(var position:needed) {
+            if(result.containsKey(position))continue;
+            var reusable=existing.stream().filter(l->l.wagonId().equals(position.wagonId())&&!used.contains(l.id())).findFirst();
+            UUID id;
+            if(reusable.isPresent()) {
+                id=reusable.get().id();
+                jdbc.update("update waybill_railway_carriage set waybill_id=? where id=?",position.waybillId(),id);
+            } else {
+                id=UUID.randomUUID();
+                jdbc.update("insert into waybill_railway_carriage(id,waybill_id,railway_carriage_id) values(?,?,?)",id,position.waybillId(),position.wagonId());
+            }
+            result.put(position,id);used.add(id);
+        }
+        return result;
     }
 }

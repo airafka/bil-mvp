@@ -47,32 +47,43 @@ async function fixture(twenty=4,forty=0){
  extended=await save(extended,Object.fromEntries(moving.map(c=>[c.rowId,emptyWagon])));assert.equal(extended.wagons.length,3);assert.equal(extended.containers.filter(c=>c.wagonId===sourceWagon).length,0);
  assert.equal(sql("select count(*) from waybill_railway_carriage where railway_carriage_id='"+sourceWagon+"' and waybill_id in ('"+f.ids.join("','")+"')"),'0');
  console.log('PASS: adding an empty wagon and cleaning empty document associations');
- // Moving between two waybills on the same physical wagon changes only the WC link.
- const cross=await fixture(0,4),cl=await preview(cross.ids),ca=cl.containers[0],cb=cl.containers.find(c=>c.wagonId===ca.wagonId&&c.rowId!==ca.rowId);
+ // Full swaps reuse the target wagon link but keep each container's original waybill.
+ const cross=await fixture(0,4),cl=await preview(cross.ids),ca=cl.containers[0],cb=cl.containers.find(c=>c.wagonId!==ca.wagonId);
  const crossPayload=payload(cl);crossPayload.assignments.find(a=>a.rowId===ca.rowId).waybillId=cb.waybillId;
- const frozen=()=>json("select json_agg(t order by t.id) from (select wc.id,to_jsonb(wc)-'waybill_railway_carriage_id' as data,(select jsonb_agg(z order by z.id) from waybill_zpu z where z.waybill_container_id=wc.id) as seals from waybill_container wc where wc.id in ('"+cl.containers.map(c=>c.rowId).join("','")+"'))t");
+ const frozen=()=>json("select json_agg(t order by t.id) from (select wc.id,rc.waybill_id,to_jsonb(wc)-'waybill_railway_carriage_id' as data,(select jsonb_agg(z order by z.id) from waybill_zpu z where z.waybill_container_id=wc.id) as seals from waybill_container wc join waybill_railway_carriage rc on rc.id=wc.waybill_railway_carriage_id where wc.id in ('"+cl.containers.map(c=>c.rowId).join("','")+"'))t");
  const originalRows=frozen(),oldLink=sql("select waybill_railway_carriage_id from waybill_container where id='"+ca.rowId+"'"),targetLink=sql("select waybill_railway_carriage_id from waybill_container where id='"+cb.rowId+"'");
+ assert.equal((await api('/waybills/placement','PUT',crossPayload,409)).code,'WAYBILL_IDENTITY_CHANGED');assert.deepEqual(frozen(),originalRows);
  const outside=structuredClone(crossPayload);outside.assignments[0].waybillId=f.ids[0];assert.equal((await api('/waybills/placement','PUT',outside,409)).code,'INVALID_PLACEMENT');
- const product=crypto.randomUUID();sql("insert into waybill_product(id,waybill_id,etsng_code_id,weight) select '"+product+"',waybill_id,etsng_code_id,weight from waybill_product where waybill_id='"+cb.waybillId+"' limit 1");
- assert.equal((await api('/waybills/placement','PUT',crossPayload,409)).code,'WAYBILL_MULTIPLE_PRODUCTS');sql("delete from waybill_product where id='"+product+"'");
- const moved=await api('/waybills/placement','PUT',crossPayload);assert.equal(moved.containers.find(c=>c.rowId===ca.rowId).waybillId,cb.waybillId);assert.equal(moved.containers.find(c=>c.rowId===ca.rowId).wagonId,ca.wagonId);
- assert.notEqual(oldLink,targetLink);assert.equal(sql("select waybill_railway_carriage_id from waybill_container where id='"+ca.rowId+"'"),targetLink);assert.deepEqual(frozen(),originalRows);
- assert.equal(sql("select count(*) from waybill_container_relocation where waybill_container_id='"+ca.rowId+"' and waybill_id='"+ca.waybillId+"' and to_waybill_id='"+cb.waybillId+"' and from_railway_carriage_id=to_railway_carriage_id"),'1');
- await save(moved);assert.equal((await api('/waybills/placement','PUT',crossPayload,409)).code,'WAYBILL_PLACEMENT_CHANGED');
- const restore=payload(moved);restore.assignments.find(a=>a.rowId===ca.rowId).waybillId=ca.waybillId;const restored=await api('/waybills/placement','PUT',restore);assert.equal(restored.containers.find(c=>c.rowId===ca.rowId).waybillId,ca.waybillId);
- const swap=payload(restored);swap.assignments.find(a=>a.rowId===ca.rowId).waybillId=cb.waybillId;swap.assignments.find(a=>a.rowId===cb.rowId).waybillId=ca.waybillId;const cs=await api('/waybills/placement','PUT',swap);assert.equal(cs.containers.find(c=>c.rowId===cb.rowId).waybillId,ca.waybillId);assert.deepEqual(frozen(),originalRows);
- console.log('PASS: same-wagon waybill reassignment changes exactly WC foreign key, audit, stale/unknown destination guards, empty source return and swap, cargo invariant');
+ const swapPayload=payload(cl,{[ca.rowId]:cb.wagonId,[cb.rowId]:ca.wagonId});swapPayload.assignments.forEach(a=>a.waybillId=cl.containers.find(c=>c.rowId===a.rowId).waybillId);
+ const moved=await api('/waybills/placement','PUT',swapPayload);assert.equal(moved.containers.find(c=>c.rowId===ca.rowId).waybillId,ca.waybillId);assert.equal(moved.containers.find(c=>c.rowId===ca.rowId).wagonId,cb.wagonId);assert.deepEqual(frozen(),originalRows);
+ assert.equal(sql("select waybill_railway_carriage_id from waybill_container where id='"+ca.rowId+"'"),targetLink);
+ assert.equal(sql("select waybill_id from waybill_railway_carriage where id='"+targetLink+"'"),ca.waybillId);
+ assert.equal(sql("select waybill_id from waybill_railway_carriage where id='"+oldLink+"'"),cb.waybillId);
+ assert.equal(sql("select count(*) from waybill_container_relocation where waybill_container_id in ('"+ca.rowId+"','"+cb.rowId+"') and waybill_id=to_waybill_id and from_railway_carriage_id<>to_railway_carriage_id"),'2');
+ await save(moved);assert.equal((await api('/waybills/placement','PUT',swapPayload,409)).code,'WAYBILL_PLACEMENT_CHANGED');
+ await save(moved,{[ca.rowId]:ca.wagonId,[cb.rowId]:cb.wagonId});assert.deepEqual(frozen(),originalRows);
+ console.log('PASS: full swap updates target WRC.waybill_id and WC link, keeps original waybills/cargo/attributes, audits only wagon changes, rejects waybill reassignment');
+ // Partial swaps must not reassign the links still used by stationary containers.
+ const multi=await fixture(),ml=await preview(multi.ids);
+ for(const wagon of ml.wagons){const rows=ml.containers.filter(c=>c.wagonId===wagon.id),link=sql("select waybill_railway_carriage_id from waybill_container where id='"+rows[0].rowId+"'");sql("update waybill_container set waybill_railway_carriage_id='"+link+"' where id='"+rows[1].rowId+"'")}
+ sql("delete from waybill_railway_carriage rc where waybill_id in ('"+multi.ids.join("','")+"') and not exists(select 1 from waybill_container wc where wc.waybill_railway_carriage_id=rc.id)");
+ const m=await preview(multi.ids),ma=m.containers[0],mb=m.containers.find(c=>c.wagonId!==ma.wagonId);
+ const stationary=m.containers.filter(c=>c.rowId!==ma.rowId&&c.rowId!==mb.rowId),stationaryState=()=>sql("select json_agg(t order by t.id) from (select wc.*,rc.waybill_id,rc.railway_carriage_id from waybill_container wc join waybill_railway_carriage rc on rc.id=wc.waybill_railway_carriage_id where wc.id in ('"+stationary.map(c=>c.rowId).join("','")+"'))t");
+ const stationaryBefore=stationaryState(),partialSwap=await save(m,{[ma.rowId]:mb.wagonId,[mb.rowId]:ma.wagonId});assert.equal(stationaryState(),stationaryBefore);
+ for(const c of m.containers)assert.equal(partialSwap.containers.find(x=>x.rowId===c.rowId).waybillId,c.waybillId);
+ const linkCount=()=>sql("select count(*) from waybill_railway_carriage where waybill_id in ('"+multi.ids.join("','")+"')");assert.equal(linkCount(),'4');
+ const merged=await save(partialSwap,{[ma.rowId]:ma.wagonId,[mb.rowId]:mb.wagonId});assert.equal(linkCount(),'2');assert.equal(stationaryState(),stationaryBefore);assert.deepEqual(merged.containers,m.containers);
+ console.log('PASS: partial swaps split wagon links safely, preserve stationary KTK, merge back without duplicate associations');
  // Existing draft delivery sees the change automatically, while its source container links remain intact.
  const service=(await api('/comprehensive-service-orders/available-services'))[0],tariff=json("select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where complex_service_id='"+service.id+"' and active limit 1)t");
  const order=await api('/comprehensive-service-orders','POST',{clientId:tariff.client_id,contractId:tariff.contract_id,complexServiceId:service.id,defaultContainerOwnerId:tariff.client_id,waybillIds:f.ids},201);
  const draft=await preview(f.ids),one=draft.containers[0],two=draft.containers.find(c=>c.wagonId!==one.wagonId),withOwners=identity();await save(draft,{[one.rowId]:two.wagonId,[two.rowId]:one.wagonId});assert.deepEqual(identity(),withOwners);
  assert.equal(sql("select count(*) from shipping_order_source_container where comprehensive_service_order_id='"+order.order.id+"'"),'4');
- const sameDraft=await preview(f.ids),da=sameDraft.containers[0],dbrow=sameDraft.containers.find(c=>c.wagonId===da.wagonId&&c.rowId!==da.rowId);
+ const sameDraft=await preview(f.ids),da=sameDraft.containers[0],dbrow=sameDraft.containers.find(c=>c.wagonId!==da.wagonId);
  const sourceLinks=sql("select json_agg(t order by to_jsonb(t)::text) from shipping_order_source_container t where comprehensive_service_order_id='"+order.order.id+"'");
- const draftPayload=payload(sameDraft);draftPayload.assignments.find(a=>a.rowId===da.rowId).waybillId=dbrow.waybillId;draftPayload.assignments.find(a=>a.rowId===dbrow.rowId).waybillId=da.waybillId;await api('/waybills/placement','PUT',draftPayload);
+ await save(sameDraft,{[da.rowId]:dbrow.wagonId,[dbrow.rowId]:da.wagonId});
  assert.equal(sql("select json_agg(t order by to_jsonb(t)::text) from shipping_order_source_container t where comprehensive_service_order_id='"+order.order.id+"'"),sourceLinks);
- const mixed=await preview([...f.ids,...cross.ids]),mismatch=payload(mixed);mismatch.assignments.find(a=>a.rowId===da.rowId).waybillId=cross.ids[0];assert.equal((await api('/waybills/placement','PUT',mismatch,409)).code,'WAYBILL_RECEIVING_MISMATCH');
- console.log('PASS: same-draft reassignment preserves source links; cross-delivery reassignment rejected');
+ console.log('PASS: draft wagon swap preserves source links and each container waybill');
  const stale=await preview(f.ids);await api('/comprehensive-service-orders/'+order.order.id+'/prepare-transport','POST',{section:'INITIAL_RECEIVING'});await api('/comprehensive-service-orders/'+order.order.id+'/complete-section','POST',{section:'INITIAL_RECEIVING',action:'CONFIRM_ROUTES'});
  assert.equal((await save(stale,{},409)).code,'WAYBILL_PLACEMENT_LOCKED');assert.equal((await api('/waybills/placement/candidates?query='+f.tag)).totalElements,0);
  const ui=await fixture(0,4);fs.writeFileSync('backups/wagon-fixtures.json',JSON.stringify({...ui,db}));

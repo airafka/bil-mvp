@@ -29,8 +29,7 @@ export function waybillWagons(layout: PlacementLayout, positions: PlacementMap):
   const assigned = layout.containers.filter(c => c.selected).map(c => { const target = positionOf(c, positions); return { ...c, ...target, waybillNumber: numbers.get(target.waybillId) ?? c.waybillNumber } })
   return layout.wagons.flatMap<WaybillWagon>(wagon => {
     const physicalRows = assigned.filter(c => c.wagonId === wagon.id)
-    // Keep vacated source cards until save so the user can move a KTK back.
-    const bills = [...new Set([...layout.containers.filter(c => c.selected && c.wagonId === wagon.id).map(c => c.waybillId), ...physicalRows.map(c => c.waybillId)])]
+    const bills = [...new Set(physicalRows.map(c => c.waybillId))]
     if (!bills.length) return [{ key: 'empty:' + wagon.id, waybillId: null, waybillNumber: null, wagon, rows: [], physicalRows, occupiedFeet: 0 }]
     return bills.map(waybillId => {
       const rows = physicalRows.filter(c => c.waybillId === waybillId)
@@ -47,14 +46,14 @@ export function wagonIssue(wagon: PlacementWagon, rows: PlacementContainer[]): s
   if (feet > wagon.feet) return 'Суммарная длина КТК превышает длину платформы'
   return null
 }
-export function transfer(positions: PlacementMap, rows: PlacementContainer[], rowId: string, wagonId: string, swapId?: string, waybillId?: string | null): PlacementMap {
+export function transfer(positions: PlacementMap, rows: PlacementContainer[], rowId: string, wagonId: string, swapId?: string): PlacementMap {
   const source = rows.find(c => c.rowId === rowId)
   const target = swapId ? rows.find(c => c.rowId === swapId) : null
   if (!source?.selected || (swapId && !target?.selected)) return positions
   const from = positionOf(source, positions)
-  const to = target ? positionOf(target, positions) : { wagonId, waybillId: waybillId ?? from.waybillId }
-  if (!rows.some(c => c.selected && c.waybillId === to.waybillId)) return positions
-  const next = { ...positions, [rowId]: to }
-  if (target && target.rowId !== source.rowId) next[target.rowId] = from
+  const destination = target ? positionOf(target, positions).wagonId : wagonId
+  if (destination === from.wagonId) return positions
+  const next = { ...positions, [rowId]: { wagonId: destination, waybillId: source.waybillId } }
+  if (target) next[target.rowId] = { wagonId: from.wagonId, waybillId: target.waybillId }
   return next
 }
