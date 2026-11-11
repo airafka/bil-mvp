@@ -171,7 +171,7 @@ public class WaybillPlacementService {
         targets.stream().sorted(Comparator.comparing(Assignment::rowId)).forEach(t->needed.add(new Position(t.waybillId(),t.wagonId())));
         Map<Position,UUID> result=new HashMap<>();
         Set<UUID> used=new HashSet<>();
-        // Reserve every pair still needed by any KTK before reassigning a vacated link.
+        // Reserve pairs used by stationary KTK before moving a whole link of the same waybill.
         for(var link:existing) {
             var position=new Position(link.waybillId(),link.wagonId());
             if(needed.contains(position)&&!result.containsKey(position)) {
@@ -180,11 +180,11 @@ public class WaybillPlacementService {
         }
         for(var position:needed) {
             if(result.containsKey(position))continue;
-            var reusable=existing.stream().filter(l->l.wagonId().equals(position.wagonId())&&!used.contains(l.id())).findFirst();
+            var reusable=existing.stream().filter(l->l.waybillId().equals(position.waybillId())&&!used.contains(l.id())).findFirst();
             UUID id;
             if(reusable.isPresent()) {
                 id=reusable.get().id();
-                jdbc.update("update waybill_railway_carriage set waybill_id=? where id=?",position.waybillId(),id);
+                jdbc.update("update waybill_railway_carriage set railway_carriage_id=? where id=?",position.wagonId(),id);
             } else {
                 id=UUID.randomUUID();
                 jdbc.update("insert into waybill_railway_carriage(id,waybill_id,railway_carriage_id) values(?,?,?)",id,position.waybillId(),position.wagonId());
