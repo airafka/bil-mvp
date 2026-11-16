@@ -13,6 +13,7 @@
     <span class="toolbar-separator" aria-hidden="true"></span>
     <button id="refresh" class="tool-button" title="Обновить данные" aria-label="Обновить данные"><svg class="icon refresh-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg><span>Обновить</span></button>
     <button id="add-panel" class="tool-button" type="button" disabled>＋ Добавить таблицу</button>
+    <button id="toggle-events" class="tool-button" type="button" aria-controls="activity-panel" aria-expanded="true">Скрыть журнал</button>
     <button id="pause" class="tool-button" type="button">Пауза</button>
     <span class="toolbar-separator" aria-hidden="true"></span>
     <span class="readonly"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg> Только чтение</span>
@@ -68,7 +69,7 @@
       </section>
       </template>
 
-      <section class="activity-panel">
+      <section id="activity-panel" class="activity-panel">
         <div class="activity-heading"><h2><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>Журнал событий <span id="event-count" class="badge">0</span></h2><span class="activity-caption">Завершённые транзакции · текущая сессия</span><button id="clear-events" title="Очистить только журнал этой вкладки">Очистить журнал</button></div>
         <div class="event-columns" aria-hidden="true"><span>Время</span><span>Операция</span><span>Таблица</span><span>Транзакция</span></div>
         <div id="activity" class="activity"><div class="activity-empty">Ожидание событий БД. Создайте или измените документ в MVP.</div></div>

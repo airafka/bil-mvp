@@ -312,6 +312,20 @@ source.addEventListener('change', event => {
 });
 source.onerror = () => { app.connected = false; connectionStatus(); };
 
+const eventsVisibilityKey = 'billing-db-viewer.events-hidden';
+function setEventsHidden(hidden) {
+  $('activity-panel').hidden = hidden;
+  $('toggle-events').textContent = hidden ? 'Показать журнал' : 'Скрыть журнал';
+  $('toggle-events').setAttribute('aria-expanded', String(!hidden));
+}
+try { setEventsHidden(localStorage.getItem(eventsVisibilityKey) === 'true'); }
+catch { setEventsHidden(false); }
+$('toggle-events').onclick = () => {
+  const hidden = !$('activity-panel').hidden;
+  setEventsHidden(hidden);
+  try { localStorage.setItem(eventsVisibilityKey, String(hidden)); }
+  catch { /* Keep the toggle usable when browser storage is unavailable. */ }
+};
 $('table-search').oninput = renderTables;
 $('add-panel').onclick = addPanel;
 $('pause').onclick = () => { app.paused = !app.paused; connectionStatus(); if (!app.paused) { renderEvents(); refresh(true); } };
