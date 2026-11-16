@@ -299,7 +299,11 @@ function createPanel(number) {
         const serialized = JSON.stringify(record);
         nextRows.set(key, serialized);
         if (comparable && !state.rows.has(key)) state.highlights.set(key, { kind: 'new', until: Date.now() + 8000 });
-        else if (comparable && state.rows.get(key) !== serialized) state.highlights.set(key, { kind: 'modified', until: Date.now() + 8000 });
+        else if (comparable && state.rows.get(key) !== serialized) {
+          const previous = JSON.parse(state.rows.get(key));
+          const columns = data.columns.filter(column => previous[column.name] !== record[column.name]).map(column => column.name);
+          state.highlights.set(key, { kind: 'modified', columns, until: Date.now() + 8000 });
+        }
         const highlight = state.highlights.get(key);
         if (highlight?.until > Date.now()) row.classList.add(highlight.kind);
         else state.highlights.delete(key);
@@ -308,6 +312,8 @@ function createPanel(number) {
         for (const column of data.columns) {
           const value = record[column.name];
           const td = element('td', undefined, value === null ? 'null' : '');
+          const changed = highlight?.until > Date.now() && highlight.kind === 'modified' && highlight.columns.includes(column.name);
+          if (changed) td.classList.add('cell-modified');
           if (/^(smallint|integer|bigint|numeric|real|double)/.test(column.type)) td.classList.add('numeric');
           const relation = data.relations.find(r => r.column === column.name);
           const target = relation?.target.replace(/^public\./, '');
@@ -315,7 +321,7 @@ function createPanel(number) {
             const link = element('button', value, 'fk'); link.title = `Открыть ${target}: ${value}`;
             link.onclick = () => selectTable(target, { column: relation.target_column, value }); td.append(link);
           } else td.textContent = value === null ? 'NULL' : value === '' ? '""' : value;
-          td.title = value === null ? 'NULL' : value; row.append(td);
+          td.title = (changed ? 'Изменённое поле: ' : '') + (value === null ? 'NULL' : value); row.append(td);
         }
         body.append(row);
       }

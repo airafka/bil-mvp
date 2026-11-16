@@ -119,6 +119,8 @@ tbody tr:nth-child(even) td { background: #2e2e2e; }
 tbody tr:hover td { background: #2c3d49; }
 tbody tr.new td { background: #1b382f; color: #c7f0dc; }
 tbody tr.modified td { background: #3a3221; color: #ebdcb4; }
+tbody tr.modified td.cell-modified { background: #69502b; color: #fff1d2; box-shadow: inset 0 -2px #e6af59; }
+tbody tr.modified td.cell-modified:focus-within { box-shadow: inset 0 0 0 2px #85b4d7, inset 0 -4px #e6af59; }
 td.null { color: #a5a5a5; font-style: italic; }
 td.numeric { text-align: right; color: #dedede; }
 th.row-number, td.action-cell { min-width: 42px; width: 42px; max-width: 42px; position: sticky; left: 0; text-align: right; padding: 0; background: #394148; color: #bbc3ca; border-right-color: #59636d; }
