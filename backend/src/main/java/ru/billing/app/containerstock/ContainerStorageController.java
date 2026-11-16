@@ -25,7 +25,7 @@ public class ContainerStorageController {
         String departureCarrier,String consignee,String shippingClientName,String shippingOwnerName,Long storageDays,Boolean inStock,String status,
         String arrivalTimeSource,String departureTimeSource,UUID receivingOrderContainerId,UUID waybillContainerId,UUID shippingOrderContainerId) {}
     private static final String SELECT="""
-        select p.*,c.code container_name,a.name area_name,cl.name client_name,ow.name owner_name,
+        select p.*,s.id as shipping_order_id,c.code container_name,a.name area_name,cl.name client_name,ow.name owner_name,
           r.number::bigint receiving_number,s.number::bigint shipping_number,r.transport_type arrival_transport,s.transport_type departure_transport,
           ic.name arrival_carrier,oc.name departure_carrier,r.consignor,cons.name consignee,
           shipping_client.name shipping_client_name,shipping_owner.name shipping_owner_name,
@@ -39,9 +39,9 @@ public class ContainerStorageController {
         left join client cl on cl.id=p.receiving_client_id left join client ow on ow.id=p.receiving_owner_id
         left join route ir on ir.id=r.route_id and r.transport_type='VEHICLE'
         left join client_related_entity ic on ic.id=ir.client_related_entity_id
-        left join shipping_order s on s.id=p.shipping_order_id
-        left join client shipping_client on shipping_client.id=s.client_id
         left join shipping_order_container shipping_row on shipping_row.id=p.shipping_order_container_id
+        left join shipping_order s on s.id=shipping_row.shipping_order_id
+        left join client shipping_client on shipping_client.id=s.client_id
         left join client shipping_owner on shipping_owner.id=shipping_row.owner_container_id
         left join route outr on outr.id=s.route_id and s.transport_type='VEHICLE'
         left join client_related_entity oc on oc.id=outr.client_related_entity_id

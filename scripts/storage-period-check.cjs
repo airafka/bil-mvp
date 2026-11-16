@@ -41,13 +41,13 @@ const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true')
  assert.ok((await history(c)).some(h=>h.operationType==='CANCEL_SHIPPING_RESERVATION'&&h.orderId===s.id&&h.oldStatus==='RESERVED_OUT'&&h.newStatus==='ON_TERMINAL'&&h.cancellation&&h.storagePeriodId===pid));
  console.log('PASS: reservations never start/stop storage; arrival links and repeated completion');
  s=await manual('shipping');await confirm('shipping',s.id);await finish('shipping',s.id);p=periods(c)[0];
- assert.equal(p.status,'CLOSED');assert.equal(p.shipping_order_id,s.id);assert.ok(p.shipping_history_id);const dh=p.shipping_history_id;
+ assert.equal(p.status,'CLOSED');assert.equal(sql(`select shipping_order_id from shipping_order_container where id='${p.shipping_order_container_id}'`),s.id);assert.equal((await api('/container-storage-periods?periodId='+p.id)).items[0].shippingOrderId,s.id);assert.ok(p.shipping_history_id);const dh=p.shipping_history_id;
  await Promise.all([finish('shipping',s.id),finish('shipping',s.id)]);assert.deepEqual(periods(c)[0],p);
  let report=await api('/container-storage-periods?periodId='+pid);assert.equal(report.items[0].storageDays,1);assert.equal(report.items[0].inStock,false);
  for(const field of ['version','needsReview','reviewReason'])assert.ok(!(field in report.items[0]));
  await Promise.all([cancel('shipping',s.id,'COMPLETED'),cancel('shipping',s.id,'COMPLETED')]);p=periods(c)[0];
  assert.equal(p.id,pid);assert.equal(p.receiving_at,arrival);assert.equal(p.status,'OPEN');assert.equal(p.shipping_at,null);
- assert.equal(p.shipping_order_id,null);assert.equal(p.shipping_history_id,null);for(const field of ['version','needs_review','review_reason'])assert.ok(!(field in p));
+ assert.ok(!('shipping_order_id' in p));assert.equal((await api('/container-storage-periods?periodId='+p.id)).items[0].shippingOrderId,undefined);assert.equal(p.shipping_history_id,null);for(const field of ['version','needs_review','review_reason'])assert.ok(!(field in p));
  h=(await history(c)).filter(h=>h.operationType==='CANCEL_DEPARTURE');assert.equal(h.length,1);assert.equal(h[0].orderId,s.id);assert.equal(h[0].oldStatus,'DEPARTED');assert.equal(h[0].newStatus,'ON_TERMINAL');assert.equal(h[0].cancellation,true);
  assert.equal(h[0].storagePeriodId,pid);assert.equal((await api('/shipping-orders/'+s.id+'/cancellation')).reason,'Проверка истории хранения');
  for(const field of ['targetHistoryId','sourceSystem','sourceOperationKey','reason','needsReview','reviewReason'])assert.ok(!(field in h[0]));
