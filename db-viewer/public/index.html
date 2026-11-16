@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Биллинг · Просмотр БД</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<body>
+  <header class="topbar"><div class="brand"><span class="brand-icon">Б</span><div><strong>Биллинг <span class="slash">/</span> Просмотр БД</strong><small id="database">Подключение к базе…</small></div></div><div class="top-actions"><span class="readonly">Только чтение</span><a href="http://localhost:3001" target="_blank" rel="noopener">Открыть MVP ↗</a></div></header>
+  <main class="workspace">
+    <aside class="sidebar"><div class="sidebar-heading"><h2>Таблицы</h2><span id="table-count" class="badge">—</span></div><label class="search-label" for="table-search">Поиск таблицы</label><input id="table-search" type="search" placeholder="Название или назначение…" autocomplete="off"><div class="table-list" id="table-list"><p class="muted">Загружаем таблицы…</p></div><div class="sidebar-footer"><span class="schema-dot"></span> Схема public</div></aside>
+    <section class="content">
+      <div class="page-heading"><div><div class="eyebrow">ДАННЫЕ ПРИЛОЖЕНИЯ</div><h1>База данных в реальном времени</h1><p>Создайте заявку в MVP — изменения появятся здесь после сохранения.</p></div><div class="live-controls"><span id="connection" class="connection waiting" role="status">Подключение…</span><button id="pause" type="button">Пауза</button><button id="refresh" class="icon-button" title="Обновить данные" aria-label="Обновить данные">↻</button></div></div>
+      <div id="error" class="error" role="alert" hidden></div><div id="observer-warning" class="warning" hidden></div>
+      <section class="data-panel"><div class="panel-heading"><div><h2 id="table-title">Выберите таблицу</h2><p id="table-description">Список слева показывает все таблицы рабочей БД.</p></div><span id="rows-count" class="count-label">—</span></div>
+        <div class="toolbar"><div class="view-tabs" role="tablist" aria-label="Представление таблицы"><button id="data-tab" role="tab" aria-selected="true">Данные</button><button id="schema-tab" role="tab" aria-selected="false">Структура</button></div><label class="row-search"><span class="sr-only">Поиск по данным</span><input id="row-search" type="search" placeholder="Номер, UUID или значение…" autocomplete="off"></label><button id="reset-sort" title="Сначала последние изменённые строки">Последние изменения ↓</button></div>
+        <div id="relation-filter" class="filter-banner" hidden><span id="filter-text"></span><button id="clear-filter">Снять фильтр ×</button></div>
+        <div id="data-scroll" class="data-scroll" tabindex="0" aria-label="Содержимое таблицы"><table id="data-table"></table><div id="empty" class="empty" hidden></div></div>
+        <footer class="table-footer"><span id="updated">Ожидаем данные</span><div class="pagination"><label>Строк <select id="page-size"><option>25</option><option selected>50</option><option>100</option></select></label><span id="page-info">—</span><button id="previous" aria-label="Предыдущая страница">←</button><button id="next" aria-label="Следующая страница">→</button></div></footer>
+      </section>
+      <section class="activity-panel"><div class="activity-heading"><div><h2>Изменения в БД <span id="event-count" class="badge">0</span></h2><p>С момента открытия страницы · нажмите на событие, чтобы открыть таблицу</p></div><button id="clear-events">Очистить журнал</button></div><div id="activity" class="activity"><div class="activity-empty">Ожидаем изменения. Создайте или измените документ в MVP.</div></div></section>
+      <p class="footnote">Обновление по событиям PostgreSQL. Журнал показывает операции завершённых транзакций, а не постоянную историю аудита. Новые и изменённые строки выделены цветом.</p>
+    </section>
+  </main>
+  <dialog id="detail"><div class="detail-heading"><div><div class="eyebrow">ЗАПИСЬ ТАБЛИЦЫ</div><h2 id="detail-title"></h2></div><button id="close-detail" aria-label="Закрыть запись">×</button></div><div id="detail-body"></div></dialog>
+</body></html>

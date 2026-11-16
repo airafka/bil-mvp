@@ -32,3 +32,6 @@ backups/
 /database/*.jar
 /database/*-nginx.conf
 !database/billing-next-snapshot.json
+
+# Standalone local database viewer
+/db-viewer/node_modules/

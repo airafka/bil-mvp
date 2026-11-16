@@ -1,0 +1,31 @@
+name: billing-db-viewer
+
+services:
+  viewer:
+    build: ./db-viewer
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      HOST: 0.0.0.0
+      PORT: ${DB_VIEWER_PORT:-3002}
+      DB_HOST: billing-next-db-1
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-billing_next}
+      DB_USER: ${POSTGRES_USER:-billing}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-billing}
+    ports:
+      - "127.0.0.1:${DB_VIEWER_PORT:-3002}:${DB_VIEWER_PORT:-3002}"
+    networks: [billing]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:'+process.env.PORT+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  billing:
+    external: true
+    name: billing-next_default
