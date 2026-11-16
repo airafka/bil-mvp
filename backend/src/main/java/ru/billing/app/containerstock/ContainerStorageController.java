@@ -32,12 +32,12 @@ public class ContainerStorageController {
           shipping_client.name shipping_client_name,shipping_owner.name shipping_owner_name,
           ah.time_source arrival_time_source,dh.time_source departure_time_source,
           case when p.status='CANCELLED' or p.needs_review then null
-            else greatest(0,(least(coalesce((p.departure_at at time zone 'Europe/Moscow')::date,?::date),?::date)
-              -(p.arrival_at at time zone 'Europe/Moscow')::date)+1)::bigint end storage_days
+            else greatest(0,(least(coalesce((p.shipping_at at time zone 'Europe/Moscow')::date,?::date),?::date)
+              -(p.receiving_at at time zone 'Europe/Moscow')::date)+1)::bigint end storage_days
         from container_storage_period p join container c on c.id=p.container_id
         join terminal_area_catalog a on a.id=p.terminal_area_id
         join receiving_order r on r.id=p.receiving_order_id
-        left join client cl on cl.id=p.receiving_client_id left join client ow on ow.id=p.arrival_owner_id
+        left join client cl on cl.id=p.receiving_client_id left join client ow on ow.id=p.receiving_owner_id
         left join route ir on ir.id=r.route_id and r.transport_type='VEHICLE'
         left join client_related_entity ic on ic.id=ir.client_related_entity_id
         left join shipping_order s on s.id=p.shipping_order_id
@@ -50,8 +50,8 @@ public class ContainerStorageController {
         left join route outr on outr.id=s.route_id and s.transport_type='VEHICLE'
         left join client_related_entity oc on oc.id=outr.client_related_entity_id
         left join client_related_entity cons on cons.id=s.consignee_id
-        join container_owner_history ah on ah.id=p.arrival_history_id
-        left join container_owner_history dh on dh.id=p.departure_history_id
+        join container_owner_history ah on ah.id=p.receiving_history_id
+        left join container_owner_history dh on dh.id=p.shipping_history_id
         """;
     record Filter(String sql,List<Object> args) {}
     private Filter filter(String query,String status,UUID clientId,UUID periodId,LocalDate from,LocalDate to,LocalDate asOf) {
@@ -64,9 +64,9 @@ public class ContainerStorageController {
         args.add(query.trim());args.add(query.trim());
         if(clientId!=null){sql+=" and p.receiving_client_id=?";args.add(clientId);}
         if(periodId!=null){sql+=" and p.id=?";args.add(periodId);}
-        if(from!=null){sql+=" and (p.arrival_at at time zone 'Europe/Moscow')::date>=?";args.add(from);}
-        if(to!=null){sql+=" and (p.arrival_at at time zone 'Europe/Moscow')::date<=?";args.add(to);}
-        sql+=" and (p.arrival_at at time zone 'Europe/Moscow')::date<=?";args.add(asOf);
+        if(from!=null){sql+=" and (p.receiving_at at time zone 'Europe/Moscow')::date>=?";args.add(from);}
+        if(to!=null){sql+=" and (p.receiving_at at time zone 'Europe/Moscow')::date<=?";args.add(to);}
+        sql+=" and (p.receiving_at at time zone 'Europe/Moscow')::date<=?";args.add(asOf);
         sql+=switch(status){case "ACTIVE"->" and p.status<>'CANCELLED'";case "REVIEW"->" and p.needs_review";
             case "ALL"->"";default->" and p.status=?";};
         if(Set.of("OPEN","CLOSED","CANCELLED").contains(status))args.add(status);
@@ -81,7 +81,7 @@ public class ContainerStorageController {
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
         long count=jdbc.queryForObject("select count(*) from ("+SELECT+f.sql()+") q",Long.class,f.args().toArray());
         var args=new ArrayList<>(f.args());args.add(size);args.add((long)page*size);
-        return PagedResponse.of(jdbc.query(SELECT+f.sql()+" order by p.arrival_at desc,p.id limit ? offset ?",
+        return PagedResponse.of(jdbc.query(SELECT+f.sql()+" order by p.receiving_at desc,p.id limit ? offset ?",
             (rs,n)->row(rs),args.toArray()),page,size,count);
     }
     public record ContainerOption(UUID id, String name) {}
@@ -109,7 +109,7 @@ public class ContainerStorageController {
         csv(out,"Номер КТК","Площадка","Заявка поставки","Прибыл","Клиент заявки поставки","Собственник при приёме",
             "Транспорт поставки","Перевозчик поставки","Груз (ЕТСНГ)","Груж/порож","Заявка вывоза","Вывезен",
             "Транспорт вывоза","Перевозчик вывоза","Грузополучатель","Кол-во дней хранения","В стоке","Состояние","Проверка");
-        jdbc.query(SELECT+f.sql()+" order by p.arrival_at desc,p.id",rs->{
+        jdbc.query(SELECT+f.sql()+" order by p.receiving_at desc,p.id",rs->{
             Row r=row(rs);csv(out,r.containerName(),r.terminalAreaName(),r.receivingOrderNumber(),format(r.arrivalAt()),r.clientName(),r.ownerName(),
                 transport(r.arrivalTransport()),r.arrivalCarrier(),r.cargoName(),r.empty()==null?"Не указан":r.empty()?"Порожний":"Гружёный",
                 r.shippingOrderNumber(),format(r.departureAt()),transport(r.departureTransport()),r.departureCarrier(),r.consignee(),
@@ -137,10 +137,10 @@ public class ContainerStorageController {
     private Row row(ResultSet rs)throws SQLException {
         String status=rs.getString("status");boolean review=rs.getBoolean("needs_review");
         return new Row(rs.getObject("id",UUID.class),rs.getObject("container_id",UUID.class),rs.getString("container_name"),rs.getString("area_name"),
-            rs.getObject("receiving_order_id",UUID.class),rs.getObject("receiving_number",Long.class),rs.getObject("arrival_at",OffsetDateTime.class),
+            rs.getObject("receiving_order_id",UUID.class),rs.getObject("receiving_number",Long.class),rs.getObject("receiving_at",OffsetDateTime.class),
             rs.getString("client_name"),rs.getString("owner_name"),rs.getString("arrival_transport"),rs.getString("arrival_carrier"),rs.getString("consignor"),
             rs.getString("cargo_name"),rs.getObject("is_empty",Boolean.class),rs.getObject("shipping_order_id",UUID.class),
-            rs.getObject("shipping_number",Long.class),rs.getObject("departure_at",OffsetDateTime.class),rs.getString("departure_transport"),
+            rs.getObject("shipping_number",Long.class),rs.getObject("shipping_at",OffsetDateTime.class),rs.getString("departure_transport"),
             rs.getString("departure_carrier"),rs.getString("consignee"),rs.getString("shipping_client_name"),rs.getString("shipping_owner_name"),rs.getObject("storage_days",Long.class),review?null:status.equals("OPEN"),
             status,review,rs.getString("review_reason"),rs.getString("arrival_time_source"),rs.getString("departure_time_source"),rs.getLong("version"));
     }

@@ -38,8 +38,8 @@ public class ContainerStorageService {
             if(!opened.isEmpty()) throw conflict("Для КТК уже есть открытый период хранения. Требуется сверка истории");
             period=UUID.randomUUID();
             jdbc.update("""
-                insert into container_storage_period(id,container_id,terminal_area_id,receiving_order_id,arrival_history_id,
-                    arrival_at,receiving_client_id,arrival_owner_id,status)
+                insert into container_storage_period(id,container_id,terminal_area_id,receiving_order_id,receiving_history_id,
+                    receiving_at,receiving_client_id,receiving_owner_id,status)
                 select ?,?,?,id,?,?,client_id,?,'OPEN' from receiving_order where id=?
                 """,period,container,area,history,at,owner,order);
             snapshotCargo(period,order,container,receiving);
@@ -48,7 +48,7 @@ public class ContainerStorageService {
             if(at.isBefore(current.arrival())) throw conflict("Вывоз не может быть раньше приёма КТК");
             period=current.id();
             jdbc.update("""
-                update container_storage_period set shipping_order_id=?,departure_history_id=?,departure_at=?,status='CLOSED',
+                update container_storage_period set shipping_order_id=?,shipping_history_id=?,shipping_at=?,status='CLOSED',
                     version=version+1,updated_at=billing_now() where id=?
                 """,order,history,at,period);
         } else if(operation.equals("CANCEL_ARRIVAL")) {
@@ -62,7 +62,7 @@ public class ContainerStorageService {
                 throw conflict("Нельзя открыть период отменяемого вывоза. Сначала отмените последующие операции или проверьте историю");
             current=closed.getFirst();period=current.id();target=current.departureHistory();
             jdbc.update("""
-                update container_storage_period set shipping_order_id=null,departure_history_id=null,departure_at=null,status='OPEN',
+                update container_storage_period set shipping_order_id=null,shipping_history_id=null,shipping_at=null,status='OPEN',
                     version=version+1,updated_at=billing_now() where id=?
                 """,period);
         } else {
@@ -92,8 +92,8 @@ public class ContainerStorageService {
     private List<Period> periods(String condition,Object... args) {
         return jdbc.query("select * from container_storage_period where "+condition+" for update",(rs,n)->new Period(
             rs.getObject("id",UUID.class),rs.getObject("terminal_area_id",UUID.class),rs.getObject("receiving_order_id",UUID.class),
-            rs.getObject("shipping_order_id",UUID.class),rs.getObject("arrival_history_id",UUID.class),rs.getObject("departure_history_id",UUID.class),
-            rs.getObject("arrival_at",OffsetDateTime.class),rs.getString("status"),rs.getBoolean("needs_review")),args);
+            rs.getObject("shipping_order_id",UUID.class),rs.getObject("receiving_history_id",UUID.class),rs.getObject("shipping_history_id",UUID.class),
+            rs.getObject("receiving_at",OffsetDateTime.class),rs.getString("status"),rs.getBoolean("needs_review")),args);
     }
     private void snapshotCargo(UUID period,UUID order,UUID container,boolean receiving) {
         if(!receiving) return;

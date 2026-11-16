@@ -10,7 +10,8 @@ function fingerprints(){const tables=json("select json_agg(tablename order by ta
 if(process.argv[2]==='capture') {assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'34');assert.ok(!fs.existsSync(snapshot),'Capture already exists');fs.writeFileSync(snapshot,fingerprints());console.log('Captured pre-migration business rows');process.exit();}
 const inspect=JSON.parse(run(['inspect','billing-next-clock-test']))[0];
 assert.ok(inspect.Config.Env.includes('DB_NAME='+db));assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort==='8199'));
-assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'35');
+assert.ok([35,36].includes(Number(sql('select max(version::int) from flyway_schema_history where success'))));
+if(process.argv[2]!=='recheck') assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'35','Original clock migration capture is V34 -> V35; use recheck for the latest schema');
 async function api(p,method='GET',body,status=200){const r=await fetch(base+p,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();let value;try{value=JSON.parse(text)}catch{value=text}assert.equal(r.status,status,p+': '+text);return value;}
 async function date(value){const c=await api('/application-clock');return api('/application-clock','PUT',{date:value,version:c.version});}
 const localDate=value=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow'}).format(new Date(value));
@@ -41,7 +42,7 @@ async function complete(id,section){await api('/comprehensive-service-orders/'+i
   await api('/comprehensive-service-orders/'+id+'/no-return','POST',{containerIds:[c]});
   await complete(id,'INITIAL_RECEIVING');
   let period=json(`select row_to_json(p) from container_storage_period p where container_id='${c}'`);
-  assert.equal(localDate(period.arrival_at),'2096-02-28');assert.equal(localDate(period.created_at),'2096-02-28');
+  assert.equal(localDate(period.receiving_at ?? period.arrival_at),'2096-02-28');assert.equal(localDate(period.created_at),'2096-02-28');
   assert.equal((await api('/container-storage-periods?periodId='+period.id)).items[0].storageDays,1);
   const frozen=sql(`select to_jsonb(p)::text from container_storage_period p where id='${period.id}'`);
   await date('2096-03-01'); // Includes 29 February.
@@ -50,7 +51,7 @@ async function complete(id,section){await api('/comprehensive-service-orders/'+i
   await api('/container-storage-periods?asOf=2096-03-02','GET',undefined,400);
   await complete(id,'SHIPPING');
   period=json(`select row_to_json(p) from container_storage_period p where id='${period.id}'`);
-  assert.equal(localDate(period.departure_at),'2096-03-01');assert.equal(localDate(period.updated_at),'2096-03-01');
+  assert.equal(localDate(period.shipping_at ?? period.departure_at),'2096-03-01');assert.equal(localDate(period.updated_at),'2096-03-01');
   const execution=json(`select row_to_json(e) from service_execution e where comprehensive_service_order_id='${id}'`);
   assert.equal(localDate(execution.performed_at),'2096-03-01');assert.equal(localDate(execution.priced_at),'2096-03-01');
   assert.equal(sql(`select count(*) from route where id in (select route_id from receiving_order where comprehensive_service_order_id='${id}') and (data_time at time zone 'Europe/Moscow')::date='2096-02-28'`),'1');

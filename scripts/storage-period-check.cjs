@@ -30,7 +30,7 @@ const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true')
  assert.ok((await history(c)).some(h=>h.operationType==='CANCEL_RECEIVING_RESERVATION'&&h.targetHistoryId&&!h.storagePeriodId));
  r=await manual('receiving');await confirm('receiving',r.id);await finish('receiving',r.id);
  let p=periods(c)[0];assert.equal(p.status,'OPEN');assert.equal(p.is_empty,true);assert.equal(p.receiving_order_id,r.id);
- const hid=p.arrival_history_id,pid=p.id,arrival=p.arrival_at;
+ const hid=p.receiving_history_id,pid=p.id,arrival=p.receiving_at;
  let h=(await history(c)).find(h=>h.id===hid);assert.equal(h.storagePeriodId,pid);assert.equal(h.operationType,'ARRIVAL');
  assert.equal(h.timeSource,'MANUAL_COMPLETION');assert.ok(h.occurredAt);
  await finish('receiving',r.id);assert.equal(periods(c).length,1);assert.equal((await history(c)).filter(h=>h.operationType==='ARRIVAL').length,1);
@@ -39,25 +39,25 @@ const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true')
  assert.ok((await history(c)).some(h=>h.operationType==='CANCEL_SHIPPING_RESERVATION'&&h.storagePeriodId===pid&&h.targetHistoryId));
  console.log('PASS: reservations never start/stop storage; arrival links and repeated completion');
  s=await manual('shipping');await confirm('shipping',s.id);await finish('shipping',s.id);p=periods(c)[0];
- assert.equal(p.status,'CLOSED');assert.equal(p.shipping_order_id,s.id);assert.ok(p.departure_history_id);const dh=p.departure_history_id;
+ assert.equal(p.status,'CLOSED');assert.equal(p.shipping_order_id,s.id);assert.ok(p.shipping_history_id);const dh=p.shipping_history_id;
  await Promise.all([finish('shipping',s.id),finish('shipping',s.id)]);assert.deepEqual(periods(c)[0],p);
  let report=await api('/container-storage-periods?periodId='+pid);assert.equal(report.items[0].storageDays,1);assert.equal(report.items[0].inStock,false);
  await Promise.all([cancel('shipping',s.id,'COMPLETED'),cancel('shipping',s.id,'COMPLETED')]);p=periods(c)[0];
- assert.equal(p.id,pid);assert.equal(p.arrival_at,arrival);assert.equal(p.status,'OPEN');assert.equal(p.departure_at,null);
- assert.equal(p.shipping_order_id,null);assert.equal(p.departure_history_id,null);assert.equal(p.version,2);
+ assert.equal(p.id,pid);assert.equal(p.receiving_at,arrival);assert.equal(p.status,'OPEN');assert.equal(p.shipping_at,null);
+ assert.equal(p.shipping_order_id,null);assert.equal(p.shipping_history_id,null);assert.equal(p.version,2);
  h=(await history(c)).filter(h=>h.operationType==='CANCEL_DEPARTURE');assert.equal(h.length,1);assert.equal(h[0].targetHistoryId,dh);
  assert.equal(h[0].storagePeriodId,pid);assert.equal(h[0].reason,'Проверка истории хранения');
  assert.ok((await history(c)).find(h=>h.id===dh&&!h.cancellation));
  console.log('PASS: departure/reopening, immutable original history, cancellation reason, concurrent retries');
  // Test-only date fixture: calendar boundaries use Moscow, not elapsed 24-hour blocks.
- sql(`update container_storage_period set arrival_at='2026-10-31T21:30:00Z' where id='${pid}'; update container_owner_history set occurred_at='2026-10-31T21:30:00Z' where id='${hid}'`);
+ sql(`update container_storage_period set receiving_at='2026-10-31T21:30:00Z' where id='${pid}'; update container_owner_history set occurred_at='2026-10-31T21:30:00Z' where id='${hid}'`);
  report=await api('/container-storage-periods?periodId='+pid+'&asOf=2026-11-05');assert.equal(report.items[0].storageDays,5);
  report=await api('/container-storage-periods?periodId='+pid+'&asOf=2026-10-31');assert.equal(report.totalElements,0);
  s=await manual('shipping');await confirm('shipping',s.id);await finish('shipping',s.id);p=periods(c)[0];
  const r2=await manual('receiving');await confirm('receiving',r2.id);await cancel('shipping',s.id,'COMPLETED',409);assert.deepEqual(periods(c)[0],p);
  await finish('receiving',r2.id);assert.equal(periods(c).length,2);assert.notEqual(periods(c)[1].id,pid);
  await cancel('shipping',s.id,'COMPLETED',409);await cancel('receiving',r2.id,'COMPLETED');
- assert.equal(periods(c)[1].status,'CANCELLED');assert.ok(periods(c)[1].arrival_at);
+ assert.equal(periods(c)[1].status,'CANCELLED');assert.ok(periods(c)[1].receiving_at);
  await cancel('shipping',s.id,'COMPLETED');assert.equal(periods(c)[0].status,'OPEN');
  await cancel('receiving',r.id,'COMPLETED');assert.equal(periods(c)[0].status,'CANCELLED');
  report=await api('/container-storage-periods?periodId='+pid+'&status=ALL');assert.equal(report.items[0].storageDays,undefined);
@@ -70,8 +70,8 @@ const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true')
  const csvText=new TextDecoder().decode(bytes);assert.match(csvText,/Аннулирован/);assert.equal(csvText.trim().split('\r\n').length,2);
  // All linked facts must refer to the same physical container and period.
  assert.equal(sql(`select count(*) from container_owner_history h join container_storage_period p on p.id=h.storage_period_id where h.container_id<>p.container_id`),'0');
- assert.equal(sql(`select count(*) from container_storage_period p join container_owner_history h on h.id=p.arrival_history_id where h.storage_period_id<>p.id`),'0');
- assert.equal(sql(`select count(*) from container_storage_period where status='OPEN' and not needs_review and departure_at is not null`),'0');
+ assert.equal(sql(`select count(*) from container_storage_period p join container_owner_history h on h.id=p.receiving_history_id where h.storage_period_id<>p.id`),'0');
+ assert.equal(sql(`select count(*) from container_storage_period where status='OPEN' and not needs_review and shipping_at is not null`),'0');
  fs.mkdirSync(path.join(__dirname,'../backups'),{recursive:true});
  fs.writeFileSync(path.join(__dirname,'../backups/storage-fixtures.json'),JSON.stringify({db,containerId:c,periodId:pid}));
  console.log('PASS: filter validation, CSV export, bidirectional history consistency');
