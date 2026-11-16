@@ -81,11 +81,110 @@ function activate(panel) {
   $('navigator-target').textContent = 'Выбор для панели ' + panel.number;
   renderTables();
 }
+let finishPanelResize;
+const minimumPanelHeight = () => window.innerWidth <= 700 ? 360 : 280;
+function updatePanelHeights() {
+  const minimum = minimumPanelHeight();
+  const tracks = [];
+  for (const [index, panel] of panels.entries()) {
+    if (panel.height !== undefined) panel.height = Math.max(minimum, panel.height);
+    tracks.push(panel.height === undefined ? (window.innerWidth <= 700 ? '520px' : 'minmax(320px,1fr)') : panel.height + 'px');
+    if (index < panels.length - 1) tracks.push('14px');
+  }
+  $('panels').style.gridTemplateRows = panels.length > 1 ? tracks.join(' ') : '';
+  for (const handle of $('panels').querySelectorAll('.panel-resize')) {
+    const above = handle.previousElementSibling.getBoundingClientRect().height;
+    const below = handle.nextElementSibling.getBoundingClientRect().height;
+    handle.setAttribute('aria-valuemin', String(minimum));
+    handle.setAttribute('aria-valuemax', String(Math.max(minimum, Math.round(above + below - minimum))));
+    handle.setAttribute('aria-valuenow', String(Math.round(above)));
+    handle.setAttribute('aria-valuetext', 'Высота верхней панели: ' + Math.round(above) + ' пикселей');
+  }
+}
+function resetPanelHeights() {
+  finishPanelResize?.();
+  for (const panel of panels) delete panel.height;
+  updatePanelHeights();
+}
+function freezePanelHeights() {
+  for (const panel of panels) panel.height = panel.root.getBoundingClientRect().height;
+}
+function resizePanelPair(above, below, height, total) {
+  const minimum = minimumPanelHeight();
+  above.height = Math.max(minimum, Math.min(total - minimum, height));
+  below.height = total - above.height;
+  updatePanelHeights();
+}
+function createPanelResize(above, below) {
+  const handle = element('div', undefined, 'panel-resize');
+  handle.tabIndex = 0;
+  handle.setAttribute('role', 'separator');
+  handle.setAttribute('aria-orientation', 'horizontal');
+  handle.setAttribute('aria-controls', above.root.id + ' ' + below.root.id);
+  handle.setAttribute('aria-label', 'Изменить высоту панелей ' + above.number + ' и ' + below.number);
+  handle.title = 'Потяните вверх или вниз. Стрелки ↑/↓ — изменить высоту, двойной щелчок — выровнять панели.';
+  let drag;
+  function finish() {
+    if (!drag) return;
+    const pointerId = drag.pointerId;
+    drag = undefined;
+    document.body.classList.remove('resizing-panels');
+    if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+    if (finishPanelResize === finish) finishPanelResize = undefined;
+  }
+  handle.onpointerdown = event => {
+    if (event.button !== 0) return;
+    finishPanelResize?.();
+    event.preventDefault();
+    freezePanelHeights();
+    drag = { pointerId: event.pointerId, y: event.clientY, height: above.height, total: above.height + below.height };
+    handle.setPointerCapture(event.pointerId);
+    handle.focus({ preventScroll: true });
+    document.body.classList.add('resizing-panels');
+    finishPanelResize = finish;
+    updatePanelHeights();
+  };
+  handle.onpointermove = event => {
+    if (drag && drag.pointerId === event.pointerId) resizePanelPair(above, below, drag.height + event.clientY - drag.y, drag.total);
+  };
+  handle.onpointerup = finish;
+  handle.onpointercancel = finish;
+  handle.onlostpointercapture = finish;
+  handle.ondblclick = resetPanelHeights;
+  handle.onkeydown = event => {
+    if (event.key === 'Escape' && drag) {
+      event.preventDefault();
+      resizePanelPair(above, below, drag.height, drag.total);
+      finish(); return;
+    }
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    finishPanelResize?.();
+    freezePanelHeights();
+    const total = above.height + below.height;
+    const step = event.shiftKey ? 80 : 20;
+    const height = event.key === 'Home' ? minimumPanelHeight() : event.key === 'End' ? total - minimumPanelHeight()
+      : above.height + (event.key === 'ArrowUp' ? -step : step);
+    resizePanelPair(above, below, height, total);
+  };
+  return handle;
+}
+window.addEventListener('resize', () => { finishPanelResize?.(); updatePanelHeights(); });
+window.addEventListener('blur', () => finishPanelResize?.());
 function layoutPanels() {
+  finishPanelResize?.();
   $('panels').classList.toggle('multiple', panels.length > 1);
   $('panels').classList.toggle('many', panels.length > 2);
-  for (const panel of panels) panel.root.querySelector('[data-role="close"]').disabled = panels.length === 1;
+  $('reset-heights').hidden = panels.length < 2;
+  for (const handle of $('panels').querySelectorAll('.panel-resize')) handle.remove();
+  for (const [index, panel] of panels.entries()) {
+    panel.root.querySelector('[data-role="close"]').disabled = panels.length === 1;
+    if (panels.length === 1) delete panel.height;
+    if (index < panels.length - 1) $('panels').insertBefore(createPanelResize(panel, panels[index + 1]), panels[index + 1].root);
+  }
+  updatePanelHeights();
 }
+
 function addPanel() {
   const panel = createPanel(nextPanel++);
   panels.push(panel);
@@ -107,6 +206,7 @@ function createPanel(number) {
   let optionsKey = '';
   let searchTimer;
   const panel = { root, number, state, select: selectTable, refresh: refreshPanel, options: updateOptions };
+  root.id = 'table-panel-' + number;
   root.setAttribute('aria-label', 'Панель ' + number);
   $('table-select').setAttribute('aria-label', 'Таблица панели ' + number);
   $('close').setAttribute('aria-label', 'Закрыть панель ' + number);
@@ -317,6 +417,7 @@ function setEventsHidden(hidden) {
   $('activity-panel').hidden = hidden;
   $('toggle-events').textContent = hidden ? 'Показать журнал' : 'Скрыть журнал';
   $('toggle-events').setAttribute('aria-expanded', String(!hidden));
+  updatePanelHeights();
 }
 try { setEventsHidden(localStorage.getItem(eventsVisibilityKey) === 'true'); }
 catch { setEventsHidden(false); }
@@ -328,6 +429,7 @@ $('toggle-events').onclick = () => {
 };
 $('table-search').oninput = renderTables;
 $('add-panel').onclick = addPanel;
+$('reset-heights').onclick = resetPanelHeights;
 $('pause').onclick = () => { app.paused = !app.paused; connectionStatus(); if (!app.paused) { renderEvents(); refresh(true); } };
 $('refresh').onclick = () => refresh(true);
 $('close-detail').onclick = () => $('detail').close();

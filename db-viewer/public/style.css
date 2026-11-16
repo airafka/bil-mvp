@@ -225,7 +225,7 @@ dialog::backdrop { background: #080808b3; backdrop-filter: blur(3px); }
 
 /* Independent table panels share the navigator and the event stream. */
 .panels { display: grid; grid-template-columns: minmax(0,1fr); grid-auto-rows: minmax(0,1fr); flex: 1; min-height: 0; gap: 12px; overflow: auto; }
-.panels.multiple { grid-template-columns: minmax(0,1fr); grid-auto-rows: minmax(320px,1fr); }
+.panels.multiple { grid-template-columns: minmax(0,1fr); grid-auto-rows: minmax(320px,1fr); gap: 0; align-content: start; }
 .pane-toolbar { display: flex; align-items: center; gap: 7px; padding: 8px; background: #20262e; border-bottom: 1px solid var(--border); }
 .pane-activate { background: transparent; border-color: transparent; white-space: nowrap; color: var(--muted); font-size: 11px; padding: 4px 6px; }
 .pane-toolbar select { flex: 1; width: 0; min-width: 0; font-size: 12px; }
@@ -257,3 +257,10 @@ dialog::backdrop { background: #080808b3; backdrop-filter: blur(3px); }
 td.schema-note { min-width: 260px; width: 420px; max-width: 520px; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; font: 13px/1.55 "Segoe UI", Arial, sans-serif; color: #d0d9e5; padding: 10px 12px; vertical-align: top; }
 
 @media (max-width: 700px) { .content:has(#activity-panel[hidden]) { min-height: 0; } }
+
+.panels.multiple .data-panel { height: auto; }
+.panel-resize { min-width: 0; min-height: 14px; display: flex; align-items: center; justify-content: center; cursor: row-resize; touch-action: none; border-radius: 5px; }
+.panel-resize::before { content: ''; width: 54px; height: 3px; background: #657990; border-radius: 3px; }
+.panel-resize:hover, .panel-resize:focus-visible { background: #28384b; outline: none; }
+.panel-resize:hover::before, .panel-resize:focus-visible::before { background: #c0d1e6; height: 4px; }
+.resizing-panels, .resizing-panels * { cursor: row-resize !important; user-select: none !important; }
