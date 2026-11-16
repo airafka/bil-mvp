@@ -281,7 +281,7 @@ function createPanel(number) {
         const th = element('th');
         const button = element('button');
         const numeric = /^(smallint|integer|bigint|numeric|real|double)/.test(column.type);
-        const symbol = column.primary ? '◆' : numeric ? '#' : column.type.includes('timestamp') || column.type === 'date' ? '◷' : 'T';
+        const symbol = column.primary ? '◆' : numeric ? '123' : column.type.includes('timestamp') || column.type === 'date' ? '◷' : 'A-Z';
         const icon = element('span', symbol, `column-symbol${column.primary ? ' primary' : ''}`);
         icon.setAttribute('aria-hidden', 'true');
         button.append(icon, document.createTextNode(`${state.sort === column.name ? (state.direction === 'asc' ? '↑ ' : '↓ ') : ''}${column.name}`));
