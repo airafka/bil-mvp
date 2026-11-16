@@ -1,3 +1,4 @@
+import { ApplicationCalendar } from './ApplicationCalendar'
 import { preloadNavigation } from '../navigationPreload'
 import { useResponsiveTables } from './useResponsiveTables'
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
@@ -89,6 +90,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }}>
       <header className="topbar">
         <nav className="breadcrumbs" aria-label="Навигационная цепочка"><Link to="/">Главная</Link><span aria-hidden="true">—</span><Link to={current?.path ?? '/'}>{current?.title ?? 'Биллинг'}</Link>{(isCreating || isViewing) && <><span aria-hidden="true">—</span><strong>{isCreating ? 'Создание' : 'Просмотр'}</strong></>}</nav>
+        <ApplicationCalendar />
         <div className="user-badge" title="Локальный пользователь"><img src="/icons/figma/avatar.svg" alt="Локальный пользователь" /></div>
       </header>
       <main id="main-content" className="content" tabIndex={-1}>{children}</main>

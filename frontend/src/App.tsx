@@ -1,3 +1,4 @@
+import { ApplicationClockProvider } from './components/ApplicationClockProvider'
 const TransportCatalogRegistryPage = lazy(() => import('./pages/TransportCatalogPages').then(m => ({default:m.TransportCatalogRegistryPage})))
 const TransportCatalogCardPage = lazy(() => import('./pages/TransportCatalogPages').then(m => ({default:m.TransportCatalogCardPage})))
 import { NotificationProvider } from './components/Notification'
@@ -41,7 +42,7 @@ const UiKitPage = lazy(() => import('./pages/UiKitPage').then(module => ({ defau
 function App() {
   return (
     <BrowserRouter>
-      <NotificationProvider><AppLayout>
+      <NotificationProvider><ApplicationClockProvider><AppLayout>
         <Suspense fallback={<div className="view-loading" role="status">Загружаем раздел…</div>}><Routes>
           <Route path="/ui-kit" element={<UiKitPage />} />
           <Route path="/" element={<Navigate to="/receiving-orders" replace />} />
@@ -85,7 +86,7 @@ function App() {
           <Route path="/waybills/create" element={<WaybillCreatePage />} />
           <Route path="*" element={<section className="table-card empty-state"><h1>Страница не найдена</h1><p>Проверьте адрес или откройте реестр заявок.</p><Link className="primary-button" to="/comprehensive-service-orders">К заявкам на услугу</Link></section>} />
         </Routes></Suspense>
-      </AppLayout></NotificationProvider>
+      </AppLayout></ApplicationClockProvider></NotificationProvider>
     </BrowserRouter>
   )
 }

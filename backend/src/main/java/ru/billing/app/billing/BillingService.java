@@ -70,7 +70,7 @@ public class BillingService {
                         select count(distinct wc.container_id) from waybill_details w
                         join waybill_railway_carriage rc on rc.waybill_id=w.id
                         join waybill_container_details wc on wc.waybill_railway_carriage_id=rc.id
-                        where w.receiving_order_id=?), acceptance_fixed_at=current_timestamp where id=?
+                        where w.receiving_order_id=?), acceptance_fixed_at=billing_now() where id=?
                     """, orderId, orderId);
             return;
         }
@@ -99,9 +99,9 @@ public class BillingService {
                 insert into service_execution(id,comprehensive_service_order_id,container_id,complex_service_id,
                     receiving_order_id,shipping_order_id,status,performed_at,tariff_id,coefficient,
                     base_price_without_vat,base_price_with_vat,price_without_vat,price_with_vat,priced_at)
-                select ?,t.comprehensive_service_order_id,?,t.complex_service_id,?,?,'PERFORMED',current_timestamp,
+                select ?,t.comprehensive_service_order_id,?,t.complex_service_id,?,?,'PERFORMED',billing_now(),
                     t.tariff_id,t.coefficient,t.base_price_without_vat,t.base_price_with_vat,
-                    t.price_without_vat,t.price_with_vat,current_timestamp
+                    t.price_without_vat,t.price_with_vat,billing_now()
                 from comprehensive_service_order_tariff t
                 where t.comprehensive_service_order_id=? and t.complex_service_id=?
                 on conflict(comprehensive_service_order_id,container_id) do nothing

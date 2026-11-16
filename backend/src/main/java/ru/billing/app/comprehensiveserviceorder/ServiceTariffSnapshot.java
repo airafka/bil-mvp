@@ -21,7 +21,7 @@ public class ServiceTariffSnapshot {
                        round(c.price_without_vat*t.coefficient,2),round(c.price_with_vat*t.coefficient,2)
                 from complex_service_tariff t join complex_service_catalog c on c.id=t.complex_service_id where t.id=?
                 """,orderId,tariffs.getFirst());
-        jdbc.update("update comprehensive_service_order set tariffs_fixed_at=current_timestamp where id=?",orderId);
+        jdbc.update("update comprehensive_service_order set tariffs_fixed_at=billing_now() where id=?",orderId);
     }
 
 }

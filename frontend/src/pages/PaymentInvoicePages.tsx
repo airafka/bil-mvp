@@ -1,3 +1,4 @@
+import { useApplicationClock } from '../applicationClock'
 import { TableReveal } from '../components/TableReveal'
 import { createPortal } from 'react-dom'
 import { RecordRow } from '../components/RecordRow'
@@ -89,6 +90,7 @@ export function InvoiceRegistryPage() {
 export function InvoiceCreatePage() { return <InvoiceForm /> }
 
 function InvoiceForm({ initial, onSaved, onCancel }: { initial?: InvoiceDetails; onSaved?: (data: InvoiceDetails) => void; onCancel?: () => void }) {
+  const { clock } = useApplicationClock()
   const [actionHost, setActionHost] = useState<HTMLDivElement | null>(null)
   const [clients, setClients] = useState<ReferenceOption[]>([])
   const [contracts, setContracts] = useState<ContractOption[]>([])
@@ -96,7 +98,7 @@ function InvoiceForm({ initial, onSaved, onCancel }: { initial?: InvoiceDetails;
   const [referenceError, setReferenceError] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [filters, setFilters] = useState<InvoiceFilters>(initial ? { clientId: initial.invoice.clientId, contractId: initial.invoice.contractId, period: initial.invoice.period } : { clientId: '', contractId: '', period: new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' }).slice(0, 7) })
+  const [filters, setFilters] = useState<InvoiceFilters>(initial ? { clientId: initial.invoice.clientId, contractId: initial.invoice.contractId, period: initial.invoice.period } : { clientId: '', contractId: '', period: clock.date.slice(0, 7) })
   const [applied, setApplied] = useState<{ filters: InvoiceFilters; candidates: InvoiceCandidates; key: string } | null>(null)
   const [candidates, setCandidates] = useState<InvoiceCandidates | null>(null)
   const [candidateError, setCandidateError] = useState('')

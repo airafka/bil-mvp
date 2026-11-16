@@ -53,7 +53,7 @@ public class ContainerStockService {
         State old=state(container);
         if(old==null) jdbc.update("insert into container_owner(id,container_id,client_id,status,receiving_order_id,shipping_order_id) values(?,?,?,?,?,?)",
             UUID.randomUUID(),container,client,status,receiving,shipping);
-        else jdbc.update("update container_owner set client_id=?,status=?,receiving_order_id=?,shipping_order_id=?,updated_at=now() at time zone 'UTC',updated_by='local' where id=?",
+        else jdbc.update("update container_owner set client_id=?,status=?,receiving_order_id=?,shipping_order_id=?,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
             client,status,receiving,shipping,old.id());
         // Only drafts follow the register. Confirmation freezes the shipment owner.
         jdbc.update("""
@@ -63,7 +63,7 @@ public class ContainerStockService {
             """,client,container);
         if(old==null || !Objects.equals(old.client(),client) || !Objects.equals(old.status(),status)) {
             UUID history=UUID.randomUUID();
-            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,created_at) values(?,?,?,?,?,?,?,?,clock_timestamp() at time zone 'UTC')",
+            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,created_at) values(?,?,?,?,?,?,?,?,billing_now() at time zone 'UTC')",
                 history,container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type);
             storage.onHistory(history,container,order,type,old==null?null:old.status(),status,client,cancellation,reason);
         }
@@ -179,7 +179,7 @@ public class ContainerStockService {
             transition(id,receiving&&previous.client()!=null?previous.client():old.client(),receiving?"DEPARTED":"ON_TERMINAL",
                 receiving?previous.receiving():old.receiving(),receiving?old.shipping():previous.shipping(),order,type,true,reason);
         }
-        jdbc.update("update container_movement set active=false,updated_at=clock_timestamp() at time zone 'UTC' where order_id=?",order);
+        jdbc.update("update container_movement set active=false,updated_at=billing_now() at time zone 'UTC' where order_id=?",order);
     }
     static final String OWNER_SELECT="""
         select o.*,c.code as container_name,c.container_type,cl.name as client_name

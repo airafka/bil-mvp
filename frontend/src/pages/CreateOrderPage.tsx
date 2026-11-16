@@ -1,3 +1,4 @@
+import { businessDateLabel, useApplicationClock } from '../applicationClock'
 import { catalogDate } from '../transportCatalogs'
 import { WaybillFilterFields } from '../components/WaybillFilterFields'
 import { validateWaybillSelection } from '../waybillSelection'
@@ -44,7 +45,8 @@ const receivingRailwaySteps = ['Основное', 'Накладные ЭТРА�
 const shippingRailwaySteps = ['Основное', 'Вагоны', 'КТК', 'Груз']
 
 export function CreateOrderPage({ config, serviceMode = false }: { config: OrderConfig; serviceMode?: boolean }) {
-  const [creationDate] = useState(() => new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }))
+  const { clock } = useApplicationClock()
+  const creationDate = businessDateLabel(clock.date)
   const [serviceOptions,setServiceOptions] = useState<AvailableOrderService[]>([])
   const [complexServiceId,setComplexServiceId] = useState('')
   const [containerOwners, setContainerOwners] = useState<Record<string, string>>({})

@@ -52,8 +52,8 @@ public class ServiceTransportPreparation {
         if(selected.stream().anyMatch(o->o.route()==null && o.transport()==TransportType.VEHICLE)) {
             carrier=first("carriers","перевозчика"); driver=first("drivers","водителя"); vehicle=first("vehicles","транспортное средство");
         }
-        // Use one Moscow instant for the entire section, independent of host/browser timezone.
-        OffsetDateTime now=OffsetDateTime.now(ZoneId.of("Europe/Moscow")).truncatedTo(ChronoUnit.MINUTES);
+        // Use the shared business date and current system time for the entire section.
+        OffsetDateTime now=jdbc.queryForObject("select billing_now()",OffsetDateTime.class).atZoneSameInstant(ZoneId.of("Europe/Moscow")).toOffsetDateTime().truncatedTo(ChronoUnit.MINUTES);
         for(var order:selected) {
             boolean emptyParty=order.party()==null||order.party().isBlank();
             if(shipping) {

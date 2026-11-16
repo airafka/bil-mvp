@@ -49,13 +49,13 @@ public class ContainerStorageService {
             period=current.id();
             jdbc.update("""
                 update container_storage_period set shipping_order_id=?,departure_history_id=?,departure_at=?,status='CLOSED',
-                    version=version+1,updated_at=clock_timestamp() where id=?
+                    version=version+1,updated_at=billing_now() where id=?
                 """,order,history,at,period);
         } else if(operation.equals("CANCEL_ARRIVAL")) {
             requireOpen(current,area);
             if(!order.equals(current.receiving())) throw conflict("Открытый период относится к другой поставке");
             period=current.id();target=current.arrivalHistory();
-            jdbc.update("update container_storage_period set status='CANCELLED',version=version+1,updated_at=clock_timestamp() where id=?",period);
+            jdbc.update("update container_storage_period set status='CANCELLED',version=version+1,updated_at=billing_now() where id=?",period);
         } else if(operation.equals("CANCEL_DEPARTURE")) {
             var closed=periods("container_id=? and shipping_order_id=? and status='CLOSED'",container,order);
             if(closed.size()!=1 || closed.getFirst().review() || !opened.isEmpty())
@@ -63,7 +63,7 @@ public class ContainerStorageService {
             current=closed.getFirst();period=current.id();target=current.departureHistory();
             jdbc.update("""
                 update container_storage_period set shipping_order_id=null,departure_history_id=null,departure_at=null,status='OPEN',
-                    version=version+1,updated_at=clock_timestamp() where id=?
+                    version=version+1,updated_at=billing_now() where id=?
                 """,period);
         } else {
             if(current!=null && !operation.equals("RESERVE_RECEIVING") && !operation.equals("CANCEL_RECEIVING_RESERVATION")) {

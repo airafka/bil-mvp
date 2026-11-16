@@ -1,3 +1,4 @@
+import { useApplicationClock } from '../applicationClock'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { request } from '../http'
@@ -32,6 +33,7 @@ export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; empty
 }
 
 export default function ContainerStoragePage() {
+  const { clock } = useApplicationClock()
   const [params, setParams] = useSearchParams()
   const query = params.get('query') || ''
   const page = Math.max(0, Number(params.get('page')) || 0)
@@ -45,7 +47,7 @@ export default function ContainerStoragePage() {
   const filter = new URLSearchParams({ query, status: params.has('periodId') ? 'ALL' : 'ACTIVE' })
   if(params.get('periodId')) filter.set('periodId',params.get('periodId')!)
   const url = '/api/container-storage-periods?' + filter + '&page=' + page + '&size=' + pageSize
-  const requestKey = url + ':' + attempt
+  const requestKey = url + ':' + attempt + ':' + clock.date + ':' + clock.version
   const [result, setResult] = useState<{ key: string; data: PagedResponse<StoragePeriod>; issues: StorageIssue[]; containers: ReferenceOption[] } | null>(null)
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null)
   const error = failure?.key === requestKey ? failure.message : ''

@@ -58,7 +58,7 @@ public class ContainerStorageController {
         if(!Set.of("ACTIVE","OPEN","CLOSED","CANCELLED","REVIEW","ALL").contains(status))
             throw bad("Неизвестное состояние хранения");
         if(from!=null && to!=null && from.isAfter(to)) throw bad("Начало периода фильтра позже окончания");
-        if(asOf.isAfter(LocalDate.now(ZoneId.of("Europe/Moscow")))) throw bad("Дата расчёта не может быть в будущем");
+
         var args=new ArrayList<Object>();args.add(asOf);args.add(asOf);
         String sql=" where (?='' or position(lower(?) in lower(c.code))>0)";
         args.add(query.trim());args.add(query.trim());
@@ -128,7 +128,11 @@ public class ContainerStorageController {
     private static String format(OffsetDateTime value){return value==null?"":value.atZoneSameInstant(ZoneId.of("Europe/Moscow"))
         .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));}
     private static String transport(String s){return s==null?"":s.equals("VEHICLE")?"Авто":s.equals("RAILWAY")?"ЖД":s;}
-    private static LocalDate date(LocalDate d){return d==null?LocalDate.now(ZoneId.of("Europe/Moscow")):d;}
+    private LocalDate date(LocalDate d) {
+        LocalDate today=jdbc.queryForObject("select billing_today()",LocalDate.class);
+        if(d!=null && d.isAfter(today)) throw bad("Дата расчёта не может быть позже рабочей даты");
+        return d==null?today:d;
+    }
     private static ApiException bad(String message){return new ApiException(HttpStatus.BAD_REQUEST,"INVALID_STORAGE_FILTER",message);}
     private Row row(ResultSet rs)throws SQLException {
         String status=rs.getString("status");boolean review=rs.getBoolean("needs_review");

@@ -223,7 +223,7 @@ public class PaymentInvoiceService {
         if ("PAID".equals(invoice.status())) return details(id);
         requireDraft(invoice); requireVersion(invoice, request.version());
         if (details(id).items().isEmpty()) throw new ApiException(HttpStatus.CONFLICT, "EMPTY_INVOICE", "В счёте нет услуг");
-        jdbc.update("update payment_invoice set status='PAID',paid_at=current_timestamp,version=version+1 where id=?", id);
+        jdbc.update("update payment_invoice set status='PAID',paid_at=billing_now(),version=version+1 where id=?", id);
         return details(id);
     }
 

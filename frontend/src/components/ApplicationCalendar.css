@@ -1,0 +1,16 @@
+.topbar > .breadcrumbs { flex: 1; min-width: 0; }
+.topbar > .user-badge { flex-shrink: 0; }
+.application-clock-actions { display: flex; margin-left: auto; margin-right: 12px; flex-shrink: 0; }
+.app-shell .application-clock-trigger { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding-inline: 8px; }
+.application-clock-trigger[data-mode="FIXED"] { border-color: var(--ui-field-focus); }
+.application-calendar { position: fixed; inset: auto; width: min(340px, calc(100vw - 16px)); margin: 0; padding: 16px; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: white; color: var(--text); box-shadow: 0 8px 24px #18264222; max-height: calc(100dvh - 16px); overflow: auto; }
+.application-calendar .field { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.application-calendar .field > span { padding: 0; }
+.application-calendar-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.application-calendar-mode { margin: 12px 0 0; font-size: 12px; color: #64748b; }
+.application-calendar-error { margin-top: 12px; color: #9a3412; font-size: 13px; }
+@media(max-width:640px) {
+  .application-clock-label { display: none; }
+  .application-clock-actions { margin-right: 8px; }
+  .app-shell .application-clock-trigger { gap: 4px; font-size: 12px; }
+}

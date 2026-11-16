@@ -73,7 +73,7 @@ public class OwnershipOrderService {
     @Transactional public Details update(UUID id,Update request){
         if(!id.equals(request.id()))throw error(HttpStatus.BAD_REQUEST,"SERVICE_ORDER_ID_MISMATCH","Идентификаторы заявки не совпадают");
         draft(locked(id));
-        jdbc.update("update service_order set service=?,comment=?,updated_at=now() at time zone 'UTC',updated_by='local' where id=?",request.service().name(),request.comment(),id);
+        jdbc.update("update service_order set service=?,comment=?,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",request.service().name(),request.comment(),id);
         return details(id);
     }
     @Transactional public void delete(UUID id){
@@ -138,7 +138,7 @@ public class OwnershipOrderService {
             if(state==null)throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_NOT_FOUND","У КТК нет текущего собственника");
             stock.transition(l.containerId(),h.clientId(),state.status(),state.receiving(),state.shipping(),id,"SERVICE_ORDER");
         }
-        jdbc.update("update service_order set status='DONE',completion_at=now() at time zone 'UTC',updated_at=now() at time zone 'UTC',updated_by='local' where id=?",id);
+        jdbc.update("update service_order set status='DONE',completion_at=billing_now() at time zone 'UTC',updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",id);
         jdbc.update("insert into outbound_data(id,message_type,entity_type,root_object_id) values(?,'SERVICE_ORDER_CHAIN_PACKAGE','SERVICE_ORDER',?)",UUID.randomUUID(),id);
         return details(id);
     }
