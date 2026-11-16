@@ -1,22 +1,75 @@
 <!doctype html>
 <html lang="ru">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Биллинг · Просмотр БД</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Биллинг — Database Viewer</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
 <body>
-  <header class="topbar"><div class="brand"><span class="brand-icon">Б</span><div><strong>Биллинг <span class="slash">/</span> Просмотр БД</strong><small id="database">Подключение к базе…</small></div></div><div class="top-actions"><span class="readonly">Только чтение</span><a href="http://localhost:3001" target="_blank" rel="noopener">Открыть MVP ↗</a></div></header>
+  <header class="app-toolbar">
+    <div class="app-name"><span class="db-icon" aria-hidden="true"></span><strong>Биллинг</strong><span class="app-caption">Database Viewer</span></div>
+    <span class="toolbar-separator" aria-hidden="true"></span>
+    <button id="refresh" class="tool-button" title="Обновить данные" aria-label="Обновить данные"><span class="refresh-icon" aria-hidden="true">↻</span><span>Обновить</span></button>
+    <button id="pause" class="tool-button" type="button">Пауза</button>
+    <span class="toolbar-separator" aria-hidden="true"></span>
+    <span class="readonly"><span aria-hidden="true">▣</span> Только чтение</span>
+    <a class="app-link" href="http://localhost:3001" target="_blank" rel="noopener">Открыть MVP ↗</a>
+  </header>
+
   <main class="workspace">
-    <aside class="sidebar"><div class="sidebar-heading"><h2>Таблицы</h2><span id="table-count" class="badge">—</span></div><label class="search-label" for="table-search">Поиск таблицы</label><input id="table-search" type="search" placeholder="Название или назначение…" autocomplete="off"><div class="table-list" id="table-list"><p class="muted">Загружаем таблицы…</p></div><div class="sidebar-footer"><span class="schema-dot"></span> Схема public</div></aside>
-    <section class="content">
-      <div class="page-heading"><div><div class="eyebrow">ДАННЫЕ ПРИЛОЖЕНИЯ</div><h1>База данных в реальном времени</h1><p>Создайте заявку в MVP — изменения появятся здесь после сохранения.</p></div><div class="live-controls"><span id="connection" class="connection waiting" role="status">Подключение…</span><button id="pause" type="button">Пауза</button><button id="refresh" class="icon-button" title="Обновить данные" aria-label="Обновить данные">↻</button></div></div>
-      <div id="error" class="error" role="alert" hidden></div><div id="observer-warning" class="warning" hidden></div>
-      <section class="data-panel"><div class="panel-heading"><div><h2 id="table-title">Выберите таблицу</h2><p id="table-description">Список слева показывает все таблицы рабочей БД.</p></div><span id="rows-count" class="count-label">—</span></div>
-        <div class="toolbar"><div class="view-tabs" role="tablist" aria-label="Представление таблицы"><button id="data-tab" role="tab" aria-selected="true">Данные</button><button id="schema-tab" role="tab" aria-selected="false">Структура</button></div><label class="row-search"><span class="sr-only">Поиск по данным</span><input id="row-search" type="search" placeholder="Номер, UUID или значение…" autocomplete="off"></label><button id="reset-sort" title="Сначала последние изменённые строки">Последние изменения ↓</button></div>
+    <aside class="sidebar" aria-label="Навигатор базы данных">
+      <div class="panel-title"><span class="navigator-icon" aria-hidden="true">▤</span><h1>Навигатор БД</h1></div>
+      <div class="navigator-search"><label class="sr-only" for="table-search">Поиск таблицы</label><input id="table-search" type="search" placeholder="Фильтр таблиц…" autocomplete="off"></div>
+      <div class="tree-scroll">
+        <details class="tree-connection" open>
+          <summary><span class="db-icon" aria-hidden="true"></span><strong id="navigator-db">Подключение…</strong><span class="db-engine">PostgreSQL</span></summary>
+          <details class="tree-schema" open>
+            <summary><span class="schema-icon" aria-hidden="true">▦</span>public</summary>
+            <details id="tables-branch" class="tree-tables" open>
+              <summary><span class="folder-icon" aria-hidden="true"></span>Таблицы <span id="table-count" class="badge">—</span></summary>
+              <div class="table-list" id="table-list"><p class="muted">Загрузка…</p></div>
+            </details>
+          </details>
+        </details>
+      </div>
+      <div class="sidebar-footer"><span class="db-icon small" aria-hidden="true"></span><span id="database">Подключение к базе…</span></div>
+    </aside>
+
+    <section class="content" aria-label="Просмотр таблицы">
+      <div id="error" class="error" role="alert" hidden></div>
+      <div id="observer-warning" class="warning" hidden></div>
+      <section class="data-panel">
+        <div class="editor-tabs"><div class="object-tab"><span class="table-icon" aria-hidden="true"></span><h2 id="table-title">Выберите таблицу</h2><span class="tab-schema">public</span></div></div>
+        <div class="editor-heading">
+          <div class="view-tabs" role="tablist" aria-label="Представление таблицы">
+            <button id="data-tab" role="tab" aria-selected="true"><span class="table-icon" aria-hidden="true"></span>Данные</button>
+            <button id="schema-tab" role="tab" aria-selected="false"><span aria-hidden="true">☷</span>Структура</button>
+          </div>
+          <span id="table-description" class="table-description">Таблицы схемы public</span>
+        </div>
+        <div class="filter-toolbar">
+          <label class="row-search"><span class="filter-icon" aria-hidden="true">⌕</span><span class="sr-only">Поиск по данным</span><input id="row-search" type="search" placeholder="Фильтр данных: номер, UUID или значение" autocomplete="off"></label>
+          <button id="reset-sort" title="Сначала последние изменённые строки">Последние изменения ↓</button>
+        </div>
         <div id="relation-filter" class="filter-banner" hidden><span id="filter-text"></span><button id="clear-filter">Снять фильтр ×</button></div>
         <div id="data-scroll" class="data-scroll" tabindex="0" aria-label="Содержимое таблицы"><table id="data-table"></table><div id="empty" class="empty" hidden></div></div>
-        <footer class="table-footer"><span id="updated">Ожидаем данные</span><div class="pagination"><label>Строк <select id="page-size"><option>25</option><option selected>50</option><option>100</option></select></label><span id="page-info">—</span><button id="previous" aria-label="Предыдущая страница">←</button><button id="next" aria-label="Следующая страница">→</button></div></footer>
+        <footer class="table-footer">
+          <span id="rows-count" class="count-label">—</span>
+          <div class="pagination"><button id="previous" aria-label="Предыдущая страница" title="Предыдущая страница">◀</button><button id="next" aria-label="Следующая страница" title="Следующая страница">▶</button><span id="page-info">—</span><span class="toolbar-separator" aria-hidden="true"></span><label>Размер страницы <select id="page-size"><option>25</option><option selected>50</option><option>100</option></select></label></div>
+        </footer>
       </section>
-      <section class="activity-panel"><div class="activity-heading"><div><h2>Изменения в БД <span id="event-count" class="badge">0</span></h2><p>С момента открытия страницы · нажмите на событие, чтобы открыть таблицу</p></div><button id="clear-events">Очистить журнал</button></div><div id="activity" class="activity"><div class="activity-empty">Ожидаем изменения. Создайте или измените документ в MVP.</div></div></section>
-      <p class="footnote">Обновление по событиям PostgreSQL. Журнал показывает операции завершённых транзакций, а не постоянную историю аудита. Новые и изменённые строки выделены цветом.</p>
+
+      <section class="activity-panel">
+        <div class="activity-heading"><h2><span aria-hidden="true">≡</span> Журнал событий <span id="event-count" class="badge">0</span></h2><span class="activity-caption">Завершённые транзакции · текущая сессия</span><button id="clear-events" title="Очистить только журнал этой вкладки">Очистить журнал</button></div>
+        <div class="event-columns" aria-hidden="true"><span>Время</span><span>Операция</span><span>Таблица</span><span>Транзакция</span></div>
+        <div id="activity" class="activity"><div class="activity-empty">Ожидание событий БД. Создайте или измените документ в MVP.</div></div>
+      </section>
     </section>
   </main>
-  <dialog id="detail"><div class="detail-heading"><div><div class="eyebrow">ЗАПИСЬ ТАБЛИЦЫ</div><h2 id="detail-title"></h2></div><button id="close-detail" aria-label="Закрыть запись">×</button></div><div id="detail-body"></div></dialog>
-</body></html>
+
+  <footer class="statusbar"><span id="connection" class="connection waiting" role="status">Подключение…</span><span class="status-hint">Изменения появляются после сохранения в БД</span><span id="updated">Ожидаем данные</span></footer>
+  <dialog id="detail"><div class="detail-heading"><div><span class="table-icon" aria-hidden="true"></span><h2 id="detail-title"></h2><span class="detail-caption">Значения записи</span></div><button id="close-detail" aria-label="Закрыть запись">×</button></div><div id="detail-body"></div></dialog>
+</body>
+</html>

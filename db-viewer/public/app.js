@@ -44,6 +44,7 @@ function renderTables() {
     button.classList.toggle('active', table.name === state.selected);
     button.classList.toggle('changed', state.changed.has(table.name));
     button.setAttribute('aria-pressed', String(table.name === state.selected));
+    button.title = `${table.name} — ${labels[table.name] || 'Таблица БД'}`;
     const title = element('span');
     title.append(element('span', table.name, 'name'));
     title.append(element('small', labels[table.name] || 'Таблица БД'));
@@ -98,10 +99,15 @@ function renderData() {
     }
     $('empty').hidden = true;
   } else {
-    heading.append(element('th', ''));
+    heading.append(element('th', '#', 'row-number'));
     for (const column of data.columns) {
       const th = element('th');
-      const button = element('button', `${column.primary ? '◇ ' : ''}${column.name}${state.sort === column.name ? (state.direction === 'asc' ? ' ↑' : ' ↓') : ''}`);
+      const button = element('button');
+      const numeric = /^(smallint|integer|bigint|numeric|real|double)/.test(column.type);
+      const symbol = column.primary ? '◆' : numeric ? '#' : column.type.includes('timestamp') || column.type === 'date' ? '◷' : 'T';
+      const icon = element('span', symbol, `column-symbol${column.primary ? ' primary' : ''}`);
+      icon.setAttribute('aria-hidden', 'true');
+      button.append(icon, document.createTextNode(`${column.name}${state.sort === column.name ? (state.direction === 'asc' ? ' ↑' : ' ↓') : ''}`));
       button.onclick = () => { state.direction = state.sort === column.name && state.direction === 'asc' ? 'desc' : 'asc'; state.sort = column.name; state.offset = 0; state.version++; refresh(true); };
       th.append(button, element('span', column.type, 'type')); heading.append(th);
     }
@@ -110,7 +116,7 @@ function renderData() {
     const comparable = identity === state.identity;
     if (!comparable) state.highlights.clear();
     const nextRows = new Map();
-    for (const record of data.rows) {
+    for (const [index, record] of data.rows.entries()) {
       const row = element('tr');
       const key = JSON.stringify(keys.length ? keys.map(k => record[k]) : record);
       const serialized = JSON.stringify(record);
@@ -121,10 +127,11 @@ function renderData() {
       if (highlight?.until > Date.now()) row.classList.add(highlight.kind);
       else state.highlights.delete(key);
       const action = element('td', undefined, 'action-cell');
-      const open = element('button', '↗', 'row-open'); open.title = 'Открыть все поля записи'; open.setAttribute('aria-label', 'Открыть запись'); open.onclick = () => detail(record); action.append(open); row.append(action);
+      const open = element('button', String(state.offset + index + 1), 'row-open'); open.title = 'Открыть все поля записи'; open.setAttribute('aria-label', 'Открыть запись'); open.onclick = () => detail(record); action.append(open); row.append(action);
       for (const column of data.columns) {
         const value = record[column.name];
         const td = element('td', undefined, value === null ? 'null' : '');
+        if (/^(smallint|integer|bigint|numeric|real|double)/.test(column.type)) td.classList.add('numeric');
         const relation = data.relations.find(r => r.column === column.name);
         const target = relation?.target.replace(/^public\./, '');
         if (value !== null && relation && state.tables.some(t => t.name === target)) {
@@ -150,6 +157,7 @@ async function refresh(force = false) {
     const overview = await get('/api/tables');
     state.tables = overview.tables;
     $('database').textContent = `${overview.database} / ${overview.schema} · PostgreSQL`;
+    $('navigator-db').textContent = overview.database;
     const missing = overview.tables.filter(t => !t.observed);
     $('observer-warning').hidden = missing.length === 0;
     $('observer-warning').textContent = `Для ${missing.length} таблиц не включены уведомления. Повторно установите наблюдатель по инструкции в database/README.md.`;
@@ -179,7 +187,7 @@ function renderEvents() {
   const operations = { INSERT: 'Добавление', UPDATE: 'Изменение', DELETE: 'Удаление', TRUNCATE: 'Очистка' };
   const nodes = state.events.map(event => {
     const button = element('button', undefined, `event ${event.operation}`);
-    button.append(element('time', stamp(event.at)), element('span', operations[event.operation] || event.operation, 'operation'), element('span', event.table, 'event-table'), element('span', `Транзакция ${event.transaction}`, 'tx'));
+    button.append(element('time', stamp(event.at)), element('span', operations[event.operation] || event.operation, 'operation'), element('span', event.table, 'event-table'), element('span', event.transaction, 'tx'));
     button.onclick = () => selectTable(event.table);
     return button;
   });
