@@ -1,9 +1,11 @@
 // Mutating integration checks. Refuses any database/backend other than this isolated fixture.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-const docker=process.env.DOCKER_EXE||'docker',db='billing_container_tasks_test',base='http://127.0.0.1:8194/api';
-const inspect=JSON.parse(execFileSync(docker,['inspect','billing-next-container-tasks-test'],{encoding:'utf8',windowsHide:true}))[0];
+const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_container_tasks_test';
+assert.ok(['billing_container_tasks_test','billing_storage_fields_test'].includes(db));
+const fieldsTest=db==='billing_storage_fields_test',port=fieldsTest?'8198':'8194',base='http://127.0.0.1:'+port+'/api';
+const inspect=JSON.parse(execFileSync(docker,['inspect',fieldsTest?'billing-next-storage-fields-test':'billing-next-container-tasks-test'],{encoding:'utf8',windowsHide:true}))[0];
 assert.ok(inspect.Config.Env.includes('DB_NAME='+db));
-assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort==='8194'));
+assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
 const sql=q=>execFileSync(docker,['exec','billing-next-db-1','psql','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q],{encoding:'utf8',windowsHide:true}).trim();
 assert.equal(sql('select current_database()'),db);
 const json=q=>JSON.parse(sql(q));
@@ -47,7 +49,7 @@ const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true')
  let report=await api('/container-storage-periods?periodId='+pid);assert.equal(report.items[0].storageDays,1);assert.equal(report.items[0].inStock,false);
  await Promise.all([cancel('shipping',s.id,'COMPLETED'),cancel('shipping',s.id,'COMPLETED')]);p=periods(c)[0];
  assert.equal(p.id,pid);assert.equal(p.receiving_at,arrival);assert.equal(p.status,'OPEN');assert.equal(p.shipping_at,null);
- assert.equal(taskStatus('shipping',s.id),null);assert.equal(p.shipping_order_container_id,null);assert.equal(p.shipping_order_id,null);assert.equal(p.shipping_history_id,null);assert.equal(p.version,2);
+ assert.equal(taskStatus('shipping',s.id),null);assert.equal(p.shipping_order_container_id,null);assert.equal(p.shipping_order_id,null);assert.equal(p.shipping_history_id,null);for(const field of ['version','needs_review','review_reason'])assert.ok(!(field in p));
  h=(await history(c)).filter(h=>h.operationType==='CANCEL_DEPARTURE');assert.equal(h.length,1);assert.equal(h[0].targetHistoryId,dh);
  assert.equal(h[0].storagePeriodId,pid);assert.equal(h[0].reason,'Проверка истории хранения');
  assert.ok((await history(c)).find(h=>h.id===dh&&!h.cancellation));
@@ -74,9 +76,9 @@ const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true')
  // All linked facts must refer to the same physical container and period.
  assert.equal(sql(`select count(*) from container_owner_history h join container_storage_period p on p.id=h.storage_period_id where h.container_id<>p.container_id`),'0');
  assert.equal(sql(`select count(*) from container_storage_period p join container_owner_history h on h.id=p.receiving_history_id where h.storage_period_id<>p.id`),'0');
- assert.equal(sql(`select count(*) from container_storage_period where status='OPEN' and not needs_review and shipping_at is not null`),'0');
+ assert.equal(sql(`select count(*) from container_storage_period where status='OPEN' and shipping_at is not null`),'0');
  fs.mkdirSync(path.join(__dirname,'../backups'),{recursive:true});
- fs.writeFileSync(path.join(__dirname,'../backups/container-task-fixtures.json'),JSON.stringify({db,containerId:c,periodId:pid}));
+ fs.writeFileSync(path.join(__dirname,'../backups/'+(fieldsTest?'storage-fields-task-fixtures.json':'container-task-fixtures.json')),JSON.stringify({db,containerId:c,periodId:pid}));
  console.log('PASS: filter validation, CSV export, bidirectional history consistency');
  // Railway task rows retain their identity when a cancelled waybill is reused.
  const generated=await api('/waybills/generate','POST',{standard20:2,standard40:0},201);

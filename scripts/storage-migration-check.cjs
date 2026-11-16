@@ -10,8 +10,9 @@ run(['exec','billing-next-db-1','pg_restore','-U','billing','-d',target,'--no-ow
 assert.equal(sql('select current_database()'),target);
 const fields='arrival_history_id,departure_history_id,receiving_order_id,shipping_order_id,status,needs_review,arrival_at,departure_at';
 const renamed=sql("select count(*) from information_schema.columns where table_schema='public' and table_name='container_storage_period' and column_name='receiving_at'")==='1';
+const reviewField=sql("select count(*) from information_schema.columns where table_schema='public' and table_name='container_storage_period' and column_name='needs_review'")==='1'?'needs_review':'false as needs_review';
 const sourceFields=renamed?'receiving_history_id as arrival_history_id,shipping_history_id as departure_history_id,receiving_order_id,shipping_order_id,status,needs_review,receiving_at as arrival_at,shipping_at as departure_at':fields;
-const expected=JSON.parse(sql(`select json_agg(p order by arrival_history_id) from (select ${sourceFields} from container_storage_period)p`));
+const expected=JSON.parse(sql(`select json_agg(p order by arrival_history_id) from (select ${sourceFields.replace('needs_review',reviewField)} from container_storage_period)p`));
 // Remove only the feature under test in this disposable database to replay its migration from legacy history.
 sql(`alter table container_owner_history drop constraint history_storage_period_fk;
 drop table container_storage_period;

@@ -10,7 +10,7 @@ function fingerprints(){const tables=json("select json_agg(tablename order by ta
 if(process.argv[2]==='capture') {assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'34');assert.ok(!fs.existsSync(snapshot),'Capture already exists');fs.writeFileSync(snapshot,fingerprints());console.log('Captured pre-migration business rows');process.exit();}
 const inspect=JSON.parse(run(['inspect','billing-next-clock-test']))[0];
 assert.ok(inspect.Config.Env.includes('DB_NAME='+db));assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort==='8199'));
-assert.ok([35,36,37].includes(Number(sql('select max(version::int) from flyway_schema_history where success'))));
+assert.ok([35,36,37,38].includes(Number(sql('select max(version::int) from flyway_schema_history where success'))));
 if(process.argv[2]!=='recheck') assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'35','Original clock migration capture is V34 -> V35; use recheck for the latest schema');
 async function api(p,method='GET',body,status=200){const r=await fetch(base+p,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();let value;try{value=JSON.parse(text)}catch{value=text}assert.equal(r.status,status,p+': '+text);return value;}
 async function date(value){const c=await api('/application-clock');return api('/application-clock','PUT',{date:value,version:c.version});}

@@ -21,7 +21,7 @@ export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; empty
       <td><Link to={'/container-owners/' + row.containerId + '/history'}>{row.containerName}</Link></td>
       <td title={timeSourceLabel(row.arrivalTimeSource)}>{storageDate(row.arrivalAt)}{row.arrivalTimeSource === 'HISTORY_CREATED' && <div className="storage-note">По старой истории</div>}</td>
       <td title={row.departureAt ? timeSourceLabel(row.departureTimeSource) : undefined}>{storageDate(row.departureAt)}</td>
-      <td>{row.storageDays ?? '—'}{row.needsReview && <div className="storage-review" title={row.reviewReason}>Требуется проверка</div>}</td>
+      <td>{row.storageDays ?? '—'}</td>
       <td><Link to={'/receiving-orders/' + row.receivingOrderId}>{row.receivingOrderNumber}</Link></td>
       <td>{parties(row.clientName, row.ownerName)}</td><td>{row.consignor || '—'}</td><td>{transportLabel(row.arrivalTransport)}</td><td>{row.arrivalCarrier || '—'}</td>
       <td>{storageCargoName(row.cargoName)}</td>

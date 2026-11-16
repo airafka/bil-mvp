@@ -4,7 +4,7 @@ export type StoragePeriod = {
   arrivalTransport?: string; arrivalCarrier?: string; consignor?: string; cargoName?: string; empty?: boolean;
   shippingOrderId?: string; shippingOrderNumber?: number; departureAt?: string; departureTransport?: string;
   departureCarrier?: string; consignee?: string; shippingClientName?: string; shippingOwnerName?: string; storageDays?: number; inStock?: boolean; status: string;
-  needsReview: boolean; reviewReason?: string; arrivalTimeSource?: string; departureTimeSource?: string; version: number;
+  arrivalTimeSource?: string; departureTimeSource?: string;
 }
 export type StorageIssue = { id: string; containerId: string; containerName: string; reason: string }
 export const storageDate = (value?: string) => value ? new Date(value).toLocaleString('ru-RU', {

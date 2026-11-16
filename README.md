@@ -2,7 +2,7 @@
 
 Локальное приложение для оформления услуг контейнерной площадки: поставка КТК, вывоз, возврат, учёт собственников, начисления и счета на оплату. Репозиторий — [airafka/bil](https://github.com/airafka/bil), общая ветка — **main**. Название локальной папки bil-next не является названием ветки.
 
-Основная бизнес-логика описана по сверке 10.11.2026; документация редактора накладных, структура проекта и инструкции запуска актуализированы 16.11.2026 по исходникам. Проверка запуска 16.11.2026 после добавления статусов строк КТК и связей хранения: frontend HTTP 200, backend UP, контейнеры billing-next запущены, схема Flyway V37. Это результат проверки на указанную дату, а не постоянная гарантия состояния окружения.
+Основная бизнес-логика описана по сверке 10.11.2026; документация редактора накладных, структура проекта и инструкции запуска актуализированы 16.11.2026 по исходникам. Проверка запуска 16.11.2026 после удаления служебных полей периода хранения: frontend HTTP 200, backend UP, контейнеры billing-next запущены, схема Flyway V38. Это результат проверки на указанную дату, а не постоянная гарантия состояния окружения.
 
 ## Документация
 
@@ -83,7 +83,7 @@
 
 - Frontend: React, TypeScript, React Router, Vite; зависимости фиксирует [package-lock.json](frontend/package-lock.json).
 - Backend: Java 21, Spring Boot 4.1.0, Spring JDBC, Bean Validation.
-- БД: PostgreSQL 16, Flyway; активный каталог миграций — [db/baseline](backend/src/main/resources/db/baseline), V1–V37.
+- БД: PostgreSQL 16, Flyway; активный каталог миграций — [db/baseline](backend/src/main/resources/db/baseline), V1–V38.
 - Сборка и запуск: Docker Compose; frontend раздаёт Nginx.
 
 [Backend Dockerfile](backend/Dockerfile) выполняет Maven package с тестами; [frontend Dockerfile](frontend/Dockerfile) — ESLint, Vitest и TypeScript/Vite build. Локально: mvn test из backend; npm ci, npm run lint, npm run test, npm run build из frontend. Для frontend dev доступен npm run dev.

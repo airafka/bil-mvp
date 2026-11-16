@@ -23,7 +23,7 @@ public class ContainerStorageController {
         String arrivalTransport,String arrivalCarrier,String consignor,String cargoName,Boolean empty,
         UUID shippingOrderId,Long shippingOrderNumber,OffsetDateTime departureAt,String departureTransport,
         String departureCarrier,String consignee,String shippingClientName,String shippingOwnerName,Long storageDays,Boolean inStock,String status,
-        boolean needsReview,String reviewReason,String arrivalTimeSource,String departureTimeSource,long version,UUID receivingOrderContainerId,UUID waybillContainerId,UUID shippingOrderContainerId) {}
+        String arrivalTimeSource,String departureTimeSource,UUID receivingOrderContainerId,UUID waybillContainerId,UUID shippingOrderContainerId) {}
     public record Issue(UUID id,UUID containerId,String containerName,String reason) {}
     private static final String SELECT="""
         select p.*,c.code container_name,a.name area_name,cl.name client_name,ow.name owner_name,
@@ -31,7 +31,7 @@ public class ContainerStorageController {
           ic.name arrival_carrier,oc.name departure_carrier,r.consignor,cons.name consignee,
           shipping_client.name shipping_client_name,shipping_owner.name shipping_owner_name,
           ah.time_source arrival_time_source,dh.time_source departure_time_source,
-          case when p.status='CANCELLED' or p.needs_review then null
+          case when p.status='CANCELLED' then null
             else greatest(0,(least(coalesce((p.shipping_at at time zone 'Europe/Moscow')::date,?::date),?::date)
               -(p.receiving_at at time zone 'Europe/Moscow')::date)+1)::bigint end storage_days
         from container_storage_period p join container c on c.id=p.container_id
@@ -52,7 +52,7 @@ public class ContainerStorageController {
         """;
     record Filter(String sql,List<Object> args) {}
     private Filter filter(String query,String status,UUID clientId,UUID periodId,LocalDate from,LocalDate to,LocalDate asOf) {
-        if(!Set.of("ACTIVE","OPEN","CLOSED","CANCELLED","REVIEW","ALL").contains(status))
+        if(!Set.of("ACTIVE","OPEN","CLOSED","CANCELLED","ALL").contains(status))
             throw bad("Неизвестное состояние хранения");
         if(from!=null && to!=null && from.isAfter(to)) throw bad("Начало периода фильтра позже окончания");
 
@@ -64,7 +64,7 @@ public class ContainerStorageController {
         if(from!=null){sql+=" and (p.receiving_at at time zone 'Europe/Moscow')::date>=?";args.add(from);}
         if(to!=null){sql+=" and (p.receiving_at at time zone 'Europe/Moscow')::date<=?";args.add(to);}
         sql+=" and (p.receiving_at at time zone 'Europe/Moscow')::date<=?";args.add(asOf);
-        sql+=switch(status){case "ACTIVE"->" and p.status<>'CANCELLED'";case "REVIEW"->" and p.needs_review";
+        sql+=switch(status){case "ACTIVE"->" and p.status<>'CANCELLED'";
             case "ALL"->"";default->" and p.status=?";};
         if(Set.of("OPEN","CLOSED","CANCELLED").contains(status))args.add(status);
         return new Filter(sql,args);
@@ -105,13 +105,13 @@ public class ContainerStorageController {
         var out=new StringBuilder("\uFEFF");
         csv(out,"Номер КТК","Площадка","Заявка поставки","Прибыл","Клиент заявки поставки","Собственник при приёме",
             "Транспорт поставки","Перевозчик поставки","Груз (ЕТСНГ)","Груж/порож","Заявка вывоза","Вывезен",
-            "Транспорт вывоза","Перевозчик вывоза","Грузополучатель","Кол-во дней хранения","В стоке","Состояние","Проверка");
+            "Транспорт вывоза","Перевозчик вывоза","Грузополучатель","Кол-во дней хранения","В стоке","Состояние");
         jdbc.query(SELECT+f.sql()+" order by p.receiving_at desc,p.id",rs->{
             Row r=row(rs);csv(out,r.containerName(),r.terminalAreaName(),r.receivingOrderNumber(),format(r.arrivalAt()),r.clientName(),r.ownerName(),
                 transport(r.arrivalTransport()),r.arrivalCarrier(),r.cargoName(),r.empty()==null?"Не указан":r.empty()?"Порожний":"Гружёный",
                 r.shippingOrderNumber(),format(r.departureAt()),transport(r.departureTransport()),r.departureCarrier(),r.consignee(),
-                r.storageDays(),r.inStock()==null?"Требует проверки":r.inStock()?"Да":"Нет",
-                switch(r.status()){case "OPEN"->"На терминале";case "CLOSED"->"Вывезен";default->"Аннулирован";},r.reviewReason());
+                r.storageDays(),r.inStock()?"Да":"Нет",
+                switch(r.status()){case "OPEN"->"На терминале";case "CLOSED"->"Вывезен";default->"Аннулирован";});
         },f.args().toArray());
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=container-storage.csv")
             .contentType(new MediaType("text","csv",StandardCharsets.UTF_8)).body(out.toString().getBytes(StandardCharsets.UTF_8));
@@ -132,14 +132,14 @@ public class ContainerStorageController {
     }
     private static ApiException bad(String message){return new ApiException(HttpStatus.BAD_REQUEST,"INVALID_STORAGE_FILTER",message);}
     private Row row(ResultSet rs)throws SQLException {
-        String status=rs.getString("status");boolean review=rs.getBoolean("needs_review");
+        String status=rs.getString("status");
         return new Row(rs.getObject("id",UUID.class),rs.getObject("container_id",UUID.class),rs.getString("container_name"),rs.getString("area_name"),
             rs.getObject("receiving_order_id",UUID.class),rs.getObject("receiving_number",Long.class),rs.getObject("receiving_at",OffsetDateTime.class),
             rs.getString("client_name"),rs.getString("owner_name"),rs.getString("arrival_transport"),rs.getString("arrival_carrier"),rs.getString("consignor"),
             rs.getString("cargo_name"),rs.getObject("is_empty",Boolean.class),rs.getObject("shipping_order_id",UUID.class),
             rs.getObject("shipping_number",Long.class),rs.getObject("shipping_at",OffsetDateTime.class),rs.getString("departure_transport"),
-            rs.getString("departure_carrier"),rs.getString("consignee"),rs.getString("shipping_client_name"),rs.getString("shipping_owner_name"),rs.getObject("storage_days",Long.class),review?null:status.equals("OPEN"),
-            status,review,rs.getString("review_reason"),rs.getString("arrival_time_source"),rs.getString("departure_time_source"),rs.getLong("version"),rs.getObject("receiving_order_container_id",UUID.class),
+            rs.getString("departure_carrier"),rs.getString("consignee"),rs.getString("shipping_client_name"),rs.getString("shipping_owner_name"),rs.getObject("storage_days",Long.class),status.equals("OPEN"),
+            status,rs.getString("arrival_time_source"),rs.getString("departure_time_source"),rs.getObject("receiving_order_container_id",UUID.class),
             rs.getObject("waybill_container_id",UUID.class),rs.getObject("shipping_order_container_id",UUID.class));
     }
 }
