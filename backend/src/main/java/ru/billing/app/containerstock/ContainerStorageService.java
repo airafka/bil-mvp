@@ -13,7 +13,8 @@ import ru.billing.app.error.ApiException;
 @Service
 public class ContainerStorageService {
     private final JdbcTemplate jdbc;
-    public ContainerStorageService(JdbcTemplate jdbc) { this.jdbc=jdbc; }
+    private final ContainerTaskRows tasks;
+    public ContainerStorageService(JdbcTemplate jdbc, ContainerTaskRows tasks) { this.jdbc=jdbc; this.tasks=tasks; }
     record Period(UUID id, UUID area, UUID receiving, UUID shipping, UUID arrivalHistory, UUID departureHistory,
                   OffsetDateTime arrival, String status, boolean review) {}
 
@@ -36,21 +37,25 @@ public class ContainerStorageService {
         UUID period=null,target=null;
         if(operation.equals("ARRIVAL")) {
             if(!opened.isEmpty()) throw conflict("Для КТК уже есть открытый период хранения. Требуется сверка истории");
+            var source=tasks.finished(order,container,true);
+            UUID autoRow=source.table().equals("receiving_order_container")?source.id():null;
+            UUID waybillRow=source.table().equals("waybill_container")?source.id():null;
             period=UUID.randomUUID();
             jdbc.update("""
                 insert into container_storage_period(id,container_id,terminal_area_id,receiving_order_id,receiving_history_id,
-                    receiving_at,receiving_client_id,receiving_owner_id,status)
-                select ?,?,?,id,?,?,client_id,?,'OPEN' from receiving_order where id=?
-                """,period,container,area,history,at,owner,order);
+                    receiving_at,receiving_client_id,receiving_owner_id,status,receiving_order_container_id,waybill_container_id)
+                select ?,?,?,id,?,?,client_id,?,'OPEN',?,? from receiving_order where id=?
+                """,period,container,area,history,at,owner,autoRow,waybillRow,order);
             snapshotCargo(period,order,container,receiving);
         } else if(operation.equals("DEPARTURE")) {
+            var source=tasks.finished(order,container,false);
             requireOpen(current,area);
             if(at.isBefore(current.arrival())) throw conflict("Вывоз не может быть раньше приёма КТК");
             period=current.id();
             jdbc.update("""
-                update container_storage_period set shipping_order_id=?,shipping_history_id=?,shipping_at=?,status='CLOSED',
+                update container_storage_period set shipping_order_id=?,shipping_history_id=?,shipping_at=?,shipping_order_container_id=?,status='CLOSED',
                     version=version+1,updated_at=billing_now() where id=?
-                """,order,history,at,period);
+                """,order,history,at,source.id(),period);
         } else if(operation.equals("CANCEL_ARRIVAL")) {
             requireOpen(current,area);
             if(!order.equals(current.receiving())) throw conflict("Открытый период относится к другой поставке");
@@ -62,7 +67,7 @@ public class ContainerStorageService {
                 throw conflict("Нельзя открыть период отменяемого вывоза. Сначала отмените последующие операции или проверьте историю");
             current=closed.getFirst();period=current.id();target=current.departureHistory();
             jdbc.update("""
-                update container_storage_period set shipping_order_id=null,shipping_history_id=null,shipping_at=null,status='OPEN',
+                update container_storage_period set shipping_order_id=null,shipping_history_id=null,shipping_at=null,shipping_order_container_id=null,status='OPEN',
                     version=version+1,updated_at=billing_now() where id=?
                 """,period);
         } else {

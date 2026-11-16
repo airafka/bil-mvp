@@ -23,7 +23,7 @@ public class ContainerStorageController {
         String arrivalTransport,String arrivalCarrier,String consignor,String cargoName,Boolean empty,
         UUID shippingOrderId,Long shippingOrderNumber,OffsetDateTime departureAt,String departureTransport,
         String departureCarrier,String consignee,String shippingClientName,String shippingOwnerName,Long storageDays,Boolean inStock,String status,
-        boolean needsReview,String reviewReason,String arrivalTimeSource,String departureTimeSource,long version) {}
+        boolean needsReview,String reviewReason,String arrivalTimeSource,String departureTimeSource,long version,UUID receivingOrderContainerId,UUID waybillContainerId,UUID shippingOrderContainerId) {}
     public record Issue(UUID id,UUID containerId,String containerName,String reason) {}
     private static final String SELECT="""
         select p.*,c.code container_name,a.name area_name,cl.name client_name,ow.name owner_name,
@@ -42,11 +42,8 @@ public class ContainerStorageController {
         left join client_related_entity ic on ic.id=ir.client_related_entity_id
         left join shipping_order s on s.id=p.shipping_order_id
         left join client shipping_client on shipping_client.id=s.client_id
-        left join lateral (
-          select string_agg(distinct owner.name,'; ' order by owner.name) name
-          from shipping_order_container sc join client owner on owner.id=sc.owner_container_id
-          where sc.shipping_order_id=p.shipping_order_id and sc.container_id=p.container_id
-        ) shipping_owner on true
+        left join shipping_order_container shipping_row on shipping_row.id=p.shipping_order_container_id
+        left join client shipping_owner on shipping_owner.id=shipping_row.owner_container_id
         left join route outr on outr.id=s.route_id and s.transport_type='VEHICLE'
         left join client_related_entity oc on oc.id=outr.client_related_entity_id
         left join client_related_entity cons on cons.id=s.consignee_id
@@ -142,6 +139,7 @@ public class ContainerStorageController {
             rs.getString("cargo_name"),rs.getObject("is_empty",Boolean.class),rs.getObject("shipping_order_id",UUID.class),
             rs.getObject("shipping_number",Long.class),rs.getObject("shipping_at",OffsetDateTime.class),rs.getString("departure_transport"),
             rs.getString("departure_carrier"),rs.getString("consignee"),rs.getString("shipping_client_name"),rs.getString("shipping_owner_name"),rs.getObject("storage_days",Long.class),review?null:status.equals("OPEN"),
-            status,review,rs.getString("review_reason"),rs.getString("arrival_time_source"),rs.getString("departure_time_source"),rs.getLong("version"));
+            status,review,rs.getString("review_reason"),rs.getString("arrival_time_source"),rs.getString("departure_time_source"),rs.getLong("version"),rs.getObject("receiving_order_container_id",UUID.class),
+            rs.getObject("waybill_container_id",UUID.class),rs.getObject("shipping_order_container_id",UUID.class));
     }
 }

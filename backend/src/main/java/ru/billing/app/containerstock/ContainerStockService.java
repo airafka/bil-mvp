@@ -13,7 +13,8 @@ import ru.billing.app.order.PagedResponse;
 public class ContainerStockService {
     private final JdbcTemplate jdbc;
     private final ContainerStorageService storage;
-    public ContainerStockService(JdbcTemplate jdbc, ContainerStorageService storage) { this.jdbc=jdbc; this.storage=storage; }
+    private final ContainerTaskRows tasks;
+    public ContainerStockService(JdbcTemplate jdbc, ContainerStorageService storage, ContainerTaskRows tasks) { this.jdbc=jdbc; this.storage=storage; this.tasks=tasks; }
     public record Owner(UUID id, UUID containerId, String containerName, String containerType,
             UUID clientId, String clientName, String status, UUID receivingOrderId, UUID shippingOrderId) {}
     public record Lookup(UUID containerId, UUID ownerClientId, String ownerClientName, String status) {}
@@ -71,18 +72,7 @@ public class ContainerStockService {
     public void onOrderTransition(String resource, UUID order, boolean completed) {
         if(resource.equals("comprehensive-service-orders")) return;
         boolean receiving=resource.equals("receiving-orders");
-        String table=receiving?"receiving_order_container":"shipping_order_container";
-        String column=receiving?"receiving_order_id":"shipping_order_id";
-        record Row(UUID container,UUID owner) {}
-        boolean railway=receiving && "RAILWAY".equals(jdbc.queryForObject("select transport_type from receiving_order where id=?",String.class,order));
-        String source=railway ? """
-            select distinct wc.container_id,wc.owner_container_id as owner_container_id
-            from receiving_order r join waybill w on w.receiving_order_id=r.id
-            join waybill_railway_carriage rc on rc.waybill_id=w.id join waybill_container wc on wc.waybill_railway_carriage_id=rc.id
-            where r.id=? order by wc.container_id
-            """ : "select container_id,owner_container_id from "+table+" where "+column+"=? order by container_id";
-        var rows=jdbc.query(source,
-            (rs,n)->new Row(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class)),order);
+        var rows=tasks.rows(order,receiving);
         // Legacy empty orders have no physical KTK to reserve.
         if(rows.isEmpty()) {
             if(receiving) {
@@ -91,7 +81,7 @@ public class ContainerStockService {
             }
             return;
         }
-        lockContainers(rows.stream().map(Row::container).toList());
+        lockContainers(rows.stream().map(ContainerTaskRows.Row::container).toList());
         var conflicts = new ArrayList<String>();
         var owners = new HashMap<UUID,UUID>();
         for (var row:rows) {
@@ -106,6 +96,7 @@ public class ContainerStockService {
         }
         if(!conflicts.isEmpty()) throw error("CONTAINER_RESERVATION_CONFLICT",String.join("; ",conflicts));
         for(var row:rows) {
+            tasks.change(row,completed?"UPLOADED":null,completed?"FINISHED":"UPLOADED");
             State old=state(row.container());
             if(!completed) jdbc.update("""
                 insert into container_stock_reservation(order_id,order_type,container_id,previous_client_id,previous_receiving_id,previous_shipping_id)
@@ -179,6 +170,7 @@ public class ContainerStockService {
             transition(id,receiving&&previous.client()!=null?previous.client():old.client(),receiving?"DEPARTED":"ON_TERMINAL",
                 receiving?previous.receiving():old.receiving(),receiving?old.shipping():previous.shipping(),order,type,true,reason);
         }
+        tasks.cancel(order,receiving,previousStatus);
         jdbc.update("update container_movement set active=false,updated_at=billing_now() at time zone 'UTC' where order_id=?",order);
     }
     static final String OWNER_SELECT="""
