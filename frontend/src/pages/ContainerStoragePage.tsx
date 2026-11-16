@@ -4,28 +4,29 @@ import { request } from '../http'
 import type { PagedResponse } from '../domain'
 import { UiInput, UiSelect } from '../components/FormControls'
 import { TableReveal } from '../components/TableReveal'
-import { storageDate, storageStatus, timeSourceLabel, transportLabel, type StorageIssue, type StoragePeriod } from '../containerStorage'
+import { storageDate, timeSourceLabel, transportLabel, type StorageIssue, type StoragePeriod } from '../containerStorage'
 import './ContainerStoragePage.css'
 
 const today = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date())
-const columns = [160, 175, 175, 100, 110, 190, 160, 155, 200, 180, 110, 190, 180, 120, 155, 110, 190, 190]
+const columns = [160, 175, 175, 100, 155, 260, 110, 190, 180, 120, 155, 260, 110, 190, 190]
+const parties = (client?: string, owner?: string) => `${client || '—'} / ${owner || '—'}`
 
 export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; emptyText: string }) {
   return <table className="storage-table"><colgroup>{columns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
-    <thead><tr><th>Номер КТК</th><th>Прибыл</th><th>Вывезен</th><th>Дней хранения</th><th>В стоке</th><th>Состояние</th>
-      <th>Площадка</th><th>Заявка на поставку</th><th>Клиент поставки</th><th>Собственник при приёме</th>
-      <th>На чём прибыл</th><th>Грузоперевозчик</th><th>Груз (ЕТСНГ)</th><th>Груж/порож</th><th>Заявка на вывоз</th>
+    <thead><tr><th>Номер КТК</th><th>Прибыл</th><th>Вывезен</th><th>Дней хранения</th>
+      <th>Заявка на поставку</th><th>Клиент/собственник поставки</th>
+      <th>На чём прибыл</th><th>Грузоперевозчик</th><th>Груз (ЕТСНГ)</th><th>Груж/порож</th><th>Заявка на вывоз</th><th>Клиент/собственник вывоза</th>
       <th>На чём вывезен</th><th>Перевозчик на вывоз</th><th>Грузополучатель</th></tr></thead>
     <tbody>{rows.length ? rows.map(row => <tr key={row.id}>
       <td><Link to={'/container-owners/' + row.containerId + '/history'}>{row.containerName}</Link></td>
       <td title={timeSourceLabel(row.arrivalTimeSource)}>{storageDate(row.arrivalAt)}{row.arrivalTimeSource === 'HISTORY_CREATED' && <div className="storage-note">По старой истории</div>}</td>
       <td title={row.departureAt ? timeSourceLabel(row.departureTimeSource) : undefined}>{storageDate(row.departureAt)}</td>
-      <td>{row.storageDays ?? '—'}</td><td>{row.inStock == null ? 'Не определено' : row.inStock ? 'Да' : 'Нет'}</td>
-      <td>{storageStatus(row.status)}{row.needsReview && <div className="storage-review">Требуется проверка: {row.reviewReason}</div>}</td>
-      <td>{row.terminalAreaName}</td><td><Link to={'/receiving-orders/' + row.receivingOrderId}>№ {row.receivingOrderNumber}</Link></td>
-      <td>{row.clientName || '—'}</td><td>{row.ownerName || '—'}</td><td>{transportLabel(row.arrivalTransport)}</td><td>{row.arrivalCarrier || '—'}</td>
+      <td>{row.storageDays ?? '—'}{row.needsReview && <div className="storage-review" title={row.reviewReason}>Требуется проверка</div>}</td>
+      <td><Link to={'/receiving-orders/' + row.receivingOrderId}>{row.receivingOrderNumber}</Link></td>
+      <td>{parties(row.clientName, row.ownerName)}</td><td>{transportLabel(row.arrivalTransport)}</td><td>{row.arrivalCarrier || '—'}</td>
       <td>{row.cargoName || '—'}</td><td>{row.empty == null ? 'Не указан' : row.empty ? 'Порожний' : 'Гружёный'}</td>
-      <td>{row.shippingOrderId ? <Link to={'/shipping-orders/' + row.shippingOrderId}>№ {row.shippingOrderNumber}</Link> : '—'}</td>
+      <td>{row.shippingOrderId ? <Link to={'/shipping-orders/' + row.shippingOrderId}>{row.shippingOrderNumber}</Link> : '—'}</td>
+      <td>{row.shippingOrderId ? parties(row.shippingClientName, row.shippingOwnerName) : '—'}</td>
       <td>{transportLabel(row.departureTransport)}</td><td>{row.departureCarrier || '—'}</td><td>{row.consignee || '—'}</td>
     </tr>) : <tr><td colSpan={columns.length} className="table-message">{emptyText}</td></tr>}</tbody>
   </table>
@@ -75,7 +76,7 @@ export default function ContainerStoragePage() {
       <label>Дни на дату<UiInput type="date" value={asOf} max={today()} required onChange={e => change('asOf', e.target.value)} /></label>
       {params.size > 0 && <button type="button" className="secondary-button" onClick={() => { setParams({}); setDraftSearch({ query: '', value: '' }) }}>Сбросить</button>}
     </form>
-    <p className="composition-hint">Календарные дни, включая день прибытия и вывоза, по московскому времени. Состояние и остатки показаны на текущий момент.</p>
+    <p className="composition-hint">Календарные дни, включая день прибытия и вывоза, по московскому времени. Длительность рассчитана на выбранную дату.</p>
     {params.has('periodId') && <p>Показан выбранный период хранения.</p>}
     {error && <div role="alert" className="storage-review">{error} <button onClick={() => setAttempt(a => a + 1)}>Повторить</button></div>}
     {!!result?.issues.length && <details className="storage-issues"><summary>Записи истории, требующие проверки: {result.issues.length}</summary>
