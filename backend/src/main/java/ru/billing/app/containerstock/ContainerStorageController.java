@@ -20,7 +20,7 @@ public class ContainerStorageController {
     public ContainerStorageController(JdbcTemplate jdbc) {this.jdbc=jdbc;}
     public record Row(UUID id,UUID containerId,String containerName,String terminalAreaName,
         UUID receivingOrderId,Long receivingOrderNumber,OffsetDateTime arrivalAt,String clientName,String ownerName,
-        String arrivalTransport,String arrivalCarrier,String cargoName,Boolean empty,
+        String arrivalTransport,String arrivalCarrier,String consignor,String cargoName,Boolean empty,
         UUID shippingOrderId,Long shippingOrderNumber,OffsetDateTime departureAt,String departureTransport,
         String departureCarrier,String consignee,String shippingClientName,String shippingOwnerName,Long storageDays,Boolean inStock,String status,
         boolean needsReview,String reviewReason,String arrivalTimeSource,String departureTimeSource,long version) {}
@@ -28,7 +28,7 @@ public class ContainerStorageController {
     private static final String SELECT="""
         select p.*,c.code container_name,a.name area_name,cl.name client_name,ow.name owner_name,
           r.number::bigint receiving_number,s.number::bigint shipping_number,r.transport_type arrival_transport,s.transport_type departure_transport,
-          ic.name arrival_carrier,oc.name departure_carrier,cons.name consignee,
+          ic.name arrival_carrier,oc.name departure_carrier,r.consignor,cons.name consignee,
           shipping_client.name shipping_client_name,shipping_owner.name shipping_owner_name,
           ah.time_source arrival_time_source,dh.time_source departure_time_source,
           case when p.status='CANCELLED' or p.needs_review then null
@@ -60,7 +60,7 @@ public class ContainerStorageController {
         if(from!=null && to!=null && from.isAfter(to)) throw bad("Начало периода фильтра позже окончания");
         if(asOf.isAfter(LocalDate.now(ZoneId.of("Europe/Moscow")))) throw bad("Дата расчёта не может быть в будущем");
         var args=new ArrayList<Object>();args.add(asOf);args.add(asOf);
-        String sql=" where (?='' or position(lower(?) in lower(c.code||' '||coalesce(cl.name,'')))>0)";
+        String sql=" where (?='' or position(lower(?) in lower(c.code))>0)";
         args.add(query.trim());args.add(query.trim());
         if(clientId!=null){sql+=" and p.receiving_client_id=?";args.add(clientId);}
         if(periodId!=null){sql+=" and p.id=?";args.add(periodId);}
@@ -125,7 +125,7 @@ public class ContainerStorageController {
         String status=rs.getString("status");boolean review=rs.getBoolean("needs_review");
         return new Row(rs.getObject("id",UUID.class),rs.getObject("container_id",UUID.class),rs.getString("container_name"),rs.getString("area_name"),
             rs.getObject("receiving_order_id",UUID.class),rs.getObject("receiving_number",Long.class),rs.getObject("arrival_at",OffsetDateTime.class),
-            rs.getString("client_name"),rs.getString("owner_name"),rs.getString("arrival_transport"),rs.getString("arrival_carrier"),
+            rs.getString("client_name"),rs.getString("owner_name"),rs.getString("arrival_transport"),rs.getString("arrival_carrier"),rs.getString("consignor"),
             rs.getString("cargo_name"),rs.getObject("is_empty",Boolean.class),rs.getObject("shipping_order_id",UUID.class),
             rs.getObject("shipping_number",Long.class),rs.getObject("departure_at",OffsetDateTime.class),rs.getString("departure_transport"),
             rs.getString("departure_carrier"),rs.getString("consignee"),rs.getString("shipping_client_name"),rs.getString("shipping_owner_name"),rs.getObject("storage_days",Long.class),review?null:status.equals("OPEN"),

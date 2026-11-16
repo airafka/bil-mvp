@@ -1,7 +1,7 @@
 export type StoragePeriod = {
   id: string; containerId: string; containerName: string; terminalAreaName: string;
   receivingOrderId: string; receivingOrderNumber: number; arrivalAt: string; clientName?: string; ownerName?: string;
-  arrivalTransport?: string; arrivalCarrier?: string; cargoName?: string; empty?: boolean;
+  arrivalTransport?: string; arrivalCarrier?: string; consignor?: string; cargoName?: string; empty?: boolean;
   shippingOrderId?: string; shippingOrderNumber?: number; departureAt?: string; departureTransport?: string;
   departureCarrier?: string; consignee?: string; shippingClientName?: string; shippingOwnerName?: string; storageDays?: number; inStock?: boolean; status: string;
   needsReview: boolean; reviewReason?: string; arrivalTimeSource?: string; departureTimeSource?: string; version: number;
