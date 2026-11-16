@@ -24,7 +24,6 @@ public class ContainerStorageController {
         UUID shippingOrderId,Long shippingOrderNumber,OffsetDateTime departureAt,String departureTransport,
         String departureCarrier,String consignee,String shippingClientName,String shippingOwnerName,Long storageDays,Boolean inStock,String status,
         String arrivalTimeSource,String departureTimeSource,UUID receivingOrderContainerId,UUID waybillContainerId,UUID shippingOrderContainerId) {}
-    public record Issue(UUID id,UUID containerId,String containerName,String reason) {}
     private static final String SELECT="""
         select p.*,c.code container_name,a.name area_name,cl.name client_name,ow.name owner_name,
           r.number::bigint receiving_number,s.number::bigint shipping_number,r.transport_type arrival_transport,s.transport_type departure_transport,
@@ -89,13 +88,6 @@ public class ContainerStorageController {
             where exists(select 1 from container_storage_period p where p.container_id=c.id)
             order by c.code,c.id
             """, (rs,n)->new ContainerOption(rs.getObject(1,UUID.class),rs.getString(2)));
-    }
-    @GetMapping("/issues")
-    public List<Issue> issues() {
-        return jdbc.query("""
-            select h.id,h.container_id,c.code,h.review_reason from container_owner_history h
-            join container c on c.id=h.container_id where h.needs_review order by h.created_at,h.id
-            """,(rs,n)->new Issue(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),rs.getString(3),rs.getString(4)));
     }
     @GetMapping(value="/export",produces="text/csv")
     public ResponseEntity<byte[]> export(@RequestParam(defaultValue="")String query,@RequestParam(defaultValue="ACTIVE")String status,

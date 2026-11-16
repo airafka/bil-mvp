@@ -6,7 +6,6 @@ export type StoragePeriod = {
   departureCarrier?: string; consignee?: string; shippingClientName?: string; shippingOwnerName?: string; storageDays?: number; inStock?: boolean; status: string;
   arrivalTimeSource?: string; departureTimeSource?: string;
 }
-export type StorageIssue = { id: string; containerId: string; containerName: string; reason: string }
 export const storageDate = (value?: string) => value ? new Date(value).toLocaleString('ru-RU', {
   timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
 }) : '—'

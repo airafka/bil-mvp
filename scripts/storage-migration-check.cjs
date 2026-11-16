@@ -17,8 +17,8 @@ const expected=JSON.parse(sql(`select json_agg(p order by arrival_history_id) fr
 sql(`alter table container_owner_history drop constraint history_storage_period_fk;
 drop table container_storage_period;
 alter table container_owner_history drop column operation_type,drop column occurred_at,drop column time_source,
- drop column terminal_area_id,drop column storage_period_id,drop column target_history_id,drop column source_system,
- drop column source_operation_key,drop column reason,drop column needs_review,drop column review_reason;`);
+ drop column terminal_area_id,drop column storage_period_id,drop column if exists target_history_id,drop column if exists source_system,
+ drop column if exists source_operation_key,drop column if exists reason,drop column if exists needs_review,drop column if exists review_reason;`);
 // The day-count fixture changed the new period date only; its legacy source remains the original movement.
 const synthetic=JSON.parse(sql(`with c as (insert into container(id,code,container_type) values(gen_random_uuid(),'STORAGE-REPLAY-AMBIGUOUS','STANDARD_40') returning id),
  r as (insert into receiving_order(id,client_id,order_status,terminal_area_catalog_id,transport_type)

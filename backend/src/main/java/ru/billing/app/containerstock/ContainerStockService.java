@@ -32,7 +32,7 @@ public class ContainerStockService {
     public record History(UUID id, UUID containerId, UUID oldClientId, String oldClientName,
             UUID newClientId, String newClientName, String oldStatus, String newStatus,
             UUID orderId, String orderType, Long orderNumber, LocalDateTime createdAt, boolean cancellation, String operationType, java.time.OffsetDateTime occurredAt,
-            String timeSource, UUID storagePeriodId, UUID targetHistoryId, String reason, boolean needsReview, String reviewReason) {}
+            String timeSource, UUID storagePeriodId) {}
     record State(UUID id, UUID client, String status, UUID receiving, UUID shipping) {}
 
     public void lockContainers(Collection<UUID> ids) {
@@ -47,10 +47,10 @@ public class ContainerStockService {
             rs.getObject("receiving_order_id",UUID.class),rs.getObject("shipping_order_id",UUID.class)),id);
         return rows.isEmpty()?null:rows.getFirst();
     }
-    void transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type) {
-        transition(container,client,status,receiving,shipping,order,type,false,null);
+    UUID transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type) {
+        return transition(container,client,status,receiving,shipping,order,type,false);
     }
-    void transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type, boolean cancellation, String reason) {
+    UUID transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type, boolean cancellation) {
         State old=state(container);
         if(old==null) jdbc.update("insert into container_owner(id,container_id,client_id,status,receiving_order_id,shipping_order_id) values(?,?,?,?,?,?)",
             UUID.randomUUID(),container,client,status,receiving,shipping);
@@ -66,8 +66,10 @@ public class ContainerStockService {
             UUID history=UUID.randomUUID();
             jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,created_at) values(?,?,?,?,?,?,?,?,billing_now() at time zone 'UTC')",
                 history,container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type);
-            storage.onHistory(history,container,order,type,old==null?null:old.status(),status,client,cancellation,reason);
+            storage.onHistory(history,container,order,type,old==null?null:old.status(),status,client,cancellation);
+            return history;
         }
+        return null;
     }
     public void onOrderTransition(String resource, UUID order, boolean completed) {
         if(resource.equals("comprehensive-service-orders")) return;
@@ -98,6 +100,7 @@ public class ContainerStockService {
         for(var row:rows) {
             tasks.change(row,completed?"UPLOADED":null,completed?"FINISHED":"UPLOADED");
             State old=state(row.container());
+            UUID history;
             if(!completed) jdbc.update("""
                 insert into container_stock_reservation(order_id,order_type,container_id,previous_client_id,previous_receiving_id,previous_shipping_id)
                 values(?,?,?,?,?,?) on conflict do nothing
@@ -106,28 +109,28 @@ public class ContainerStockService {
                 if(!completed) {
                     if(row.owner()==null) throw error("RECEIVING_OWNER_REQUIRED","Укажите собственника каждого КТК в заявке на поставку");
                     if(old!=null&&!old.status().equals("DEPARTED")) throw error("CONTAINER_ALREADY_IN_STOCK","КТК уже ожидается, находится на терминале или зарезервирован для вывоза");
-                    transition(row.container(),row.owner(),"EXPECTED",order,old==null?null:old.shipping(),order,"RECEIVING_ORDER");
+                    history=transition(row.container(),row.owner(),"EXPECTED",order,old==null?null:old.shipping(),order,"RECEIVING_ORDER");
                 } else {
                     if(old==null||!old.status().equals("EXPECTED")||!order.equals(old.receiving())) throw error("RECEIVING_RESERVATION_REQUIRED","КТК не зарезервирован этой поставкой");
-                    transition(row.container(),old.client(),"ON_TERMINAL",order,old.shipping(),order,"RECEIVING_ORDER");
+                    history=transition(row.container(),old.client(),"ON_TERMINAL",order,old.shipping(),order,"RECEIVING_ORDER");
                 }
             } else {
                 if(!completed) {
                     if(old==null||!old.status().equals("ON_TERMINAL")) throw error("SHIPPING_MISSING_IN_REMAINS","Для вывоза КТК должен быть принят и свободен в остатках");
                     jdbc.update("update shipping_order_container set owner_container_id=? where shipping_order_id=? and container_id=?",old.client(),order,row.container());
-                    transition(row.container(),old.client(),"RESERVED_OUT",old.receiving(),order,order,"SHIPPING_ORDER");
+                    history=transition(row.container(),old.client(),"RESERVED_OUT",old.receiving(),order,order,"SHIPPING_ORDER");
                 } else {
                     if(old==null||!old.status().equals("RESERVED_OUT")||!order.equals(old.shipping())) throw error("SHIPPING_RESERVATION_REQUIRED","КТК не зарезервирован этим вывозом");
-                    transition(row.container(),old.client(),"DEPARTED",old.receiving(),order,order,"SHIPPING_ORDER");
+                    history=transition(row.container(),old.client(),"DEPARTED",old.receiving(),order,order,"SHIPPING_ORDER");
                 }
             }
             if(completed) jdbc.update("""
                 insert into container_movement(id,order_id,container_id,event_code,transport_type,event_date_time)
                 select ?,?,?,?,transport_type,(select occurred_at at time zone 'UTC' from container_owner_history
-                    where source_system='MVP' and source_operation_key=?) from %s where id=?
+                    where id=?) from %s where id=?
                 on conflict(order_id,container_id,event_code) do nothing
                 """.formatted(receiving?"receiving_order":"shipping_order"),UUID.randomUUID(),order,row.container(),receiving?"UNLOAD_FINISH":"LOAD_FINISH",
-                    (receiving?"RECEIVING_ORDER":"SHIPPING_ORDER")+":"+order+":"+row.container()+":"+(receiving?"ARRIVAL":"DEPARTURE"),order);
+                    history,order);
         }
     }
     private String containerName(UUID id) {
@@ -139,7 +142,7 @@ public class ContainerStockService {
         var number=related==null?List.<Integer>of():jdbc.query("select number from "+(shipping?"shipping_order":"receiving_order")+" where id=?",(rs,n)->rs.getInt(1),related);
         return containerName(id)+": "+problem+(number.isEmpty()?"":" ("+(shipping?"вывоз":"поставка")+" №"+number.getFirst()+")");
     }
-    public void cancel(String resource,UUID order,String previousStatus,String reason) {
+    public void cancel(String resource,UUID order,String previousStatus) {
         if("DRAFT".equals(previousStatus))return;
         boolean receiving=resource.equals("receiving-orders");
         String type=receiving?"RECEIVING_ORDER":"SHIPPING_ORDER";
@@ -168,7 +171,7 @@ public class ContainerStockService {
                 (rs,n)->new State(null,rs.getObject(1,UUID.class),null,rs.getObject(2,UUID.class),rs.getObject(3,UUID.class)),order,type,id);
             // Receiving restores the owner before acceptance. Shipping preserves any later owner change.
             transition(id,receiving&&previous.client()!=null?previous.client():old.client(),receiving?"DEPARTED":"ON_TERMINAL",
-                receiving?previous.receiving():old.receiving(),receiving?old.shipping():previous.shipping(),order,type,true,reason);
+                receiving?previous.receiving():old.receiving(),receiving?old.shipping():previous.shipping(),order,type,true);
         }
         tasks.cancel(order,receiving,previousStatus);
         jdbc.update("update container_movement set active=false,updated_at=billing_now() at time zone 'UTC' where order_id=?",order);
@@ -209,8 +212,7 @@ public class ContainerStockService {
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("old_client_id",UUID.class),rs.getString("old_name"),
                 rs.getObject("new_client_id",UUID.class),rs.getString("new_name"),rs.getString("old_status"),rs.getString("new_status"),
                 rs.getObject("order_id",UUID.class),rs.getString("order_type"),rs.getObject("order_number",Long.class),rs.getObject("created_at",LocalDateTime.class),rs.getBoolean("cancellation"),rs.getString("operation_type"),rs.getObject("occurred_at",java.time.OffsetDateTime.class),
-                rs.getString("time_source"),rs.getObject("storage_period_id",UUID.class),rs.getObject("target_history_id",UUID.class),
-                rs.getString("reason"),rs.getBoolean("needs_review"),rs.getString("review_reason")),container,all);
+                rs.getString("time_source"),rs.getObject("storage_period_id",UUID.class)),container,all);
     }
     ApiException error(String code,String message){return new ApiException(HttpStatus.CONFLICT,code,message);}
 }

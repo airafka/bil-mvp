@@ -1,9 +1,9 @@
 // Mutating integration checks. Refuses any database/backend other than this isolated fixture.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_storage_test';
-assert.ok(['billing_storage_test','billing_storage_fields_test'].includes(db));
-const fieldsTest=db==='billing_storage_fields_test',port=fieldsTest?'8198':'8196',base='http://127.0.0.1:'+port+'/api';
-const inspect=JSON.parse(execFileSync(docker,['inspect',fieldsTest?'billing-next-storage-fields-test':'billing-next-storage-test'],{encoding:'utf8',windowsHide:true}))[0];
+assert.ok(['billing_storage_test','billing_storage_fields_test','billing_history_fields_test'].includes(db));
+const historyTest=db==='billing_history_fields_test',fieldsTest=db==='billing_storage_fields_test',port=historyTest?'8201':fieldsTest?'8198':'8196',base='http://127.0.0.1:'+port+'/api';
+const inspect=JSON.parse(execFileSync(docker,['inspect',historyTest?'billing-next-history-fields-test':fieldsTest?'billing-next-storage-fields-test':'billing-next-storage-test'],{encoding:'utf8',windowsHide:true}))[0];
 assert.ok(inspect.Config.Env.includes('DB_NAME='+db));
 assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
 const sql=q=>execFileSync(docker,['exec','billing-next-db-1','psql','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q],{encoding:'utf8',windowsHide:true}).trim();
@@ -29,7 +29,7 @@ const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true')
    terminalAreaId:area,departureAt:'2026-11-01T12:00:00+03:00',...logistics,orderIds:[id]},201);await api('/routes/'+r.route.id+'/confirm','POST',{});}
  let r=await manual('receiving');await confirm('receiving',r.id);assert.equal(periods(c).length,0);
  await cancel('receiving',r.id,'CONFIRMED');assert.equal(periods(c).length,0);
- assert.ok((await history(c)).some(h=>h.operationType==='CANCEL_RECEIVING_RESERVATION'&&h.targetHistoryId&&!h.storagePeriodId));
+ assert.ok((await history(c)).some(h=>h.operationType==='CANCEL_RECEIVING_RESERVATION'&&h.orderId===r.id&&h.oldStatus==='EXPECTED'&&h.newStatus==='DEPARTED'&&h.cancellation&&!h.storagePeriodId));
  r=await manual('receiving');await confirm('receiving',r.id);await finish('receiving',r.id);
  let p=periods(c)[0];assert.equal(p.status,'OPEN');assert.equal(p.is_empty,true);assert.equal(p.receiving_order_id,r.id);
  const hid=p.receiving_history_id,pid=p.id,arrival=p.receiving_at;
@@ -38,7 +38,7 @@ const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true')
  await finish('receiving',r.id);assert.equal(periods(c).length,1);assert.equal((await history(c)).filter(h=>h.operationType==='ARRIVAL').length,1);
  let s=await manual('shipping');await confirm('shipping',s.id);assert.deepEqual(periods(c)[0],p);
  await cancel('shipping',s.id,'CONFIRMED');assert.deepEqual(periods(c)[0],p);
- assert.ok((await history(c)).some(h=>h.operationType==='CANCEL_SHIPPING_RESERVATION'&&h.storagePeriodId===pid&&h.targetHistoryId));
+ assert.ok((await history(c)).some(h=>h.operationType==='CANCEL_SHIPPING_RESERVATION'&&h.orderId===s.id&&h.oldStatus==='RESERVED_OUT'&&h.newStatus==='ON_TERMINAL'&&h.cancellation&&h.storagePeriodId===pid));
  console.log('PASS: reservations never start/stop storage; arrival links and repeated completion');
  s=await manual('shipping');await confirm('shipping',s.id);await finish('shipping',s.id);p=periods(c)[0];
  assert.equal(p.status,'CLOSED');assert.equal(p.shipping_order_id,s.id);assert.ok(p.shipping_history_id);const dh=p.shipping_history_id;
@@ -48,9 +48,11 @@ const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true')
  await Promise.all([cancel('shipping',s.id,'COMPLETED'),cancel('shipping',s.id,'COMPLETED')]);p=periods(c)[0];
  assert.equal(p.id,pid);assert.equal(p.receiving_at,arrival);assert.equal(p.status,'OPEN');assert.equal(p.shipping_at,null);
  assert.equal(p.shipping_order_id,null);assert.equal(p.shipping_history_id,null);for(const field of ['version','needs_review','review_reason'])assert.ok(!(field in p));
- h=(await history(c)).filter(h=>h.operationType==='CANCEL_DEPARTURE');assert.equal(h.length,1);assert.equal(h[0].targetHistoryId,dh);
- assert.equal(h[0].storagePeriodId,pid);assert.equal(h[0].reason,'Проверка истории хранения');
+ h=(await history(c)).filter(h=>h.operationType==='CANCEL_DEPARTURE');assert.equal(h.length,1);assert.equal(h[0].orderId,s.id);assert.equal(h[0].oldStatus,'DEPARTED');assert.equal(h[0].newStatus,'ON_TERMINAL');assert.equal(h[0].cancellation,true);
+ assert.equal(h[0].storagePeriodId,pid);assert.equal((await api('/shipping-orders/'+s.id+'/cancellation')).reason,'Проверка истории хранения');
+ for(const field of ['targetHistoryId','sourceSystem','sourceOperationKey','reason','needsReview','reviewReason'])assert.ok(!(field in h[0]));
  assert.ok((await history(c)).find(h=>h.id===dh&&!h.cancellation));
+ assert.equal(sql(`select count(*) from container_movement m where m.container_id='${c}' and not exists(select 1 from container_owner_history h where h.container_id=m.container_id and h.order_id=m.order_id and h.operation_type=case when m.event_code='LOAD_FINISH' then 'DEPARTURE' else 'ARRIVAL' end and h.occurred_at at time zone 'UTC'=m.event_date_time)`),'0');
  console.log('PASS: departure/reopening, immutable original history, cancellation reason, concurrent retries');
  // Test-only date fixture: calendar boundaries use Moscow, not elapsed 24-hour blocks.
  sql(`update container_storage_period set receiving_at='2026-10-31T21:30:00Z' where id='${pid}'; update container_owner_history set occurred_at='2026-10-31T21:30:00Z' where id='${hid}'`);
@@ -77,6 +79,6 @@ const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true')
  assert.equal(sql(`select count(*) from container_storage_period p join container_owner_history h on h.id=p.receiving_history_id where h.storage_period_id<>p.id`),'0');
  assert.equal(sql(`select count(*) from container_storage_period where status='OPEN' and shipping_at is not null`),'0');
  fs.mkdirSync(path.join(__dirname,'../backups'),{recursive:true});
- fs.writeFileSync(path.join(__dirname,'../backups/'+(fieldsTest?'storage-fields-fixtures.json':'storage-fixtures.json')),JSON.stringify({db,containerId:c,periodId:pid}));
+ fs.writeFileSync(path.join(__dirname,'../backups/'+(historyTest?'history-fields-fixtures.json':fieldsTest?'storage-fields-fixtures.json':'storage-fixtures.json')),JSON.stringify({db,containerId:c,periodId:pid}));
  console.log('PASS: filter validation, CSV export, bidirectional history consistency');
 })().catch(e=>{console.error(e);process.exitCode=1});

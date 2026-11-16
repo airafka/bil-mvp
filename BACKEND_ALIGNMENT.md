@@ -182,7 +182,7 @@ GET /api/comprehensive-service-orders/{id}/no-return/available-containers воз
 | /comprehensive-service-orders | Услуга, доступные услуги, транспортные действия, возвраты и прогресс |
 | /routes | Рейсы и подтверждение |
 | /container-owners, /service-orders | Регистр и смена собственника |
-| /container-storage-periods | Периоды и дни хранения; /issues — неоднозначная история; /export — CSV |
+| /container-storage-periods | Периоды и дни хранения; /export — CSV |
 | /waybills | Накладные, выбор, группировка, генерация |
 | /complex-services | Каталог услуг и тарифы |
 | /billing-charges, /payment-invoices | Начисления и счета |
