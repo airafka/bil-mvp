@@ -109,10 +109,9 @@ details[open] > summary::before { transform: rotate(45deg); margin-top: -3px; }
 .filter-banner button { font-size: 10px; padding: 2px 6px; white-space: nowrap; min-height: 24px; }
 .data-scroll { overflow: auto; flex: 1; min-height: 0; background: var(--surface); }
 table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; table-layout: auto; }
-th { position: sticky; top: 0; z-index: 2; padding: 6px 12px; height: 47px; background: #2d333c; color: #dce2eb; border-right: 1px solid #414141; border-bottom: 1px solid #4e4e4e; text-align: left; white-space: nowrap; font-weight: 500; }
-th button { font: 12px "Segoe UI",Arial,sans-serif; padding: 0; border: 0; min-height: 17px; background: transparent; border-radius: 0; }
+th { position: sticky; top: 0; z-index: 2; padding: 8px 12px; height: 40px; font-size: 14px; background: #2d333c; color: #dce2eb; border-right: 1px solid #414141; border-bottom: 1px solid #4e4e4e; text-align: left; white-space: nowrap; font-weight: 500; }
+th button { font: 500 14px "Segoe UI",Arial,sans-serif; padding: 0; border: 0; min-height: 17px; background: transparent; border-radius: 0; }
 th button:hover { background: transparent; color: #e6e6e6; }
-th .type { display: block; margin-left: 21px; margin-top: 3px; color: #a7a7a7; font-size: 11px; font-weight: 400; }
 .column-symbol { display: inline-block; width: 21px; color: #a2a2a2; font: 10px var(--mono); }
 .column-symbol.primary { color: #d6b977; }
 td { height: 34px; padding: 6px 12px; min-width: 80px; max-width: 340px; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 13px/20px var(--mono); background: #242424; color: #dedede; }
@@ -203,7 +202,7 @@ dialog::backdrop { background: #080808b3; backdrop-filter: blur(3px); }
   .editor-heading { padding: 7px 9px; }
   .filter-toolbar { flex-wrap: wrap; padding: 0 9px 8px; }
   .row-search { flex-basis: 100%; }
-  .filter-toolbar > button { margin-left: auto; }
+  .filter-toolbar > button { margin-left: 0; }
   .table-description { display: none; }
   .table-footer { flex-wrap: wrap; padding: 6px 9px; }
   .pagination { gap: 4px; flex-wrap: wrap; }

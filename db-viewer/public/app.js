@@ -107,9 +107,9 @@ function renderData() {
       const symbol = column.primary ? '◆' : numeric ? '#' : column.type.includes('timestamp') || column.type === 'date' ? '◷' : 'T';
       const icon = element('span', symbol, `column-symbol${column.primary ? ' primary' : ''}`);
       icon.setAttribute('aria-hidden', 'true');
-      button.append(icon, document.createTextNode(`${column.name}${state.sort === column.name ? (state.direction === 'asc' ? ' ↑' : ' ↓') : ''}`));
+      button.append(icon, document.createTextNode(`${state.sort === column.name ? (state.direction === 'asc' ? '↑ ' : '↓ ') : ''}${column.name}`));
       button.onclick = () => { state.direction = state.sort === column.name && state.direction === 'asc' ? 'desc' : 'asc'; state.sort = column.name; state.offset = 0; state.version++; refresh(true); };
-      th.append(button, element('span', column.type, 'type')); heading.append(th);
+      th.append(button); heading.append(th);
     }
     const keys = data.columns.filter(c => c.primary).map(c => c.name);
     const identity = JSON.stringify([data.name, state.offset, state.limit, state.search, state.sort, state.direction, state.filter]);
