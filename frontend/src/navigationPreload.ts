@@ -8,6 +8,7 @@ const modules: Record<string, () => Promise<unknown>> = {
   '/routes': () => import('./pages/RoutePages'),
   '/waybills': () => import('./pages/WaybillRegistryPage'),
   '/complex-services': () => import('./pages/ComplexServicePages'),
+  '/container-storage': () => import('./pages/ContainerStoragePage'),
   '/container-owners': () => import('./pages/ContainerStockPages'),
   '/receiving-orders': () => import('./pages/OrderListPage'),
   '/shipping-orders': () => import('./pages/OrderListPage'),

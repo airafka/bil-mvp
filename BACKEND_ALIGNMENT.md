@@ -11,6 +11,7 @@
 | Поставка | receiving_order; для авто — receiving_order_container и items; ЖД-состав — связанные накладные |
 | Вывоз | shipping_order, shipping_order_container, items и связи с исходными КТК/вагонами |
 | Рейс | route; объединяет транспортные заявки |
+| Периоды хранения КТК | container_storage_period; ссылки на фактический приём/вывоз в container_owner_history |
 | Накладная | waybill, waybill_railway_carriage, waybill_container, waybill_product, waybill_zpu |
 | Услуга / тариф клиента | complex_service_catalog, complex_service_tariff |
 | Снимок тарифа заявки | comprehensive_service_order_tariff |
@@ -157,6 +158,8 @@ GET /api/comprehensive-service-orders/{id}/no-return/available-containers воз
 - Для ручной порожней строки класс опасности не подставляется автоматически только из признака empty. Проверки и нормализацию основной системы не считать уже реализованными.
 - Роли и полномочия пользователей, внешние интеграции, банковский обмен и полный производственный жизненный цикл не реализованы.
 
+Учёт фактического хранения не зависит от каталога услуг и не создаёт начислений. Льготные дни, тарифы хранения и расчёт по дням пока не применяются. Жизненный цикл периодов и отмены описаны в [CONTAINER_STOCK.md](CONTAINER_STOCK.md).
+
 ## Карта API
 
 Базовый путь — /api. Точные DTO и методы определяются контроллерами и request-классами, а не историческими примерами запросов.
@@ -167,6 +170,7 @@ GET /api/comprehensive-service-orders/{id}/no-return/available-containers воз
 | /comprehensive-service-orders | Услуга, доступные услуги, транспортные действия, возвраты и прогресс |
 | /routes | Рейсы и подтверждение |
 | /container-owners, /service-orders | Регистр и смена собственника |
+| /container-storage-periods | Периоды и дни хранения; /issues — неоднозначная история; /export — CSV |
 | /waybills | Накладные, выбор, группировка, генерация |
 | /complex-services | Каталог услуг и тарифы |
 | /billing-charges, /payment-invoices | Начисления и счета |

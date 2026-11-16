@@ -1,0 +1,8 @@
+.storage-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
+.storage-filters label { display: grid; gap: 4px; max-width: 100%; }
+.storage-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.storage-note { color: #64748b; font-size: 12px; }
+.storage-review { color: #9a3412; }
+.storage-issues { margin-bottom: 16px; }
+.storage-table td:first-child { white-space: nowrap; font-weight: normal; }
+@media (max-width: 640px) { .storage-filters label { width: 100%; } .storage-page .page-header { flex-wrap: wrap; gap: 12px; } }

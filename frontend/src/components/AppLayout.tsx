@@ -14,7 +14,7 @@ const navigationGroups = [
     { path: '/waybills', title: 'Накладные ЭТРАН', icon: 'list' },
     { path: '/complex-services', title: 'Комплексные услуги', icon: 'billing' },
   ] },
-  { title: 'Отчеты', icon: 'paper', items: [{ path: '/container-owners', title: 'Остатки и собственники КТК', icon: 'list' }] },
+  { title: 'Отчеты', icon: 'paper', items: [{ path: '/container-storage', title: 'Хранение КТК', icon: 'list' }, { path: '/container-owners', title: 'Остатки и собственники КТК', icon: 'list' }] },
   { title: 'Заявки', icon: 'documents', items: [
     { path: '/receiving-orders', title: 'Заявки на поставку', icon: 'paper' },
     { path: '/shipping-orders', title: 'Заявки на вывоз', icon: 'paper' },

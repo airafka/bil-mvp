@@ -57,7 +57,7 @@ public class OrderCancellationService {
             (rs,n)->rs.getString(1),id);
         if(!dependent.isEmpty())throw conflict("CANCELLATION_DEPENDENT_ORDERS","Сначала отмените связанные "+(incoming?"вывозы":"возвраты")+" №"+String.join(", ",dependent));
         var document=incoming?receiving.findById(id):shipping.findById(id);
-        stock.cancel(resource,id,current.status());
+        stock.cancel(resource,id,current.status(),request.reason().trim());
         OrderCancellationArchive.save(jdbc,resource,id,request.reason().trim(),document);
         billing.cancel(resource,id);
         jdbc.update("update "+table+" set order_status='CANCELLED' where id=?",id);

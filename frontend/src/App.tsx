@@ -2,6 +2,7 @@ const TransportCatalogRegistryPage = lazy(() => import('./pages/TransportCatalog
 const TransportCatalogCardPage = lazy(() => import('./pages/TransportCatalogPages').then(m => ({default:m.TransportCatalogCardPage})))
 import { NotificationProvider } from './components/Notification'
 import { lazy, Suspense } from 'react'
+const ContainerStoragePage = lazy(() => import('./pages/ContainerStoragePage'))
 const ContainerStockPage = lazy(() => import('./pages/ContainerStockPages').then(m => ({ default: m.ContainerStockPage })))
 const ContainerHistoryPage = lazy(() => import('./pages/ContainerStockPages').then(m => ({ default: m.ContainerHistoryPage })))
 const OwnershipOrderRegistryPage = lazy(() => import('./pages/OwnershipOrderPages').then(m => ({ default: m.OwnershipOrderRegistryPage })))
@@ -44,6 +45,7 @@ function App() {
         <Suspense fallback={<div className="view-loading" role="status">Загружаем раздел…</div>}><Routes>
           <Route path="/ui-kit" element={<UiKitPage />} />
           <Route path="/" element={<Navigate to="/receiving-orders" replace />} />
+          <Route path="/container-storage" element={<ContainerStoragePage />} />
           <Route path="/container-owners" element={<ContainerStockPage />} />
           <Route path="/container-owners/:containerId/history" element={<ContainerHistoryPage />} />
           <Route path="/service-orders" element={<OwnershipOrderRegistryPage />} />
