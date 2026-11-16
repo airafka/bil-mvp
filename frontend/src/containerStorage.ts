@@ -19,3 +19,8 @@ export const operationLabel = (value?: string) => ({
   CANCEL_RECEIVING_RESERVATION: 'Отмена ожидаемой поставки', CANCEL_SHIPPING_RESERVATION: 'Снятие резерва вывоза',
   LEGACY: 'Старая запись',
 }[value ?? ''] ?? 'Изменение состояния')
+
+// MVP reference labels and historical snapshots contain "011005 — Пшеница".
+export const storageCargoName = (value?: string) => value?.split(';')
+  .map(item => item.trim().replace(/^\d{6}(?=\s|[—–-]|$)\s*(?:[—–-]\s*)?/, '').trim())
+  .filter(item => item && !/^\d+$/.test(item)).join('; ') || '—'

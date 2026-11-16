@@ -4,7 +4,7 @@ import { request } from '../http'
 import type { PagedResponse } from '../domain'
 import { UiInput, UiSelect } from '../components/FormControls'
 import { TableReveal } from '../components/TableReveal'
-import { storageDate, timeSourceLabel, transportLabel, type StorageIssue, type StoragePeriod } from '../containerStorage'
+import { storageCargoName, storageDate, timeSourceLabel, transportLabel, type StorageIssue, type StoragePeriod } from '../containerStorage'
 import './ContainerStoragePage.css'
 
 const today = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date())
@@ -15,7 +15,7 @@ export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; empty
   return <table className="storage-table"><colgroup>{columns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
     <thead><tr><th>Номер КТК</th><th>Прибыл</th><th>Вывезен</th><th>Дней хранения</th>
       <th>Заявка на поставку</th><th>Клиент/собственник поставки</th>
-      <th>На чём прибыл</th><th>Грузоперевозчик</th><th>Груз (ЕТСНГ)</th><th>Груж/порож</th><th>Заявка на вывоз</th><th>Клиент/собственник вывоза</th>
+      <th>На чём прибыл</th><th>Грузоперевозчик</th><th>Груз</th><th>Груж/порож</th><th>Заявка на вывоз</th><th>Клиент/собственник вывоза</th>
       <th>На чём вывезен</th><th>Перевозчик на вывоз</th><th>Грузополучатель</th></tr></thead>
     <tbody>{rows.length ? rows.map(row => <tr key={row.id}>
       <td><Link to={'/container-owners/' + row.containerId + '/history'}>{row.containerName}</Link></td>
@@ -24,7 +24,7 @@ export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; empty
       <td>{row.storageDays ?? '—'}{row.needsReview && <div className="storage-review" title={row.reviewReason}>Требуется проверка</div>}</td>
       <td><Link to={'/receiving-orders/' + row.receivingOrderId}>{row.receivingOrderNumber}</Link></td>
       <td>{parties(row.clientName, row.ownerName)}</td><td>{transportLabel(row.arrivalTransport)}</td><td>{row.arrivalCarrier || '—'}</td>
-      <td>{row.cargoName || '—'}</td><td>{row.empty == null ? 'Не указан' : row.empty ? 'Порожний' : 'Гружёный'}</td>
+      <td>{storageCargoName(row.cargoName)}</td><td>{row.empty == null ? 'Не указан' : row.empty ? 'Порожний' : 'Гружёный'}</td>
       <td>{row.shippingOrderId ? <Link to={'/shipping-orders/' + row.shippingOrderId}>{row.shippingOrderNumber}</Link> : '—'}</td>
       <td>{row.shippingOrderId ? parties(row.shippingClientName, row.shippingOwnerName) : '—'}</td>
       <td>{transportLabel(row.departureTransport)}</td><td>{row.departureCarrier || '—'}</td><td>{row.consignee || '—'}</td>
