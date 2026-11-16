@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+const global$ = $;
 const labels = {
   receiving_order: 'Заявки на поставку', shipping_order: 'Заявки на вывоз',
   comprehensive_service_order: 'Комплексные услуги', route: 'Рейсы',
@@ -13,9 +14,11 @@ const labels = {
   complex_service_tariff: 'Тарифы', order_cancellation: 'Отмены заявок',
   service_order: 'Смена собственника', railway_carriage: 'Вагоны',
 };
-const state = { tables: [], selected: '', data: null, offset: 0, limit: 50, search: '', sort: '',
-  direction: 'desc', filter: null, view: 'data', paused: false, connected: false, events: [],
-  changed: new Map(), rows: new Map(), highlights: new Map(), identity: '', version: 0, loading: false, pending: false, totalEvents: 0 };
+
+const app = { tables: [], paused: false, connected: false, events: [], changed: new Map(), totalEvents: 0, loading: false, pending: false };
+const panels = [];
+let active;
+let nextPanel = 1;
 const stamp = date => new Date(date).toLocaleTimeString('ru-RU', { hour12: false });
 const count = value => Number(value).toLocaleString('ru-RU');
 function element(tag, text, className) {
@@ -31,43 +34,35 @@ async function get(path) {
   if (!response.ok) throw new Error(data.error || 'Не удалось получить данные');
   return data;
 }
+
 function connectionStatus() {
-  $('connection').textContent = state.paused ? 'На паузе' : state.connected ? 'Обновление по событиям' : 'Восстанавливаем связь…';
-  $('connection').classList.toggle('waiting', state.paused || !state.connected);
-  $('pause').textContent = state.paused ? 'Продолжить' : 'Пауза';
+  $('connection').textContent = app.paused ? 'На паузе' : app.connected ? 'Обновление по событиям' : 'Восстанавливаем связь…';
+  $('connection').classList.toggle('waiting', app.paused || !app.connected);
+  $('pause').textContent = app.paused ? 'Продолжить' : 'Пауза';
 }
+
 function renderTables() {
   const search = $('table-search').value.trim().toLowerCase();
-  const list = state.tables.filter(t => `${t.name} ${labels[t.name] || ''}`.toLowerCase().includes(search));
+  const list = app.tables.filter(t => `${t.name} ${labels[t.name] || ''}`.toLowerCase().includes(search));
   const nodes = list.map(table => {
     const button = element('button', undefined, 'table-choice');
-    button.classList.toggle('active', table.name === state.selected);
-    button.classList.toggle('changed', state.changed.has(table.name));
-    button.setAttribute('aria-pressed', String(table.name === state.selected));
+    button.classList.toggle('active', table.name === active?.state.selected);
+    button.classList.toggle('changed', app.changed.has(table.name));
+    button.setAttribute('aria-pressed', String(table.name === active?.state.selected));
     button.title = `${table.name} — ${labels[table.name] || 'Таблица БД'}`;
     const title = element('span');
     title.append(element('span', table.name, 'name'));
     title.append(element('small', labels[table.name] || 'Таблица БД'));
     button.append(title, element('span', count(table.count), 'table-total'));
-    button.onclick = () => selectTable(table.name);
+    button.onclick = () => active?.select(table.name);
     return button;
   });
   $('table-list').replaceChildren(...(nodes.length ? nodes : [element('p', 'Таблицы не найдены', 'muted')]));
-  $('table-count').textContent = state.tables.length;
+  $('table-count').textContent = app.tables.length;
 }
-function selectTable(name, filter = null) {
-  state.selected = name; state.filter = filter; state.offset = 0; state.search = ''; state.sort = '';
-  state.data = null; state.version++;
-  $('row-search').value = '';
-  $('table-title').textContent = name;
-  $('table-description').textContent = labels[name] || 'Таблица БД';
-  $('relation-filter').hidden = !filter;
-  $('filter-text').textContent = filter ? `${filter.column} = ${filter.value}` : '';
-  $('data-table').replaceChildren(); $('empty').hidden = false; $('empty').textContent = 'Загружаем данные…';
-  renderTables(); refresh(true);
-}
-function detail(row) {
-  $('detail-title').textContent = state.selected;
+
+function detail(row, name) {
+  $('detail-title').textContent = name;
   const list = element('dl');
   for (const [key, value] of Object.entries(row)) {
     const field = element('div', undefined, 'detail-field');
@@ -75,148 +70,252 @@ function detail(row) {
   }
   $('detail-body').replaceChildren(list); $('detail').showModal();
 }
-function renderData() {
-  const data = state.data;
-  if (!data) return;
-  $('table-title').textContent = data.name;
-  $('rows-count').textContent = `${count(data.total)} строк${state.search || state.filter ? ' найдено' : ''}`;
-  $('updated').textContent = `Обновлено ${stamp(data.at)}`;
-  $('reset-sort').textContent = state.sort ? `Сортировка: ${state.sort} ${state.direction === 'asc' ? '↑' : '↓'}` : 'Последние изменения ↓';
-  $('data-tab').setAttribute('aria-selected', String(state.view === 'data'));
-  $('schema-tab').setAttribute('aria-selected', String(state.view === 'schema'));
-  $('previous').disabled = state.offset === 0;
-  $('next').disabled = state.offset + state.limit >= Number(data.total);
-  $('page-info').textContent = Number(data.total) ? `${state.offset + 1}–${Math.min(state.offset + data.rows.length, Number(data.total))} из ${count(data.total)}` : '0 строк';
-  const head = element('thead'), body = element('tbody'), heading = element('tr');
-  head.append(heading);
-  if (state.view === 'schema') {
-    for (const title of ['Колонка', 'Тип данных', 'NULL', 'Ключ', 'Связь']) heading.append(element('th', title));
-    for (const column of data.columns) {
-      const row = element('tr');
-      const relation = data.relations.find(r => r.column === column.name);
-      for (const text of [column.name, column.type, column.nullable ? 'Да' : 'Нет', column.primary ? 'PRIMARY KEY' : '', relation ? `${relation.target}.${relation.target_column}` : '—']) row.append(element('td', text));
-      body.append(row);
-    }
-    $('empty').hidden = true;
-  } else {
-    heading.append(element('th', '#', 'row-number'));
-    for (const column of data.columns) {
-      const th = element('th');
-      const button = element('button');
-      const numeric = /^(smallint|integer|bigint|numeric|real|double)/.test(column.type);
-      const symbol = column.primary ? '◆' : numeric ? '#' : column.type.includes('timestamp') || column.type === 'date' ? '◷' : 'T';
-      const icon = element('span', symbol, `column-symbol${column.primary ? ' primary' : ''}`);
-      icon.setAttribute('aria-hidden', 'true');
-      button.append(icon, document.createTextNode(`${state.sort === column.name ? (state.direction === 'asc' ? '↑ ' : '↓ ') : ''}${column.name}`));
-      button.onclick = () => { state.direction = state.sort === column.name && state.direction === 'asc' ? 'desc' : 'asc'; state.sort = column.name; state.offset = 0; state.version++; refresh(true); };
-      th.append(button); heading.append(th);
-    }
-    const keys = data.columns.filter(c => c.primary).map(c => c.name);
-    const identity = JSON.stringify([data.name, state.offset, state.limit, state.search, state.sort, state.direction, state.filter]);
-    const comparable = identity === state.identity;
-    if (!comparable) state.highlights.clear();
-    const nextRows = new Map();
-    for (const [index, record] of data.rows.entries()) {
-      const row = element('tr');
-      const key = JSON.stringify(keys.length ? keys.map(k => record[k]) : record);
-      const serialized = JSON.stringify(record);
-      nextRows.set(key, serialized);
-      if (comparable && !state.rows.has(key)) state.highlights.set(key, { kind: 'new', until: Date.now() + 8000 });
-      else if (comparable && state.rows.get(key) !== serialized) state.highlights.set(key, { kind: 'modified', until: Date.now() + 8000 });
-      const highlight = state.highlights.get(key);
-      if (highlight?.until > Date.now()) row.classList.add(highlight.kind);
-      else state.highlights.delete(key);
-      const action = element('td', undefined, 'action-cell');
-      const open = element('button', String(state.offset + index + 1), 'row-open'); open.title = 'Открыть все поля записи'; open.setAttribute('aria-label', 'Открыть запись'); open.onclick = () => detail(record); action.append(open); row.append(action);
-      for (const column of data.columns) {
-        const value = record[column.name];
-        const td = element('td', undefined, value === null ? 'null' : '');
-        if (/^(smallint|integer|bigint|numeric|real|double)/.test(column.type)) td.classList.add('numeric');
-        const relation = data.relations.find(r => r.column === column.name);
-        const target = relation?.target.replace(/^public\./, '');
-        if (value !== null && relation && state.tables.some(t => t.name === target)) {
-          const link = element('button', value, 'fk'); link.title = `Открыть ${target}: ${value}`;
-          link.onclick = () => selectTable(target, { column: relation.target_column, value }); td.append(link);
-        } else td.textContent = value === null ? 'NULL' : value === '' ? '""' : value;
-        td.title = value === null ? 'NULL' : value; row.append(td);
-      }
-      body.append(row);
-    }
-    state.rows = nextRows; state.identity = identity;
-    $('empty').hidden = data.rows.length > 0;
-    $('empty').textContent = state.search || state.filter ? 'Нет записей по заданному условию.' : 'В таблице пока нет записей. Новые появятся автоматически.';
+
+function activate(panel) {
+  if (active === panel) return;
+  active = panel;
+  for (const item of panels) {
+    item.root.classList.toggle('active-pane', item === panel);
+    item.root.querySelector('[data-role="activate"]').setAttribute('aria-pressed', String(item === panel));
   }
-  $('data-table').replaceChildren(head, body);
+  $('navigator-target').textContent = 'Выбор для панели ' + panel.number;
+  renderTables();
 }
-async function refresh(force = false) {
-  if (state.paused && !force) return;
-  if (state.loading) { state.pending = true; return; }
-  state.loading = true;
-  const version = state.version;
-  try {
-    const overview = await get('/api/tables');
-    state.tables = overview.tables;
-    $('database').textContent = `${overview.database} / ${overview.schema} · PostgreSQL`;
-    $('navigator-db').textContent = overview.database;
-    const missing = overview.tables.filter(t => !t.observed);
-    $('observer-warning').hidden = missing.length === 0;
-    $('observer-warning').textContent = `Для ${missing.length} таблиц не включены уведомления. Повторно установите наблюдатель по инструкции в database/README.md.`;
-    if (!state.selected && overview.tables.length) {
-      state.selected = overview.tables.some(t => t.name === 'receiving_order') ? 'receiving_order' : overview.tables[0].name;
-      $('table-description').textContent = labels[state.selected] || 'Таблица БД';
+function layoutPanels() {
+  $('panels').classList.toggle('multiple', panels.length > 1);
+  $('panels').classList.toggle('many', panels.length > 2);
+  for (const panel of panels) panel.root.querySelector('[data-role="close"]').disabled = panels.length === 1;
+}
+function addPanel() {
+  const panel = createPanel(nextPanel++);
+  panels.push(panel);
+  $('panels').append(panel.root);
+  activate(panel); layoutPanels();
+  panel.options();
+  if (app.tables.length) {
+    const name = app.tables.find(table => !panels.some(item => item.state.selected === table.name))?.name || app.tables[0].name;
+    panel.select(name);
+  }
+  panel.root.querySelector('[data-role="table-select"]').focus();
+  return panel;
+}
+function createPanel(number) {
+  const root = global$('panel-template').content.firstElementChild.cloneNode(true);
+  const $ = role => root.querySelector('[data-role="' + role + '"]');
+  const state = { selected: '', data: null, offset: 0, limit: 50, search: '', sort: '', direction: 'desc', filter: null, view: 'data', rows: new Map(), highlights: new Map(), identity: '', version: 0, loading: false, pending: false };
+  let disposed = false;
+  let optionsKey = '';
+  let searchTimer;
+  const panel = { root, number, state, select: selectTable, refresh: refreshPanel, options: updateOptions };
+  root.setAttribute('aria-label', 'Панель ' + number);
+  $('table-select').setAttribute('aria-label', 'Таблица панели ' + number);
+  $('close').setAttribute('aria-label', 'Закрыть панель ' + number);
+  $('activate').textContent = 'Панель ' + number;
+  root.addEventListener('pointerdown', () => activate(panel));
+  root.addEventListener('focusin', () => activate(panel));
+  $('activate').onclick = () => activate(panel);
+  $('table-select').onchange = () => selectTable($('table-select').value);
+  $('close').onclick = () => {
+    if (panels.length === 1) return;
+    disposed = true; clearTimeout(searchTimer);
+    const index = panels.indexOf(panel);
+    panels.splice(index, 1); root.remove();
+    if (active === panel) activate(panels[Math.min(index, panels.length - 1)]);
+    layoutPanels();
+    active.root.querySelector('[data-role="activate"]').focus();
+  };
+  function updateOptions() {
+    const key = JSON.stringify(app.tables.map(table => table.name));
+    if (key === optionsKey) return;
+    optionsKey = key;
+    const options = app.tables.map(table => {
+      const option = element('option', table.name + (labels[table.name] ? ' — ' + labels[table.name] : ''));
+      option.value = table.name; return option;
+    });
+    $('table-select').replaceChildren(...options);
+    $('table-select').value = state.selected;
+  }
+  function showPanelError(message) { $('error').textContent = message; $('error').hidden = !message; }
+  function selectTable(name, filter = null) {
+    clearTimeout(searchTimer);
+    state.selected = name; state.filter = filter; state.offset = 0; state.search = ''; state.sort = '';
+    state.data = null; state.version++;
+    $('row-search').value = '';
+    $('table-select').value = name;
+    showPanelError('');
+    $('table-title').textContent = name;
+    $('table-description').textContent = labels[name] || 'Таблица БД';
+    $('relation-filter').hidden = !filter;
+    $('filter-text').textContent = filter ? `${filter.column} = ${filter.value}` : '';
+    $('data-table').replaceChildren(); $('empty').hidden = false; $('empty').textContent = 'Загружаем данные…';
+    renderTables(); refreshPanel(true);
+  }
+
+  function renderData() {
+    const data = state.data;
+    if (!data) return;
+    $('table-title').textContent = data.name;
+    $('rows-count').textContent = `${count(data.total)} строк${state.search || state.filter ? ' найдено' : ''}`;
+    global$('updated').textContent = `Обновлено ${stamp(data.at)}`;
+    $('reset-sort').textContent = state.sort ? `Сортировка: ${state.sort} ${state.direction === 'asc' ? '↑' : '↓'}` : 'Последние изменения ↓';
+    $('data-tab').setAttribute('aria-selected', String(state.view === 'data'));
+    $('schema-tab').setAttribute('aria-selected', String(state.view === 'schema'));
+    $('previous').disabled = state.offset === 0;
+    $('next').disabled = state.offset + state.limit >= Number(data.total);
+    $('page-info').textContent = Number(data.total) ? `${state.offset + 1}–${Math.min(state.offset + data.rows.length, Number(data.total))} из ${count(data.total)}` : '0 строк';
+    const head = element('thead'), body = element('tbody'), heading = element('tr');
+    head.append(heading);
+    if (state.view === 'schema') {
+      for (const title of ['Колонка', 'Тип данных', 'NULL', 'Ключ', 'Связь']) heading.append(element('th', title));
+      for (const column of data.columns) {
+        const row = element('tr');
+        const relation = data.relations.find(r => r.column === column.name);
+        for (const text of [column.name, column.type, column.nullable ? 'Да' : 'Нет', column.primary ? 'PRIMARY KEY' : '', relation ? `${relation.target}.${relation.target_column}` : '—']) row.append(element('td', text));
+        body.append(row);
+      }
+      $('empty').hidden = true;
+    } else {
+      heading.append(element('th', '#', 'row-number'));
+      for (const column of data.columns) {
+        const th = element('th');
+        const button = element('button');
+        const numeric = /^(smallint|integer|bigint|numeric|real|double)/.test(column.type);
+        const symbol = column.primary ? '◆' : numeric ? '#' : column.type.includes('timestamp') || column.type === 'date' ? '◷' : 'T';
+        const icon = element('span', symbol, `column-symbol${column.primary ? ' primary' : ''}`);
+        icon.setAttribute('aria-hidden', 'true');
+        button.append(icon, document.createTextNode(`${state.sort === column.name ? (state.direction === 'asc' ? '↑ ' : '↓ ') : ''}${column.name}`));
+        button.onclick = () => { state.direction = state.sort === column.name && state.direction === 'asc' ? 'desc' : 'asc'; state.sort = column.name; state.offset = 0; state.version++; refreshPanel(true); };
+        th.append(button); heading.append(th);
+      }
+      const keys = data.columns.filter(c => c.primary).map(c => c.name);
+      const identity = JSON.stringify([data.name, state.offset, state.limit, state.search, state.sort, state.direction, state.filter]);
+      const comparable = identity === state.identity;
+      if (!comparable) state.highlights.clear();
+      const nextRows = new Map();
+      for (const [index, record] of data.rows.entries()) {
+        const row = element('tr');
+        const key = JSON.stringify(keys.length ? keys.map(k => record[k]) : record);
+        const serialized = JSON.stringify(record);
+        nextRows.set(key, serialized);
+        if (comparable && !state.rows.has(key)) state.highlights.set(key, { kind: 'new', until: Date.now() + 8000 });
+        else if (comparable && state.rows.get(key) !== serialized) state.highlights.set(key, { kind: 'modified', until: Date.now() + 8000 });
+        const highlight = state.highlights.get(key);
+        if (highlight?.until > Date.now()) row.classList.add(highlight.kind);
+        else state.highlights.delete(key);
+        const action = element('td', undefined, 'action-cell');
+        const open = element('button', String(state.offset + index + 1), 'row-open'); open.title = 'Открыть все поля записи'; open.setAttribute('aria-label', 'Открыть запись'); open.onclick = () => detail(record, state.selected); action.append(open); row.append(action);
+        for (const column of data.columns) {
+          const value = record[column.name];
+          const td = element('td', undefined, value === null ? 'null' : '');
+          if (/^(smallint|integer|bigint|numeric|real|double)/.test(column.type)) td.classList.add('numeric');
+          const relation = data.relations.find(r => r.column === column.name);
+          const target = relation?.target.replace(/^public\./, '');
+          if (value !== null && relation && app.tables.some(t => t.name === target)) {
+            const link = element('button', value, 'fk'); link.title = `Открыть ${target}: ${value}`;
+            link.onclick = () => selectTable(target, { column: relation.target_column, value }); td.append(link);
+          } else td.textContent = value === null ? 'NULL' : value === '' ? '""' : value;
+          td.title = value === null ? 'NULL' : value; row.append(td);
+        }
+        body.append(row);
+      }
+      state.rows = nextRows; state.identity = identity;
+      $('empty').hidden = data.rows.length > 0;
+      $('empty').textContent = state.search || state.filter ? 'Нет записей по заданному условию.' : 'В таблице пока нет записей. Новые появятся автоматически.';
     }
-    renderTables();
-    if (state.selected) {
+    $('data-table').replaceChildren(head, body);
+  }
+
+  async function refreshPanel(force = false) {
+    if (disposed || !state.selected || (app.paused && !force)) return;
+    if (state.loading) { state.pending = true; return; }
+    state.loading = true;
+    const version = state.version;
+    try {
       const params = new URLSearchParams({ name: state.selected, offset: state.offset, limit: state.limit, search: state.search, sort: state.sort, direction: state.direction });
       if (state.filter) { params.set('column', state.filter.column); params.set('value', state.filter.value); }
-      const data = await get(`/api/table?${params}`);
+      const data = await get('/api/table?' + params);
+      if (disposed) return;
       if (version === state.version) {
         if (Number(data.total) > 0 && state.offset >= Number(data.total)) { state.offset = 0; state.version++; state.pending = true; }
         else { state.data = data; renderData(); }
+        showPanelError('');
       } else state.pending = true;
+    } catch (error) {
+      if (!disposed && version === state.version) showPanelError(error.message === 'The operation was aborted due to timeout' ? 'БД не ответила вовремя. Нажмите «Обновить».' : error.message);
+    } finally {
+      state.loading = false;
+      if (state.pending && !disposed) { state.pending = false; refreshPanel(force); }
     }
-    showError('');
-  } catch (error) { showError(error.message === 'The operation was aborted due to timeout' ? 'БД не ответила вовремя. Нажмите «Обновить».' : error.message); }
+  }
+  $('row-search').oninput = () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { state.search = $('row-search').value; state.offset = 0; state.version++; refreshPanel(true); }, 250);
+  };
+  $('page-size').onchange = () => { state.limit = Number($('page-size').value); state.offset = 0; state.version++; refreshPanel(true); };
+  $('previous').onclick = () => { state.offset = Math.max(0, state.offset - state.limit); state.version++; refreshPanel(true); };
+  $('next').onclick = () => { state.offset += state.limit; state.version++; refreshPanel(true); };
+  $('reset-sort').onclick = () => { state.sort = ''; state.offset = 0; state.version++; refreshPanel(true); };
+  $('clear-filter').onclick = () => selectTable(state.selected);
+  $('data-tab').onclick = () => { state.view = 'data'; renderData(); };
+  $('schema-tab').onclick = () => { state.view = 'schema'; renderData(); };
+
+  return panel;
+}
+async function refresh(force = false) {
+  if (app.paused && !force) return;
+  if (app.loading) { app.pending = true; return; }
+  app.loading = true;
+  try {
+    const overview = await get('/api/tables');
+    app.tables = overview.tables;
+    $('database').textContent = overview.database + ' / ' + overview.schema + ' · PostgreSQL';
+    $('navigator-db').textContent = overview.database;
+    $('add-panel').disabled = !app.tables.length;
+    const missing = app.tables.filter(table => !table.observed);
+    $('observer-warning').hidden = !missing.length;
+    $('observer-warning').textContent = 'Для ' + missing.length + ' таблиц не включены уведомления. Повторно установите наблюдатель по инструкции в database/README.md.';
+    for (const panel of panels) {
+      panel.options();
+      if (!panel.state.selected && app.tables.length) panel.select(app.tables.some(table => table.name === 'receiving_order') ? 'receiving_order' : app.tables[0].name);
+    }
+    renderTables(); showError('');
+    await Promise.all(panels.map(panel => panel.refresh(force)));
+  } catch (error) { showError(error.message); }
   finally {
-    state.loading = false;
-    if (state.pending) { state.pending = false; refresh(force); }
+    app.loading = false;
+    if (app.pending) { app.pending = false; refresh(force); }
   }
 }
 function renderEvents() {
-  $('event-count').textContent = count(state.totalEvents);
+  $('event-count').textContent = count(app.totalEvents);
   const operations = { INSERT: 'Добавление', UPDATE: 'Изменение', DELETE: 'Удаление', TRUNCATE: 'Очистка' };
-  const nodes = state.events.map(event => {
+  const nodes = app.events.map(event => {
     const button = element('button', undefined, `event ${event.operation}`);
     button.append(element('time', stamp(event.at)), element('span', operations[event.operation] || event.operation, 'operation'), element('span', event.table, 'event-table'), element('span', event.transaction, 'tx'));
-    button.onclick = () => selectTable(event.table);
+    button.onclick = () => active?.select(event.table);
     return button;
   });
   $('activity').replaceChildren(...(nodes.length ? nodes : [element('div', 'Ожидаем изменения. Создайте или измените документ в MVP.', 'activity-empty')]));
 }
+
 const source = new EventSource('/api/events');
 source.addEventListener('status', event => {
-  state.connected = JSON.parse(event.data).connected; connectionStatus();
-  if (state.connected) refresh();
+  app.connected = JSON.parse(event.data).connected; connectionStatus();
+  if (app.connected) refresh();
 });
 source.addEventListener('change', event => {
   const change = JSON.parse(event.data);
-  state.totalEvents++; state.events.unshift(change); state.events.length = Math.min(state.events.length, 100);
-  state.changed.set(change.table, change.at);
-  if (!state.paused) { renderEvents(); refresh(); }
+  app.totalEvents++; app.events.unshift(change); app.events.length = Math.min(app.events.length, 100);
+  app.changed.set(change.table, change.at);
+  if (!app.paused) { renderEvents(); refresh(); }
 });
-source.onerror = () => { state.connected = false; connectionStatus(); };
+source.onerror = () => { app.connected = false; connectionStatus(); };
+
 $('table-search').oninput = renderTables;
-let searchTimer;
-$('row-search').oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.search = $('row-search').value; state.offset = 0; state.version++; refresh(true); }, 250); };
-$('pause').onclick = () => { state.paused = !state.paused; connectionStatus(); if (!state.paused) { renderEvents(); refresh(true); } };
+$('add-panel').onclick = addPanel;
+$('pause').onclick = () => { app.paused = !app.paused; connectionStatus(); if (!app.paused) { renderEvents(); refresh(true); } };
 $('refresh').onclick = () => refresh(true);
-$('page-size').onchange = () => { state.limit = Number($('page-size').value); state.offset = 0; state.version++; refresh(true); };
-$('previous').onclick = () => { state.offset = Math.max(0, state.offset - state.limit); state.version++; refresh(true); };
-$('next').onclick = () => { state.offset += state.limit; state.version++; refresh(true); };
-$('reset-sort').onclick = () => { state.sort = ''; state.offset = 0; state.version++; refresh(true); };
-$('clear-filter').onclick = () => selectTable(state.selected);
-$('data-tab').onclick = () => { state.view = 'data'; renderData(); };
-$('schema-tab').onclick = () => { state.view = 'schema'; renderData(); };
 $('close-detail').onclick = () => $('detail').close();
-$('clear-events').onclick = () => { state.events = []; state.totalEvents = 0; state.changed.clear(); renderEvents(); renderTables(); };
+$('clear-events').onclick = () => { app.events = []; app.totalEvents = 0; app.changed.clear(); renderEvents(); renderTables(); };
+addPanel();
 refresh();

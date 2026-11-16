@@ -12,6 +12,7 @@
     <div class="app-name"><span class="db-icon" aria-hidden="true"></span><strong>Биллинг</strong><span class="app-caption">Database Viewer</span></div>
     <span class="toolbar-separator" aria-hidden="true"></span>
     <button id="refresh" class="tool-button" title="Обновить данные" aria-label="Обновить данные"><svg class="icon refresh-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg><span>Обновить</span></button>
+    <button id="add-panel" class="tool-button" type="button" disabled>＋ Добавить таблицу</button>
     <button id="pause" class="tool-button" type="button">Пауза</button>
     <span class="toolbar-separator" aria-hidden="true"></span>
     <span class="readonly"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg> Только чтение</span>
@@ -21,6 +22,7 @@
   <main class="workspace">
     <aside class="sidebar" aria-label="Навигатор базы данных">
       <div class="panel-title"><svg class="icon navigator-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16M13 9h4M13 13h4"/></svg><h1>Навигатор БД</h1></div>
+      <div id="navigator-target" class="navigator-target" role="status">Выбор для панели 1</div>
       <div class="navigator-search"><label class="sr-only" for="table-search">Поиск таблицы</label><input id="table-search" type="search" placeholder="Фильтр таблиц…" autocomplete="off"></div>
       <div class="tree-scroll">
         <details class="tree-connection" open>
@@ -37,29 +39,34 @@
       <div class="sidebar-footer"><span class="db-icon small" aria-hidden="true"></span><span id="database">Подключение к базе…</span></div>
     </aside>
 
-    <section class="content" aria-label="Просмотр таблицы">
+    <section class="content" aria-label="Просмотр таблиц">
       <div id="error" class="error" role="alert" hidden></div>
       <div id="observer-warning" class="warning" hidden></div>
-      <section class="data-panel">
-        <div class="editor-tabs"><div class="object-tab"><span class="table-icon" aria-hidden="true"></span><h2 id="table-title">Выберите таблицу</h2><span class="tab-schema">public</span></div></div>
+      <div id="panels" class="panels"></div>
+      <template id="panel-template">
+      <section class="data-panel" aria-label="Панель таблицы">
+        <div class="pane-toolbar"><button data-role="activate" class="pane-activate" aria-pressed="false"></button><select data-role="table-select" aria-label="Таблица панели"></select><button data-role="close" class="pane-close" aria-label="Закрыть панель" title="Закрыть панель">×</button></div>
+        <div data-role="error" class="error pane-error" role="alert" hidden></div>
+        <div class="editor-tabs"><div class="object-tab"><span class="table-icon" aria-hidden="true"></span><h2 data-role="table-title">Выберите таблицу</h2><span class="tab-schema">public</span></div></div>
         <div class="editor-heading">
           <div class="view-tabs" role="tablist" aria-label="Представление таблицы">
-            <button id="data-tab" role="tab" aria-selected="true"><span class="table-icon" aria-hidden="true"></span>Данные</button>
-            <button id="schema-tab" role="tab" aria-selected="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.1M4 12h.1M4 18h.1"/></svg>Структура</button>
+            <button data-role="data-tab" role="tab" aria-selected="true"><span class="table-icon" aria-hidden="true"></span>Данные</button>
+            <button data-role="schema-tab" role="tab" aria-selected="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.1M4 12h.1M4 18h.1"/></svg>Структура</button>
           </div>
-          <span id="table-description" class="table-description">Таблицы схемы public</span>
+          <span data-role="table-description" class="table-description">Таблицы схемы public</span>
         </div>
         <div class="filter-toolbar">
-          <button id="reset-sort" title="Сначала последние изменённые строки">Последние изменения ↓</button>
-          <label class="row-search"><svg class="icon filter-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><span class="sr-only">Поиск по данным</span><input id="row-search" type="search" placeholder="Фильтр данных: номер, UUID или значение" autocomplete="off"></label>
+          <button data-role="reset-sort" title="Сначала последние изменённые строки">Последние изменения ↓</button>
+          <label class="row-search"><svg class="icon filter-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><span class="sr-only">Поиск по данным</span><input data-role="row-search" type="search" placeholder="Фильтр данных: номер, UUID или значение" autocomplete="off"></label>
         </div>
-        <div id="relation-filter" class="filter-banner" hidden><span id="filter-text"></span><button id="clear-filter">Снять фильтр ×</button></div>
-        <div id="data-scroll" class="data-scroll" tabindex="0" aria-label="Содержимое таблицы"><table id="data-table"></table><div id="empty" class="empty" hidden></div></div>
+        <div data-role="relation-filter" class="filter-banner" hidden><span data-role="filter-text"></span><button data-role="clear-filter">Снять фильтр ×</button></div>
+        <div data-role="data-scroll" class="data-scroll" tabindex="0" aria-label="Содержимое таблицы"><table data-role="data-table"></table><div data-role="empty" class="empty" hidden></div></div>
         <footer class="table-footer">
-          <span id="rows-count" class="count-label">—</span>
-          <div class="pagination"><button id="previous" aria-label="Предыдущая страница" title="Предыдущая страница">◀</button><button id="next" aria-label="Следующая страница" title="Следующая страница">▶</button><span id="page-info">—</span><span class="toolbar-separator" aria-hidden="true"></span><label>Размер страницы <select id="page-size"><option>25</option><option selected>50</option><option>100</option></select></label></div>
+          <span data-role="rows-count" class="count-label">—</span>
+          <div class="pagination"><button data-role="previous" aria-label="Предыдущая страница" title="Предыдущая страница">◀</button><button data-role="next" aria-label="Следующая страница" title="Следующая страница">▶</button><span data-role="page-info">—</span><span class="toolbar-separator" aria-hidden="true"></span><label>Размер страницы <select data-role="page-size"><option>25</option><option selected>50</option><option>100</option></select></label></div>
         </footer>
       </section>
+      </template>
 
       <section class="activity-panel">
         <div class="activity-heading"><h2><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>Журнал событий <span id="event-count" class="badge">0</span></h2><span class="activity-caption">Завершённые транзакции · текущая сессия</span><button id="clear-events" title="Очистить только журнал этой вкладки">Очистить журнал</button></div>
