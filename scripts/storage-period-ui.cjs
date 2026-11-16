@@ -55,11 +55,14 @@ await wait('[...document.querySelectorAll("tbody tr")].length>0 && [...document.
 await evaljs('[...document.querySelectorAll(".storage-filters button")].find(b=>b.textContent==="Сбросить").click()');
 await wait('!new URL(location.href).searchParams.has("query")');
 await wait('document.querySelectorAll("tbody tr").length>1');
-for(const width of [1440,1024,640,360,320]) {
- await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});await pause(300);
- const dims=await evaljs('(()=>{const w=document.querySelector(".table-wrap");w.scrollLeft=100;return {body:document.documentElement.scrollWidth,screen:innerWidth,scroll:w.scrollLeft,headers:document.querySelectorAll("thead th").length}})()');
- assert.ok(dims.body<=width+1,JSON.stringify(dims));assert.ok(dims.scroll>0,JSON.stringify(dims));assert.equal(dims.headers,15);
+for(const [width,height] of [[1440,900],[1366,768],[1024,768],[640,700],[360,640],[320,568]]) {
+ await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await pause(300);
+ const dims=await evaljs('(()=>{const w=document.querySelector(".table-wrap");w.scrollLeft=100;return {body:document.documentElement.scrollWidth,screen:innerWidth,scroll:w.scrollLeft,headers:document.querySelectorAll("thead th").length,pageHeight:document.documentElement.scrollHeight,viewportHeight:innerHeight,tableBottom:w.getBoundingClientRect().bottom,footerBottom:document.querySelector(".pagination").getBoundingClientRect().bottom}})()');
+ assert.ok(dims.body<=width+1,JSON.stringify(dims));assert.ok(dims.scroll>0,JSON.stringify(dims));assert.equal(dims.headers,15);assert.ok(dims.pageHeight<=dims.viewportHeight+1,JSON.stringify(dims));assert.ok(dims.tableBottom<dims.viewportHeight,JSON.stringify(dims));assert.ok(dims.footerBottom<=dims.viewportHeight,JSON.stringify(dims));
 }
+const vertical=await evaljs('(()=>{const w=document.querySelector(".table-wrap");w.scrollTop=w.scrollHeight;const h=document.querySelector("thead th").getBoundingClientRect(),b=w.getBoundingClientRect();return {scroll:w.scrollTop,header:h.top,table:b.top,page:window.scrollY}})()');
+assert.ok(vertical.scroll>0);assert.ok(Math.abs(vertical.header-vertical.table)<3,JSON.stringify(vertical));assert.equal(vertical.page,0);
+await evaljs('document.querySelector(".table-wrap").scrollTop=0');
 await shot('storage-mobile');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
 await evaljs('document.querySelector(".table-wrap").scrollLeft=0');await pause(250);await shot('storage-desktop');
 await evaljs('document.body.style.zoom="90%"');await pause(300);assert.ok(await evaljs('(()=>{const w=document.querySelector(".table-wrap");w.scrollLeft=500;return w.scrollLeft>0&&document.documentElement.scrollWidth<=innerWidth+1})()'));
