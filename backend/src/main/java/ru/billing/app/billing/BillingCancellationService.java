@@ -14,27 +14,31 @@ public class BillingCancellationService {
     public BillingCancellationService(JdbcTemplate jdbc){this.jdbc=jdbc;}
     @Transactional(propagation=Propagation.MANDATORY)
     public void cancel(String resource, UUID orderId) {
-        if(!resource.equals("receiving-orders"))return;
+        String predicate = switch(resource) {
+            case "receiving-orders" -> "receiving_order_id=?";
+            case "shipping-orders" -> "shipping_order_id=? and receiving_order_id is null";
+            default -> throw new IllegalArgumentException("Unsupported billing resource: "+resource);
+        };
         // Invoice creation also locks charges by id before checking availability.
         jdbc.query("""
             select b.id from billing_charge b join service_execution e on e.id=b.service_execution_id
-            where e.receiving_order_id=? order by b.id for update of b
-            """,(rs,n)->rs.getObject(1,UUID.class),orderId);
+            where %s order by b.id for update of b
+            """.formatted(predicate),(rs,n)->rs.getObject(1,UUID.class),orderId);
         var invoices=jdbc.query("""
             select distinct i.code from payment_invoice i join payment_invoice_line l on l.invoice_id=i.id
             join billing_charge b on b.id=l.billing_charge_id join service_execution e on e.id=b.service_execution_id
-            where e.receiving_order_id=? order by i.code
-            """,(rs,n)->rs.getString(1),orderId);
+            where %s order by i.code
+            """.formatted(predicate),(rs,n)->rs.getString(1),orderId);
         if(!invoices.isEmpty())throw new ApiException(HttpStatus.CONFLICT,"CANCELLATION_INVOICED",
             "Начисления включены в счета №"+String.join(", ",invoices)+". Исключите их из чернового счёта перед отменой. Оплаченные счета изменять нельзя");
         // Preserve the exact execution and tariff/charge amounts in the cancellation audit.
         jdbc.update("""
             update order_cancellation set billing_snapshot=(select coalesce(jsonb_agg(jsonb_build_object(
                 'execution',to_jsonb(e),'charge',to_jsonb(b))),'[]'::jsonb)
-                from service_execution e left join billing_charge b on b.service_execution_id=e.id where e.receiving_order_id=?)
+                from service_execution e left join billing_charge b on b.service_execution_id=e.id where %s)
             where resource=? and order_id=?
-            """,orderId,resource,orderId);
-        jdbc.update("delete from billing_charge where service_execution_id in (select id from service_execution where receiving_order_id=?)",orderId);
-        jdbc.update("delete from service_execution where receiving_order_id=?",orderId);
+            """.formatted(predicate),orderId,resource,orderId);
+        jdbc.update("delete from billing_charge where service_execution_id in (select id from service_execution where "+predicate+")",orderId);
+        jdbc.update("delete from service_execution where "+predicate,orderId);
     }
 }

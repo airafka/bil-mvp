@@ -239,7 +239,7 @@ public class ComprehensiveServiceOrderService {
         UUID deliveryId = jdbc.queryForObject("select id from receiving_order where comprehensive_service_order_id = ? order by case when service_role='INITIAL_RECEIVING' then 0 else 1 end, number limit 1",
                 UUID.class, id);
         List<ServiceShippingOrder> removals = jdbc.query("""
-                select sh.id, sh.number as code, sh.order_status as status, sh.planned_shipping_date_time, (select name from client_related_entity where id=sh.consignee_id) as consignee, array_agg(c.code order by c.code) as container_names
+                select sh.id, sh.number as code, sh.order_status as status, sh.planned_shipping_date_time, (select name from client_related_entity where id=sh.consignee_id) as consignee, array_agg(c.code order by c.code) as container_names, array_agg(c.code order by c.code) filter(where not link.return_required) as no_return_names
                 from shipping_order sh
                 join shipping_order_container link on link.shipping_order_id = sh.id
                 join container c on c.id = link.container_id
@@ -247,7 +247,7 @@ public class ComprehensiveServiceOrderService {
                 group by sh.id, sh.number, sh.order_status order by sh.number
                 """, (rs, row) -> new ServiceShippingOrder(rs.getObject("id", UUID.class), rs.getInt("code"),
                         rs.getString("status"), Arrays.stream((Object[]) rs.getArray("container_names").getArray())
-                                .map(Object::toString).toList(), rs.getObject("planned_shipping_date_time", java.time.LocalDateTime.class), rs.getString("consignee")), id);
+                                .map(Object::toString).toList(), rs.getObject("planned_shipping_date_time", java.time.LocalDateTime.class), rs.getString("consignee"), rs.getArray("no_return_names")==null ? List.of() : Arrays.stream((Object[])rs.getArray("no_return_names").getArray()).map(Object::toString).toList()), id);
         List<ServiceSelectableContainer> selectable = jdbc.query("""
                 select distinct c.id, c.code, c.container_type as type
                 from waybill_details w
@@ -308,7 +308,9 @@ public class ComprehensiveServiceOrderService {
                     (select count(distinct id) from own_returns) as return_order_count,
                     (select count(distinct id) from own_returns where status = 'COMPLETED') as return_orders_completed,
                     (select count(*) from initial_containers ic where not exists
-                        (select 1 from returns r where r.container_id = ic.container_id)) as return_missing
+                        (select 1 from returns r where r.container_id = ic.container_id)
+                        and not exists(select 1 from shipping sh join shipping_order_container sc on sc.shipping_order_id=sh.id
+                            where sc.container_id=ic.container_id and not sc.return_required)) as return_missing
                 from receiving_order initial
                 join comprehensive_service_order parent on parent.id=initial.comprehensive_service_order_id
                 join complex_service_catalog selected on selected.id=parent.selected_complex_service_id

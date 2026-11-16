@@ -104,22 +104,9 @@ public class OrderStatusService {
                 """.formatted(table), id);
         }
         if (!resource.equals("comprehensive-service-orders") && request.status() == Status.COMPLETED) {
-            jdbc.update("""
-                update comprehensive_service_order s set status='COMPLETED'
-                where s.id in (select comprehensive_service_order_id from %s where id=? union select source_service_order_id from comprehensive_service_order where id=(select comprehensive_service_order_id from %s where id=?)) and s.status not in ('COMPLETED','CANCELLED')
-                  and not exists(select 1 from receiving_order where comprehensive_service_order_id=s.id and order_status not in ('COMPLETED','CANCELLED'))
-                  and not exists(select 1 from shipping_order where comprehensive_service_order_id=s.id and order_status not in ('COMPLETED','CANCELLED'))
-                  and (exists(select 1 from receiving_order where comprehensive_service_order_id=s.id and service_role='RETURN_RECEIVING') or exists(select 1 from receiving_order r join shipping_order sh on sh.id=r.source_shipping_order_id where sh.comprehensive_service_order_id=s.id and r.service_role='RETURN_RECEIVING'))
-                    and not exists(select 1 from shipping_order_source_container link where link.comprehensive_service_order_id=s.id
-                      and not exists(select 1 from receiving_order r join receiving_order_container rc on rc.receiving_order_id=r.id
-                        where r.source_shipping_order_id=link.shipping_order_id and r.service_role='RETURN_RECEIVING'
-                          and r.order_status='COMPLETED' and rc.container_id=link.container_id))
-                  and not exists(select 1 from receiving_order r join waybill_details w on w.receiving_order_id=r.id
-                      join waybill_railway_carriage rc on rc.waybill_id=w.id
-                      join waybill_container_details wc on wc.waybill_railway_carriage_id=rc.id
-                      where r.comprehensive_service_order_id=s.id and not exists(select 1 from shipping_order_source_container link
-                          where link.comprehensive_service_order_id=s.id and link.container_id=wc.container_id))
-                """.formatted(table,table),id,id);
+            jdbc.query("select comprehensive_service_order_id from "+table+" where id=? union select source_service_order_id from comprehensive_service_order where id=(select comprehensive_service_order_id from "+table+" where id=?)",
+                (rs,n)->rs.getObject(1,UUID.class),id,id).stream().filter(java.util.Objects::nonNull)
+                .forEach(parent->ru.billing.app.comprehensiveserviceorder.ServiceCompletion.refresh(jdbc,parent));
         }
         return new CreatedOrderResponse(id, current.code(), request.status().name());
     }

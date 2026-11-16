@@ -18,11 +18,30 @@ public class BillingService {
     @Transactional(propagation = Propagation.MANDATORY)
     public void complete(String resource, UUID orderId) {
         switch (resource) {
-            case "shipping-orders" -> requireInitialReceivingCompleted(orderId);
+            case "shipping-orders" -> completeShipping(orderId);
             case "receiving-orders" -> completeReceiving(orderId);
             case "comprehensive-service-orders" -> { }
             default -> throw new IllegalArgumentException("Unsupported billing resource: " + resource);
         }
+    }
+
+    // Also used when the decision is made after shipping was completed.
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void completeShipping(UUID shippingId) {
+        requireInitialReceivingCompleted(shippingId);
+        var services = jdbc.query("""
+                select s.id,s.selected_complex_service_id from shipping_order sh
+                join comprehensive_service_order s on s.id=sh.comprehensive_service_order_id
+                where sh.id=? and s.workflow='RAILWAY_RETURN' and sh.transport_type='VEHICLE'
+                """, (rs,n)->new Receiving(rs.getObject(1,UUID.class),null,shippingId,rs.getObject(2,UUID.class)),shippingId);
+        if (services.isEmpty()) return;
+        var containers = jdbc.query("""
+                select sc.container_id from shipping_order_container sc
+                join shipping_order_source_container link on link.shipping_order_id=sc.shipping_order_id
+                    and link.container_id=sc.container_id
+                where sc.shipping_order_id=? and not sc.return_required order by sc.container_id
+                """,(rs,n)->rs.getObject(1,UUID.class),shippingId);
+        for (UUID container : containers) charge(services.getFirst(),container,null);
     }
 
     private void requireInitialReceivingCompleted(UUID shippingId) {

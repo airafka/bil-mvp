@@ -1,5 +1,6 @@
 import { updateResponsiveTable } from '../components/useResponsiveTables'
 import { SidebarActions } from '../components/SidebarActions'
+import { ServiceNoReturnAction } from '../components/ServiceNoReturnAction'
 import { ServiceReturnAction } from '../components/ServiceReturnAction'
 import type { CreatedReturns } from '../api'
 import { RelatedOrderLink } from '../components/RelatedOrderLink'
@@ -205,7 +206,7 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
       </div>
       <div className="service-tab-context" data-charges={activeTab === 'charges'}>
       <div className="service-tab-charge-totals" aria-hidden={activeTab !== 'charges'}><BillingChargeTotals totalWithoutVat={data.totalWithoutVat} totalWithVat={data.totalWithVat} /></div>
-      {(activeTab === 'receiving' || activeTab === 'shipping' || activeTab === 'returns') && <div className="service-tab-actions service-section-actions">{activeTab === 'shipping' && <ServiceReturnAction service={data.order} disabled={editingMetadata || preparing || metadataBusy || creatingShipping || !removals.length} onCreated={result => void returnCreated(result)} onError={setMetadataError} />}
+      {(activeTab === 'receiving' || activeTab === 'shipping' || activeTab === 'returns') && <div className="service-tab-actions service-section-actions">{activeTab === 'shipping' && <><ServiceNoReturnAction serviceId={data.order.id} disabled={editingMetadata || preparing || metadataBusy || creatingShipping || !removals.some(order => order.status !== 'CANCELLED')} onSaved={fresh => { setData(fresh); setPreparationNotice('Для выбранных КТК возврат не нужен. По выполненным вывозам услуга начислена.'); setRouteRevision(value => value + 1) }} onError={setMetadataError} /><ServiceReturnAction service={data.order} disabled={editingMetadata || preparing || metadataBusy || creatingShipping || !removals.length} onCreated={result => void returnCreated(result)} onError={setMetadataError} /></>}
         <SidebarActions><button type="button" className="secondary-button icon-button" aria-label={sectionActionLabel} title={sectionActionLabel} disabled={preparing||editingMetadata||metadataBusy||creatingShipping||!(activeTab==='receiving'?!['COMPLETED','CANCELLED'].includes(receiving.status):activeTab==='shipping'?removals.some(o=>!['COMPLETED','CANCELLED'].includes(o.status)):ownReturns.some(o=>!['COMPLETED','CANCELLED'].includes(o.status)))} onClick={completeSection}><ActionIcon name="complete" /></button>
         <button type="button" className="secondary-button icon-button" aria-label="Заполнить заявки и создать рейсы" title="Заполнить текущую дату и время, контрагентов и создать рейсы" disabled={preparing||editingMetadata||metadataBusy||creatingShipping||!(activeTab==='receiving'?receiving.status==='DRAFT':activeTab==='shipping'?removals.some(o=>o.status==='DRAFT'):ownReturns.some(o=>o.status==='DRAFT'))} onClick={prepareSection}><ActionIcon name="magic" /></button></SidebarActions></div>}
       </div>
@@ -232,7 +233,7 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
 
       </div>
       <div id="service-panel-charges" role="tabpanel" aria-labelledby="service-tab-charges" tabIndex={0} hidden={activeTab !== 'charges'}>
-        <BillingCharges active={activeTab === 'charges'} comprehensiveServiceOrderId={comprehensiveServiceOrderId} refreshKey={data.totalWithoutVat+':'+data.totalWithVat+':'+data.progress.returnCompleted} />
+        <BillingCharges active={activeTab === 'charges'} comprehensiveServiceOrderId={comprehensiveServiceOrderId} refreshKey={data.totalWithoutVat+':'+data.totalWithVat+':'+data.progress.returnCompleted+':'+routeRevision} />
       </div>
       <div id="service-panel-receiving" role="tabpanel" aria-labelledby="service-tab-receiving" tabIndex={0} hidden={activeTab !== 'receiving'}>
       <section className="service-order-section" aria-label="Заявки на поставку - ЖД">
@@ -258,7 +259,7 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
           <thead><tr><th scope="col" className="composition-index">№</th><th scope="col">Номер заявки</th><th scope="col">Номер КТК</th><th scope="col">Дата и время вывоза</th><th scope="col">Грузополучатель</th><th scope="col">Рейс</th><th scope="col">Статус</th></tr></thead>
           <tbody>{removals.map((order, index) => <tr key={order.id}><td className="composition-index">{index + 1}</td>
             <td><Link className="order-code" to={`/shipping-orders/${order.id}`}>{order.code}</Link></td>
-            <td>{order.containerNames.map(name => <span className="service-cargo-item" key={name}>{name}</span>)}</td>
+            <td>{order.containerNames.map(name => <span className="service-cargo-item" key={name}>{name}{order.noReturnContainerNames.includes(name) && <small className="service-cargo-item">Возврат не нужен</small>}</span>)}</td>
             {metadataCells('SHIPPING',order,order.consignee)}
             <td><OrderRouteCell key={routeRevision} disabled={editingMetadata||preparing} order={transportOrders.get(order.id)} /></td><td><StatusBadge status={order.status} /></td>
           </tr>)}</tbody>

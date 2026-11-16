@@ -267,3 +267,9 @@ export function cancelOrder(apiPath: string, id: string, expectedStatus: string,
 export function getOrderCancellation(apiPath: string, id: string) {
   return request<OrderCancellation>(apiPath + '/' + id + '/cancellation')
 }
+
+export type NoReturnCandidate = ReturnCandidate & { shippingStatus: string; returnRequired: boolean }
+export function getNoReturnCandidates(id: string) { return request<NoReturnCandidate[]>(`/api/comprehensive-service-orders/${id}/no-return/available-containers`) }
+export function selectNoReturnContainers(id: string, containerIds: string[]) {
+  return request<ComprehensiveServiceOrderDetails>(`/api/comprehensive-service-orders/${id}/no-return`, { method: 'POST', body: JSON.stringify({ containerIds }) })
+}

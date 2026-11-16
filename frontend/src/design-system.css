@@ -497,7 +497,7 @@ tbody th { position: static; }
   .navigation-tree .nav-children { margin-left: 12px; }
 }
 
-.service-section-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.service-section-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; max-width:100%; }
 
 /* Compact pending-container card: heading and hint share the action row. */
 .service-table-page .service-pending-card .bulk-return-heading { padding: 0; margin: 0 0 12px; gap: 12px; }

@@ -15,7 +15,7 @@ export function ServiceReturnAction({ service, disabled, onCreated, onError }: {
     lock.current = true; setLoading(true)
     try {
       const available = await getServiceReturnCandidates(service.id)
-      if (!available.length) onError('Нет КТК для возврата: для всех вывезенных КТК уже оформлены возвратные заявки либо ещё не созданы заявки на вывоз.')
+      if (!available.length) onError('Нет КТК для возврата: для КТК уже оформлены возвраты, отмечено «Возврат не нужен» либо ещё не созданы заявки на вывоз.')
       else { onError(''); setCandidates(available) }
     } catch (cause) { onError(cause instanceof Error ? cause.message : 'Не удалось загрузить КТК для возврата') }
     finally { lock.current = false; setLoading(false) }

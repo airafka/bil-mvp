@@ -57,6 +57,8 @@ public class ReturnReceivingService {
         boolean separate = differentClient || !contractId.equals(source.contractId());
         var ids = new HashSet<UUID>();
         for (UUID containerId : containerIds) {
+            if (Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from shipping_order_container where shipping_order_id=? and container_id=? and not return_required)",Boolean.class,shippingId,containerId)))
+                throw new ApiException(HttpStatus.CONFLICT,"RETURN_NOT_REQUIRED","Для выбранного КТК отмечено: возврат не нужен");
             if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from receiving_order_container where source_shipping_order_id=? and container_id=?)",Boolean.class,shippingId,containerId)))
                 throw new ApiException(HttpStatus.CONFLICT,"RETURN_ALREADY_EXISTS","Для выбранного КТК уже создан возврат. Обновите заявку.");
             if (!ids.add(containerId)) throw new ApiException(HttpStatus.BAD_REQUEST, "DUPLICATE_CONTAINER", "КТК указан повторно");
@@ -149,7 +151,9 @@ public class ReturnReceivingService {
             from shipping_order_source_container link
             join shipping_order sh on sh.id=link.shipping_order_id
             join container c on c.id=link.container_id
-            where link.comprehensive_service_order_id=? and not exists (
+            where link.comprehensive_service_order_id=? and sh.order_status<>'CANCELLED'
+              and exists(select 1 from shipping_order_container sc where sc.shipping_order_id=sh.id
+                and sc.container_id=c.id and sc.return_required) and not exists (
                 select 1 from receiving_order_container rc
                 where rc.source_shipping_order_id=sh.id and rc.container_id=c.id)
             order by sh.number,c.code,c.id

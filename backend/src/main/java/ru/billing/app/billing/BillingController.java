@@ -15,7 +15,7 @@ public class BillingController {
     public BillingController(JdbcTemplate jdbc){this.jdbc=jdbc;}
     public record Charge(UUID id, OffsetDateTime performedAt, String clientName, String contractName,
             UUID comprehensiveServiceOrderId,int comprehensiveServiceOrderCode,String containerName,String serviceName,
-            UUID receivingOrderId,int receivingOrderCode,UUID shippingOrderId,int shippingOrderCode,
+            UUID receivingOrderId,Integer receivingOrderCode,UUID shippingOrderId,int shippingOrderCode,
             BigDecimal amountWithoutVat,BigDecimal amountWithVat,String currency){}
     public record ChargePage(List<Charge> items,BigDecimal totalWithoutVat,BigDecimal totalWithVat,long total,int page,int size){}
     @GetMapping
@@ -34,10 +34,10 @@ public class BillingController {
                 from billing_charge b join service_execution e on e.id=b.service_execution_id
                 join comprehensive_service_order s on s.id=e.comprehensive_service_order_id join client c on c.id=b.client_id join contract ct on ct.id=b.contract_id
                 join container k on k.id=e.container_id join complex_service_catalog cat on cat.id=e.complex_service_id
-                join receiving_order r on r.id=e.receiving_order_id join shipping_order sh on sh.id=e.shipping_order_id
+                left join receiving_order r on r.id=e.receiving_order_id join shipping_order sh on sh.id=e.shipping_order_id
                 """+filter+" order by b.performed_at desc,b.id limit ? offset ?",(rs,n)->new Charge(rs.getObject("id",UUID.class),rs.getObject("performed_at",OffsetDateTime.class),
                     rs.getString("client_name"),rs.getString("contract_name"),rs.getObject("comprehensive_service_order_id",UUID.class),rs.getInt("comprehensive_service_order_code"),
-                    rs.getString("container_name"),rs.getString("service_name"),rs.getObject("receiving_id",UUID.class),rs.getInt("receiving_code"),
+                    rs.getString("container_name"),rs.getString("service_name"),rs.getObject("receiving_id",UUID.class),rs.getObject("receiving_code",Integer.class),
                     rs.getObject("shipping_id",UUID.class),rs.getInt("shipping_code"),rs.getBigDecimal("amount_without_vat"),rs.getBigDecimal("amount_with_vat"),rs.getString("currency")),params.toArray());
         return new ChargePage(items,(BigDecimal)totals.get("without_vat"),(BigDecimal)totals.get("with_vat"),((Number)totals.get("total")).longValue(),page,size);
     }

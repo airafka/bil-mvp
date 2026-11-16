@@ -1,15 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { createServiceReturns, getReferenceOptions, getReturnContracts, type CreatedReturns, type ReturnTariffContract } from '../api'
+import { createServiceReturns, getServiceReturnCandidates, getReferenceOptions, getReturnContracts, type CreatedReturns, type ReturnTariffContract } from '../api'
 import type { OrderDetails, ReferenceOption } from '../domain'
 import { AppOverlay } from './AppOverlay'
 import { UiInput, UiSelect } from './FormControls'
 import { Notification } from './Notification'
 
 export function CreateReturnDialog({ order, onClose, onCreated }: { order: OrderDetails; onClose: () => void; onCreated: (result: CreatedReturns) => void }) {
-  const returned = new Set(order.returnOrders?.filter(item => item.status !== 'CANCELLED').flatMap(item => item.containerIds) ?? [])
-  const available = order.containers.filter(item => !returned.has(item.containerId))
-  return <ReturnSelectionDialog context={order} serviceId={order.comprehensiveServiceOrderId!} containers={available} selectInitially onClose={onClose} onCreated={onCreated} />
+  const [available, setAvailable] = useState<Candidate[] | null>(null)
+  const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  const loadingDialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => { loadingDialog.current?.showModal() }, [])
+  useEffect(() => {
+    let active = true
+    getServiceReturnCandidates(order.comprehensiveServiceOrderId!).then(rows => {
+      if (active) setAvailable(rows.filter(row => row.shippingOrderId === order.id))
+    }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'Не удалось загрузить КТК') })
+    return () => { active = false }
+  }, [order.id, order.comprehensiveServiceOrderId, attempt])
+  if (available?.length) return <ReturnSelectionDialog context={order} serviceId={order.comprehensiveServiceOrderId!} containers={available} selectInitially onClose={onClose} onCreated={onCreated} />
+  return <AppOverlay><dialog ref={loadingDialog} className="route-side-dialog return-dialog" aria-label="Создать возврат" onCancel={event => { event.preventDefault(); onClose() }}>
+    <header className="route-dialog-heading"><h2>Создать возврат</h2><button type="button" className="close-button" aria-label="Закрыть форму возврата" onClick={onClose}>×</button></header>
+    <div className="route-drawer-body">{error ? <div role="alert">{error}<button type="button" className="secondary-button" onClick={() => { setError(''); setAttempt(value => value + 1) }}>Повторить</button></div> : <p role="status">{available ? 'Нет КТК для возврата: возврат уже оформлен или не нужен.' : 'Загружаем КТК…'}</p>}</div>
+  </dialog></AppOverlay>
 }
 
 type ReturnContext = { clientId: string; clientName: string; contractId: string | null; contractName: string | null }
