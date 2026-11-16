@@ -97,9 +97,9 @@ public class ContainerStorageController {
             @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf) {
         var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,date(asOf));
         var out=new StringBuilder("\uFEFF");
-        csv(out,"Номер КТК","Площадка","Заявка на поставку","Прибыл","Клиент заявки на поставку","Собственник при приёме",
-            "На чём прибыл","Грузоперевозчик","Груз (ЕТСНГ)","Груж/порож","Заявка на вывоз","Вывезен",
-            "На чём вывезен","Перевозчик на вывоз","Грузополучатель","Кол-во дней хранения","В стоке","Состояние","Проверка");
+        csv(out,"Номер КТК","Площадка","Заявка поставки","Прибыл","Клиент заявки поставки","Собственник при приёме",
+            "Транспорт поставки","Перевозчик поставки","Груз (ЕТСНГ)","Груж/порож","Заявка вывоза","Вывезен",
+            "Транспорт вывоза","Перевозчик вывоза","Грузополучатель","Кол-во дней хранения","В стоке","Состояние","Проверка");
         jdbc.query(SELECT+f.sql()+" order by p.arrival_at desc,p.id",rs->{
             Row r=row(rs);csv(out,r.containerName(),r.terminalAreaName(),r.receivingOrderNumber(),format(r.arrivalAt()),r.clientName(),r.ownerName(),
                 transport(r.arrivalTransport()),r.arrivalCarrier(),r.cargoName(),r.empty()==null?"Не указан":r.empty()?"Порожний":"Гружёный",

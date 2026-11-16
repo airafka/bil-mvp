@@ -30,7 +30,7 @@ await go('/container-storage');await wait('document.querySelectorAll("tbody tr t
 assert.equal(await evaljs('document.querySelectorAll("thead th").length'),15);
 const headers=await evaljs('[...document.querySelectorAll("thead th")].map(h=>h.textContent)');
 for(const removed of ['Груж/порож','В стоке','Площадка','Состояние','Клиент поставки','Собственник при приёме'])assert.ok(!headers.includes(removed));
-for(const added of ['Клиент/собственник поставки','Клиент/собственник вывоза','Грузоотправитель','Грузополучатель','Перевозчик на поставку','Перевозчик на вывоз'])assert.ok(headers.includes(added));
+for(const added of ['Клиент/собственник поставки','Клиент/собственник вывоза','Грузоотправитель','Грузополучатель','Перевозчик поставки','Перевозчик вывоза','Заявка поставки','Заявка вывоза','Транспорт поставки','Транспорт вывоза'])assert.ok(headers.includes(added));
 assert.ok(await evaljs('[...document.querySelectorAll("tbody a")].filter(a=>a.pathname.includes("-orders/")).every(a=>/^[0-9]+$/.test(a.textContent))'));
 const report=await (await fetch(base+'/api/container-storage-periods')).json();
 const cells=await evaljs('[...document.querySelectorAll("tbody tr")].map(r=>[...r.cells].map(c=>c.textContent))');
