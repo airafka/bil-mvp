@@ -13,6 +13,7 @@ test('HTTP reads every table and rejects mutations, unknown identifiers and fore
       assert.equal(result.status, 200, table.name);
       const data = await result.json();
       assert.equal(data.name, table.name); assert.ok(data.columns.length > 0);
+      assert.ok(data.columns.every(column => typeof column.note === 'string' && column.note.length > 0), table.name + ' attribute notes');
       assert.ok(data.rows.length <= 50);
     }
     assert.equal((await fetch(url + '/api/tables', { method: 'POST' })).status, 405);

@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { attributeNote } from './attribute-notes.mjs';
 
 // PostgreSQL numeric values and timestamps remain lossless strings in the browser.
 for (const oid of [20, 1114, 1184, 1082, 1700]) pg.types.setTypeParser(oid, value => value);
@@ -63,6 +64,7 @@ export async function tablePage(params) {
     if (!(await tables(client)).some(t => t.name === name)) throw new InputError('Таблица не найдена');
     const columns = (await client.query(`SELECT a.attname AS name,
       format_type(a.atttypid,a.atttypmod) AS type, NOT a.attnotnull AS nullable,
+      col_description(a.attrelid,a.attnum) AS comment,
       EXISTS(SELECT 1 FROM pg_index i WHERE i.indrelid=a.attrelid AND i.indisprimary
         AND a.attnum=ANY(i.indkey)) AS primary
       FROM pg_attribute a WHERE a.attrelid=$1::regclass AND a.attnum>0 AND NOT a.attisdropped
@@ -95,7 +97,8 @@ export async function tablePage(params) {
     const projection = columns.map(c => `t.${quote(c.name)}::text AS ${quote(c.name)}`).join(', ');
     const rows = (await client.query(`SELECT ${projection} FROM public.${quote(name)} t${where}
       ORDER BY ${order}, ${pk || 't.ctid'} LIMIT $${values.length + 1} OFFSET $${values.length + 2}`, [...values, limit, offset])).rows;
-    return { name, columns, relations, rows, total, offset, limit, at: new Date().toISOString() };
+    return { name, columns: columns.map(column => ({ ...column, note: attributeNote(name, column, relations) })),
+      relations, rows, total, offset, limit, at: new Date().toISOString() };
   });
 }
 

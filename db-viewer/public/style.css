@@ -259,3 +259,6 @@ dialog::backdrop { background: #080808b3; backdrop-filter: blur(3px); }
   .pane-activate { font-size: 10px; }
   .sidebar { height: 270px; }
 }
+
+/* Attribute explanations stay readable instead of being cut off like data cells. */
+td.schema-note { min-width: 260px; width: 420px; max-width: 520px; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; font: 13px/1.55 "Segoe UI", Arial, sans-serif; color: #d0d9e5; padding: 10px 12px; vertical-align: top; }

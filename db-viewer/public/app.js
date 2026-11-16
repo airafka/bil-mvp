@@ -166,11 +166,12 @@ function createPanel(number) {
     const head = element('thead'), body = element('tbody'), heading = element('tr');
     head.append(heading);
     if (state.view === 'schema') {
-      for (const title of ['Колонка', 'Тип данных', 'NULL', 'Ключ', 'Связь']) heading.append(element('th', title));
+      for (const title of ['Колонка', 'Примечание', 'Тип данных', 'NULL', 'Ключ', 'Связь']) heading.append(element('th', title));
       for (const column of data.columns) {
         const row = element('tr');
         const relation = data.relations.find(r => r.column === column.name);
-        for (const text of [column.name, column.type, column.nullable ? 'Да' : 'Нет', column.primary ? 'PRIMARY KEY' : '', relation ? `${relation.target}.${relation.target_column}` : '—']) row.append(element('td', text));
+        row.append(element('td', column.name), element('td', column.note || 'Описание назначения атрибута пока не задано.', 'schema-note'));
+        for (const text of [column.type, column.nullable ? 'Да' : 'Нет', column.primary ? 'PRIMARY KEY' : '', relation ? `${relation.target}.${relation.target_column}` : '—']) row.append(element('td', text));
         body.append(row);
       }
       $('empty').hidden = true;
