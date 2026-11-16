@@ -259,7 +259,7 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
           <thead><tr><th scope="col" className="composition-index">№</th><th scope="col">Номер заявки</th><th scope="col">Номер КТК</th><th scope="col">Дата и время вывоза</th><th scope="col">Грузополучатель</th><th scope="col">Рейс</th><th scope="col">Статус</th></tr></thead>
           <tbody>{removals.map((order, index) => <tr key={order.id}><td className="composition-index">{index + 1}</td>
             <td><Link className="order-code" to={`/shipping-orders/${order.id}`}>{order.code}</Link></td>
-            <td>{order.containerNames.map(name => <span className="service-cargo-item" key={name}>{name}{order.noReturnContainerNames.includes(name) && <small className="service-cargo-item">Возврат не нужен</small>}</span>)}</td>
+            <td>{order.containerNames.map(name => <span className="service-cargo-item" key={name}>{name}</span>)}</td>
             {metadataCells('SHIPPING',order,order.consignee)}
             <td><OrderRouteCell key={routeRevision} disabled={editingMetadata||preparing} order={transportOrders.get(order.id)} /></td><td><StatusBadge status={order.status} /></td>
           </tr>)}</tbody>

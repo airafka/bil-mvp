@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router'
 import { getNoReturnCandidates, selectNoReturnContainers, type NoReturnCandidate } from '../api'
 import type { ComprehensiveServiceOrderDetails } from '../comprehensiveServiceOrder'
 import { AppOverlay } from './AppOverlay'
 import { UiInput } from './FormControls'
-import { StatusBadge } from './StatusBadge'
 
 export function ServiceNoReturnAction({ serviceId, disabled, onSaved, onError }: {
   serviceId: string; disabled: boolean
@@ -53,20 +51,16 @@ function NoReturnDialog({ serviceId, onClose, onSaved }: {
         <button type="button" className="close-button" aria-label="Закрыть выбор КТК без возврата" disabled={busy} onClick={onClose}>×</button>
       </div></header>
       <div className="route-drawer-body">
-        <p>Для выбранных КТК услуга начисляется при выполнении автовывоза. Если вывоз уже выполнен, начисление создаётся сразу.</p>
-        <p>КТК с оформленным возвратом недоступны для выбора.</p>
         {loading && <p role="status">Загружаем КТК…</p>}
         {loadError && <div role="alert"><p>{loadError}</p><button type="button" className="secondary-button" onClick={() => { setLoading(true); setLoadError(''); setAttempt(value => value + 1) }}>Повторить</button></div>}
         {!loading && !loadError && <>
           {!available.length && <p role="status">Нет КТК для выбора: возвраты уже оформлены, отмечены как ненужные или отсутствуют активные автовывозы.</p>}
-          {rows.length > 0 && <div className="table-wrap return-container-scroll"><table className="return-container-table" data-responsive-min-width={460} aria-label="КТК без возврата">
-            <colgroup><col style={{ width: 44 }} /><col /><col /><col /></colgroup>
-            <thead><tr><th scope="col" className="composition-index"><UiInput type="checkbox" aria-label="Выбрать все КТК без возврата" autoFocus disabled={busy || !available.length} checked={available.length > 0 && selected.length === available.length} ref={element => { if (element) element.indeterminate = selected.length > 0 && selected.length < available.length }} onChange={event => setSelected(event.target.checked ? available.map(row => row.containerId) : [])} /></th><th scope="col">Номер КТК</th><th scope="col">Вывоз</th><th scope="col">Статус</th></tr></thead>
+          {rows.length > 0 && <div className="table-wrap return-container-scroll"><table className="return-container-table" data-responsive-min-width={300} aria-label="КТК без возврата">
+            <colgroup><col style={{ width: 44 }} /><col /></colgroup>
+            <thead><tr><th scope="col" className="composition-index"><UiInput type="checkbox" aria-label="Выбрать все КТК без возврата" autoFocus disabled={busy || !available.length} checked={available.length > 0 && selected.length === available.length} ref={element => { if (element) element.indeterminate = selected.length > 0 && selected.length < available.length }} onChange={event => setSelected(event.target.checked ? available.map(row => row.containerId) : [])} /></th><th scope="col">Номер КТК</th></tr></thead>
             <tbody>{rows.map(row => <tr key={row.containerId}>
               <td className="composition-index"><UiInput type="checkbox" aria-label={`Выбрать КТК ${row.containerName}`} disabled={busy || !row.returnRequired} checked={!row.returnRequired || selected.includes(row.containerId)} onChange={event => setSelected(value => event.target.checked ? [...value, row.containerId] : value.filter(id => id !== row.containerId))} /></td>
-              <td>{row.containerName}{!row.returnRequired && <div>Возврат не нужен</div>}</td>
-              <td><Link to={`/shipping-orders/${row.shippingOrderId}`}>№{row.shippingOrderCode}</Link></td>
-              <td><StatusBadge status={row.shippingStatus} /></td>
+              <td>{row.containerName}</td>
             </tr>)}</tbody>
           </table></div>}
         </>}

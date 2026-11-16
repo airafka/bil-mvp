@@ -36,7 +36,6 @@ assert.equal(await evaljs('document.querySelectorAll("dialog[open] tbody input:c
 await evaljs('document.querySelector("dialog[open] tbody input").click()');assert.ok(await evaljs('document.querySelector("dialog[open] thead input").indeterminate'));
 await evaljs('document.querySelector("dialog[open] thead input").click()');
 await evaljs('document.querySelector("dialog[open] button[type=submit]").click()');await wait('!document.querySelector("dialog[open]")');
-assert.equal(await evaljs('document.querySelectorAll("#service-panel-shipping small").length'),2);
 assert.equal(sql("select count(*) from service_execution where comprehensive_service_order_id='"+fixture.service+"'"),'1','only completed shipment charged');
 await shot('saved');
 await evaljs('document.body.style.zoom="0.9"');await pause(300);assert.ok(await evaljs('document.documentElement.scrollWidth<=innerWidth'),'Page overflow at 90%');await evaljs('document.body.style.zoom=""');
