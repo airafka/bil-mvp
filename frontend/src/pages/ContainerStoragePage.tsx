@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { request } from '../http'
-import type { PagedResponse } from '../domain'
-import { UiInput } from '../components/FormControls'
+import type { PagedResponse, ReferenceOption } from '../domain'
+import { UiSelect } from '../components/FormControls'
 import { TableReveal } from '../components/TableReveal'
 import { storageCargoName, storageDate, timeSourceLabel, transportLabel, type StorageIssue, type StoragePeriod } from '../containerStorage'
 import './ContainerStoragePage.css'
@@ -42,15 +42,15 @@ export default function ContainerStoragePage() {
   if(params.get('periodId')) filter.set('periodId',params.get('periodId')!)
   const url = '/api/container-storage-periods?' + filter + '&page=' + page
   const requestKey = url + ':' + attempt
-  const [result, setResult] = useState<{ key: string; data: PagedResponse<StoragePeriod>; issues: StorageIssue[] } | null>(null)
+  const [result, setResult] = useState<{ key: string; data: PagedResponse<StoragePeriod>; issues: StorageIssue[]; containers: ReferenceOption[] } | null>(null)
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null)
   const error = failure?.key === requestKey ? failure.message : ''
   const loading = result?.key !== requestKey && !error
   const data = result?.key === requestKey ? result.data : null
   useEffect(() => {
     let active = true
-    Promise.all([request<PagedResponse<StoragePeriod>>(url), request<StorageIssue[]>('/api/container-storage-periods/issues')])
-      .then(([data, issues]) => { if (active) { setResult({ key: requestKey, data, issues }); setFailure(null) } })
+    Promise.all([request<PagedResponse<StoragePeriod>>(url), request<StorageIssue[]>('/api/container-storage-periods/issues'), request<ReferenceOption[]>('/api/container-storage-periods/containers')])
+      .then(([data, issues, containers]) => { if (active) { setResult({ key: requestKey, data, issues, containers }); setFailure(null) } })
       .catch((cause: unknown) => { if (active) setFailure({ key: requestKey, message: cause instanceof Error ? cause.message : 'Не удалось загрузить хранение' }) })
     return () => { active = false }
   }, [url, requestKey])
@@ -63,11 +63,14 @@ export default function ContainerStoragePage() {
     <div className="page-header"><h1>Хранение КТК</h1><div className="storage-actions"><button className="secondary-button" onClick={() => setAttempt(a => a + 1)}>Обновить</button>
       <a className="secondary-button" href={'/api/container-storage-periods/export?' + filter}>Выгрузить CSV</a></div></div>
     <form className="storage-filters" onSubmit={e => { e.preventDefault(); change('query', search) }}>
-      <label>Номер КТК<UiInput value={search} onChange={e => setDraftSearch({ query, value: e.target.value })} placeholder="Номер КТК" /></label>
-      <button className="secondary-button" type="submit">Найти</button>
+      <label className="field horizontal-field"><span>Номер КТК</span><UiSelect value={search} disabled={loading || !!error} onChange={e => setDraftSearch({ query, value: e.target.value })}>
+        <option value="">{loading ? 'Загрузка…' : 'Все КТК'}</option>
+        {search && !result?.containers.some(item => item.name === search) && <option value={search}>{search}</option>}
+        {result?.containers.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+      </UiSelect></label>
+      <button className="secondary-button" type="submit" disabled={loading || !!error}>Найти</button>
       {params.size > 0 && <button type="button" className="secondary-button" onClick={() => { setParams({}); setDraftSearch({ query: '', value: '' }) }}>Сбросить</button>}
     </form>
-    <p className="composition-hint">Календарные дни, включая день прибытия и вывоза, по московскому времени. Длительность рассчитана на текущую дату.</p>
     {params.has('periodId') && <p>Показан выбранный период хранения.</p>}
     {error && <div role="alert" className="storage-review">{error} <button onClick={() => setAttempt(a => a + 1)}>Повторить</button></div>}
     {!!result?.issues.length && <details className="storage-issues"><summary>Записи истории, требующие проверки: {result.issues.length}</summary>

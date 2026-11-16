@@ -40,9 +40,21 @@ for(let i=0;i<report.items.length;i++){
  assert.equal(cells[i][11],report.items[i].shippingOrderId?pair(report.items[i].shippingClientName,report.items[i].shippingOwnerName):'—');
 }
 assert.ok(await evaljs('[...document.querySelectorAll("tbody a")].some(a=>a.href.includes("receiving-orders"))'));
-assert.equal(await evaljs('document.querySelectorAll(".storage-filters input").length'),1);
-assert.equal(await evaljs('document.querySelectorAll(".storage-filters select").length'),0);
+assert.equal(await evaljs('document.querySelectorAll(".storage-filters input").length'),0);
+assert.equal(await evaljs('document.querySelectorAll(".storage-filters select").length'),1);
 assert.ok(await evaljs('document.querySelector(".storage-filters label").textContent.includes("Номер КТК")'));
+assert.ok(!await evaljs('document.body.textContent.includes("Календарные дни, включая день прибытия")'));
+const pickerOptions=await evaljs('[...document.querySelector(".storage-filters select").options].filter(o=>o.value).map(o=>o.value)');
+assert.ok(pickerOptions.includes(report.items[0].containerName));
+const fieldGeometry=await evaljs('(()=>{const l=document.querySelector(".storage-filters label > span").getBoundingClientRect(),s=document.querySelector(".storage-filters select").getBoundingClientRect();return {labelRight:l.right,selectLeft:s.left}})()');
+assert.ok(fieldGeometry.labelRight<fieldGeometry.selectLeft);
+await evaljs('(()=>{const s=document.querySelector(".storage-filters select");s.value='+JSON.stringify(report.items[0].containerName)+';s.dispatchEvent(new Event("change",{bubbles:true}));})()');
+await evaljs('document.querySelector(".storage-filters button[type=submit]").click()');
+await wait('new URL(location.href).searchParams.get("query")==='+JSON.stringify(report.items[0].containerName));
+await wait('[...document.querySelectorAll("tbody tr")].length>0 && [...document.querySelectorAll("tbody tr")].every(r=>r.cells[0]?.textContent==='+JSON.stringify(report.items[0].containerName)+')');
+await evaljs('[...document.querySelectorAll(".storage-filters button")].find(b=>b.textContent==="Сбросить").click()');
+await wait('!new URL(location.href).searchParams.has("query")');
+await wait('document.querySelectorAll("tbody tr").length>1');
 for(const width of [1440,1024,640,360,320]) {
  await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});await pause(300);
  const dims=await evaljs('(()=>{const w=document.querySelector(".table-wrap");w.scrollLeft=100;return {body:document.documentElement.scrollWidth,screen:innerWidth,scroll:w.scrollLeft,headers:document.querySelectorAll("thead th").length}})()');

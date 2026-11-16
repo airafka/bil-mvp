@@ -84,6 +84,15 @@ public class ContainerStorageController {
         return PagedResponse.of(jdbc.query(SELECT+f.sql()+" order by p.arrival_at desc,p.id limit ? offset ?",
             (rs,n)->row(rs),args.toArray()),page,size,count);
     }
+    public record ContainerOption(UUID id, String name) {}
+    @GetMapping("/containers")
+    public List<ContainerOption> containers() {
+        return jdbc.query("""
+            select c.id,c.code from container c
+            where exists(select 1 from container_storage_period p where p.container_id=c.id)
+            order by c.code,c.id
+            """, (rs,n)->new ContainerOption(rs.getObject(1,UUID.class),rs.getString(2)));
+    }
     @GetMapping("/issues")
     public List<Issue> issues() {
         return jdbc.query("""
