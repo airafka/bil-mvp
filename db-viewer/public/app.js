@@ -205,6 +205,8 @@ function createPanel(number) {
   let disposed = false;
   let optionsKey = '';
   let searchTimer;
+  const backHistory = [], forwardHistory = [];
+  let pendingScroll = null;
   const panel = { root, number, state, select: selectTable, refresh: refreshPanel, options: updateOptions };
   root.id = 'table-panel-' + number;
   root.setAttribute('aria-label', 'Панель ' + number);
@@ -236,20 +238,56 @@ function createPanel(number) {
     $('table-select').value = state.selected;
   }
   function showPanelError(message) { $('error').textContent = message; $('error').hidden = !message; }
-  function selectTable(name, filter = null) {
-    clearTimeout(searchTimer);
-    state.selected = name; state.filter = filter; state.offset = 0; state.search = ''; state.sort = '';
-    state.data = null; state.version++;
-    $('row-search').value = '';
-    $('table-select').value = name;
-    showPanelError('');
-    $('table-title').textContent = name;
-    $('table-description').textContent = labels[name] || 'Таблица БД';
-    $('relation-filter').hidden = !filter;
-    $('filter-text').textContent = filter ? `${filter.column} = ${filter.value}` : '';
-    $('data-table').replaceChildren(); $('empty').hidden = false; $('empty').textContent = 'Загружаем данные…';
-    renderTables(); refreshPanel(true);
+  function captureLocation() {
+    const search = $('row-search').value;
+    return { selected: state.selected, filter: state.filter ? { ...state.filter } : null,
+      offset: search === state.search ? state.offset : 0, limit: state.limit, search,
+      sort: state.sort, direction: state.direction, view: state.view,
+      scrollTop: $('data-scroll').scrollTop, scrollLeft: $('data-scroll').scrollLeft };
   }
+  function updateHistoryButtons() {
+    $('history-back').disabled = backHistory.length === 0;
+    $('history-forward').disabled = forwardHistory.length === 0;
+    $('history-back').title = backHistory.length ? 'Назад: ' + backHistory.at(-1).selected : 'Нет предыдущей таблицы';
+    $('history-forward').title = forwardHistory.length ? 'Вперёд: ' + forwardHistory.at(-1).selected : 'Нет следующей таблицы';
+  }
+  function openLocation(location) {
+    clearTimeout(searchTimer);
+    const { scrollTop, scrollLeft, ...selection } = location;
+    Object.assign(state, selection);
+    pendingScroll = { top: scrollTop, left: scrollLeft };
+    state.data = null; state.version++;
+    state.rows.clear(); state.highlights.clear(); state.identity = '';
+    $('row-search').value = state.search;
+    $('page-size').value = String(state.limit);
+    $('table-select').value = state.selected;
+    showPanelError('');
+    $('table-title').textContent = state.selected;
+    $('table-description').textContent = labels[state.selected] || 'Таблица БД';
+    $('relation-filter').hidden = !state.filter;
+    $('filter-text').textContent = state.filter ? state.filter.column + ' = ' + state.filter.value : '';
+    $('data-table').replaceChildren(); $('empty').hidden = false; $('empty').textContent = 'Загружаем данные…';
+    updateHistoryButtons(); renderTables(); refreshPanel(true);
+  }
+  function selectTable(name, filter = null) {
+    const current = captureLocation();
+    const destination = { selected: name, filter: filter ? { ...filter } : null,
+      offset: 0, limit: state.limit, search: '', sort: '', direction: 'desc', view: state.view,
+      scrollTop: 0, scrollLeft: 0 };
+    if (state.selected && JSON.stringify(current) !== JSON.stringify(destination)) {
+      backHistory.push(current);
+      forwardHistory.length = 0;
+    }
+    openLocation(destination);
+  }
+  function travelHistory(from, to) {
+    if (!from.length) return;
+    to.push(captureLocation());
+    openLocation(from.pop());
+  }
+  $('history-back').onclick = () => travelHistory(backHistory, forwardHistory);
+  $('history-forward').onclick = () => travelHistory(forwardHistory, backHistory);
+  updateHistoryButtons();
 
   function renderData() {
     const data = state.data;
@@ -333,6 +371,11 @@ function createPanel(number) {
       $('empty').textContent = state.search || state.filter ? 'Нет записей по заданному условию.' : 'В таблице пока нет записей. Новые появятся автоматически.';
     }
     $('data-table').replaceChildren(head, body);
+    if (pendingScroll) {
+      $('data-scroll').scrollTop = pendingScroll.top;
+      $('data-scroll').scrollLeft = pendingScroll.left;
+      pendingScroll = null;
+    }
   }
 
   async function refreshPanel(force = false) {

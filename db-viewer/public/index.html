@@ -51,6 +51,10 @@
         <div data-role="error" class="error pane-error" role="alert" hidden></div>
         <div class="editor-tabs"><div class="object-tab"><span class="table-icon" aria-hidden="true"></span><h2 data-role="table-title">Выберите таблицу</h2><span class="tab-schema">public</span></div></div>
         <div class="editor-heading">
+          <div class="history-nav" role="group" aria-label="История переходов">
+            <button data-role="history-back" class="tool-button" type="button" aria-label="Назад к предыдущей таблице" disabled><span aria-hidden="true">←</span> Назад</button>
+            <button data-role="history-forward" class="tool-button" type="button" aria-label="Вперёд к следующей таблице" disabled><span aria-hidden="true">→</span> Вперёд</button>
+          </div>
           <div class="view-tabs" role="tablist" aria-label="Представление таблицы">
             <button data-role="data-tab" role="tab" aria-selected="true"><span class="table-icon" aria-hidden="true"></span>Данные</button>
             <button data-role="schema-tab" role="tab" aria-selected="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.1M4 12h.1M4 18h.1"/></svg>Структура</button>

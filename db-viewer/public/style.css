@@ -91,6 +91,9 @@ details[open] > summary::before { transform: rotate(45deg); margin-top: -3px; }
 .object-tab h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #ebebeb; font-weight: 500; }
 .tab-schema { color: #bdcee5; font-size: 10px; background: #303c4c; border-radius: 4px; padding: 2px 5px; margin-left: 6px; }
 .editor-heading { display: flex; align-items: center; min-height: 32px; padding: 0 7px; gap: 12px; background: #2d3135; border-bottom: 1px solid var(--border); }
+.history-nav { display: flex; gap: 2px; flex-shrink: 0; padding-right: 7px; border-right: 1px solid var(--border); }
+.history-nav button { white-space: nowrap; padding: 3px 7px; }
+.history-nav button:disabled { color: #717171; }
 .view-tabs { display: flex; gap: 0; align-self: stretch; }
 .view-tabs button { display: flex; align-items: center; gap: 6px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 3px 10px; min-height: 30px; background: transparent; color: #bfc3c7; font-size: 12px; }
 .view-tabs button[aria-selected=true] { background: #343d44; color: #e2e8ee; border-bottom-color: var(--accent); }
@@ -201,7 +204,7 @@ dialog::backdrop { background: #080808b3; backdrop-filter: blur(3px); }
   .content { min-height: 690px; gap: 8px; }
   .data-panel { height: 500px; flex: none; }
   .data-scroll { min-height: 0; }
-  .editor-heading { padding: 7px 9px; }
+  .editor-heading { padding: 3px 5px; gap: 4px; flex-wrap: wrap; }
   .filter-toolbar { flex-wrap: wrap; padding: 0 9px 8px; }
   .row-search { flex-basis: 100%; }
   .filter-toolbar > button { margin-left: 0; }
