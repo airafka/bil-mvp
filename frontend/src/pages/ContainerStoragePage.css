@@ -5,7 +5,7 @@
 .content > .storage-page { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .storage-page > :not(.table-card) { flex-shrink: 0; }
 .storage-page > .table-card { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.storage-page > .table-card > .table-wrap { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.storage-page > .table-card > .table-wrap { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; }
 .app-shell .storage-table thead th { position: sticky; top: 0; z-index: 1; }
 .storage-page > .storage-issues { max-height: 20%; overflow: auto; }
 .storage-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: start; margin-bottom: 16px; }

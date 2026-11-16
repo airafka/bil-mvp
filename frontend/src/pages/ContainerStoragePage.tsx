@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { request } from '../http'
 import type { PagedResponse, ReferenceOption } from '../domain'
@@ -16,7 +16,7 @@ export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; empty
       <th>Заявка поставки</th><th>Клиент/собственник поставки</th><th>Грузоотправитель</th>
       <th>Транспорт поставки</th><th>Перевозчик поставки</th><th>Груз</th><th>Заявка вывоза</th><th>Клиент/собственник вывоза</th>
       <th>Транспорт вывоза</th><th>Перевозчик вывоза</th><th>Грузополучатель</th></tr></thead>
-    <tbody>{rows.length ? rows.map(row => <tr key={row.id}>
+    <tbody>{rows.length ? rows.map(row => <tr key={row.id} data-period-id={row.id}>
       <td><Link to={'/container-owners/' + row.containerId + '/history'}>{row.containerName}</Link></td>
       <td title={timeSourceLabel(row.arrivalTimeSource)}>{storageDate(row.arrivalAt)}{row.arrivalTimeSource === 'HISTORY_CREATED' && <div className="storage-note">По старой истории</div>}</td>
       <td title={row.departureAt ? timeSourceLabel(row.departureTimeSource) : undefined}>{storageDate(row.departureAt)}</td>
@@ -38,9 +38,13 @@ export default function ContainerStoragePage() {
   const [draftSearch, setDraftSearch] = useState({ query, value: query })
   const search = draftSearch.query === query ? draftSearch.value : query
   const [attempt, setAttempt] = useState(0)
+  const [pageSize, setPageSize] = useState(1)
+  const tableWrap = useRef<HTMLDivElement>(null)
+  // Retain the tallest measured row so short/last pages cannot oscillate the request size.
+  const measuredRowHeight = useRef(36)
   const filter = new URLSearchParams({ query, status: params.has('periodId') ? 'ALL' : 'ACTIVE' })
   if(params.get('periodId')) filter.set('periodId',params.get('periodId')!)
-  const url = '/api/container-storage-periods?' + filter + '&page=' + page
+  const url = '/api/container-storage-periods?' + filter + '&page=' + page + '&size=' + pageSize
   const requestKey = url + ':' + attempt
   const [result, setResult] = useState<{ key: string; data: PagedResponse<StoragePeriod>; issues: StorageIssue[]; containers: ReferenceOption[] } | null>(null)
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null)
@@ -54,6 +58,40 @@ export default function ContainerStoragePage() {
       .catch((cause: unknown) => { if (active) setFailure({ key: requestKey, message: cause instanceof Error ? cause.message : 'Не удалось загрузить хранение' }) })
     return () => { active = false }
   }, [url, requestKey])
+  useLayoutEffect(() => {
+    const frame = tableWrap.current
+    const table = frame?.querySelector('table')
+    if (!frame || !table) return
+    let scheduled = 0
+    const measure = () => {
+      if (!loading && data?.items.length) {
+        for (const row of table.tBodies[0].rows) measuredRowHeight.current = Math.max(measuredRowHeight.current, row.offsetHeight + 1)
+      }
+      const available = frame.clientHeight - (table.tHead?.offsetHeight ?? 0) - 2
+      const nextSize = Math.max(1, Math.min(100, Math.floor(available / measuredRowHeight.current)))
+      if (nextSize === pageSize) return
+      setPageSize(nextSize)
+      // Keep the current first record in view when the window or row height changes.
+      const nextPage = Math.floor(page * pageSize / nextSize)
+      if (nextPage !== page) setParams(current => {
+        const next = new URLSearchParams(current)
+        if (nextPage) next.set('page', String(nextPage)); else next.delete('page')
+        return next
+      }, { replace: true })
+    }
+    const schedule = () => { cancelAnimationFrame(scheduled); scheduled = requestAnimationFrame(measure) }
+    const observer = new ResizeObserver(schedule)
+    observer.observe(frame); observer.observe(table); schedule()
+    return () => { observer.disconnect(); cancelAnimationFrame(scheduled) }
+  }, [data, loading, page, pageSize, setParams])
+  useEffect(() => {
+    if (!data || page < Math.max(1, data.totalPages)) return
+    setParams(current => {
+      const next = new URLSearchParams(current)
+      if (data.totalPages > 1) next.set('page', String(data.totalPages - 1)); else next.delete('page')
+      return next
+    }, { replace: true })
+  }, [data, page, setParams])
   function change(name: string, value: string) {
     const next = new URLSearchParams(params); if (value) next.set(name, value); else next.delete(name)
     if (name !== 'page') next.delete('page')
@@ -75,9 +113,9 @@ export default function ContainerStoragePage() {
     {error && <div role="alert" className="storage-review">{error} <button onClick={() => setAttempt(a => a + 1)}>Повторить</button></div>}
     {!!result?.issues.length && <details className="storage-issues"><summary>Записи истории, требующие проверки: {result.issues.length}</summary>
       <ul>{result.issues.map(issue => <li key={issue.id}><Link to={'/container-owners/' + issue.containerId + '/history'}>{issue.containerName}</Link>: {issue.reason}</li>)}</ul></details>}
-    <TableReveal loading={loading}><div className="table-wrap"><StorageTable rows={data?.items || []} emptyText={error ? 'Данные не загружены' : 'Периоды хранения не найдены'} /></div></TableReveal>
-    {data && <div className="pagination"><span>Всего: {data.totalElements}</span>{data.totalPages > 1 && <>
-      <button disabled={loading || page === 0} onClick={() => change('page', String(page - 1))}>Назад</button><span>{page + 1} / {data.totalPages}</span>
-      <button disabled={loading || page + 1 >= data.totalPages} onClick={() => change('page', String(page + 1))}>Далее</button></>}</div>}
+    <TableReveal loading={loading}><div className="table-wrap" ref={tableWrap} data-page-size={pageSize}><StorageTable rows={data?.items || []} emptyText={error ? 'Данные не загружены' : 'Периоды хранения не найдены'} /></div></TableReveal>
+    <div className="pagination"><span>Всего: {data?.totalElements ?? result?.data.totalElements ?? '—'}</span>
+      <button disabled={loading || page === 0} onClick={() => change('page', String(page - 1))}>Назад</button><span>{page + 1} / {Math.max(1, data?.totalPages ?? result?.data.totalPages ?? 1)}</span>
+      <button disabled={loading || !data || page + 1 >= data.totalPages} onClick={() => change('page', String(page + 1))}>Далее</button></div>
   </section>
 }

@@ -32,7 +32,8 @@ const headers=await evaljs('[...document.querySelectorAll("thead th")].map(h=>h.
 for(const removed of ['Груж/порож','В стоке','Площадка','Состояние','Клиент поставки','Собственник при приёме'])assert.ok(!headers.includes(removed));
 for(const added of ['Клиент/собственник поставки','Клиент/собственник вывоза','Грузоотправитель','Грузополучатель','Перевозчик поставки','Перевозчик вывоза','Заявка поставки','Заявка вывоза','Транспорт поставки','Транспорт вывоза'])assert.ok(headers.includes(added));
 assert.ok(await evaljs('[...document.querySelectorAll("tbody a")].filter(a=>a.pathname.includes("-orders/")).every(a=>/^[0-9]+$/.test(a.textContent))'));
-const report=await (await fetch(base+'/api/container-storage-periods')).json();
+const initialSize=await evaljs('Number(document.querySelector(".table-wrap").dataset.pageSize)');
+const report=await (await fetch(base+'/api/container-storage-periods?size='+initialSize)).json();
 const cells=await evaljs('[...document.querySelectorAll("tbody tr")].map(r=>[...r.cells].map(c=>c.textContent))');
 const pair=(a,b)=>(a||'—')+' / '+(b||'—');
 for(let i=0;i<report.items.length;i++){
@@ -56,17 +57,38 @@ await evaljs('[...document.querySelectorAll(".storage-filters button")].find(b=>
 await wait('!new URL(location.href).searchParams.has("query")');
 await wait('document.querySelectorAll("tbody tr").length>1');
 for(const [width,height] of [[1440,900],[1366,768],[1024,768],[640,700],[360,640],[320,568]]) {
- await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await pause(300);
- const dims=await evaljs('(()=>{const w=document.querySelector(".table-wrap");w.scrollLeft=100;return {body:document.documentElement.scrollWidth,screen:innerWidth,scroll:w.scrollLeft,headers:document.querySelectorAll("thead th").length,pageHeight:document.documentElement.scrollHeight,viewportHeight:innerHeight,tableBottom:w.getBoundingClientRect().bottom,footerBottom:document.querySelector(".pagination").getBoundingClientRect().bottom}})()');
- assert.ok(dims.body<=width+1,JSON.stringify(dims));assert.ok(dims.scroll>0,JSON.stringify(dims));assert.equal(dims.headers,15);assert.ok(dims.pageHeight<=dims.viewportHeight+1,JSON.stringify(dims));assert.ok(dims.tableBottom<dims.viewportHeight,JSON.stringify(dims));assert.ok(dims.footerBottom<=dims.viewportHeight,JSON.stringify(dims));
+ await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await pause(700);await wait('document.querySelector(".registry-table-reveal").getAttribute("aria-busy")==="false"');
+ const dims=await evaljs('(()=>{const w=document.querySelector(".table-wrap");w.scrollLeft=100;return {body:document.documentElement.scrollWidth,screen:innerWidth,scroll:w.scrollLeft,headers:document.querySelectorAll("thead th").length,pageHeight:document.documentElement.scrollHeight,viewportHeight:innerHeight,tableBottom:w.getBoundingClientRect().bottom,footerBottom:document.querySelector(".pagination").getBoundingClientRect().bottom,tableHeight:w.clientHeight,rowsHeight:w.scrollHeight,lastRowBottom:document.querySelector("tbody tr:last-child").getBoundingClientRect().bottom,visibleBottom:w.getBoundingClientRect().top+w.clientHeight}})()');
+ assert.ok(dims.body<=width+1,JSON.stringify(dims));assert.ok(dims.scroll>0,JSON.stringify(dims));assert.equal(dims.headers,15);assert.ok(dims.pageHeight<=dims.viewportHeight+1,JSON.stringify(dims));assert.ok(dims.tableBottom<dims.viewportHeight,JSON.stringify(dims));assert.ok(dims.footerBottom<=dims.viewportHeight,JSON.stringify(dims));assert.ok(dims.rowsHeight<=dims.tableHeight+1,JSON.stringify(dims));assert.ok(dims.lastRowBottom<=dims.visibleBottom+1,JSON.stringify(dims));
 }
 const vertical=await evaljs('(()=>{const w=document.querySelector(".table-wrap");w.scrollTop=w.scrollHeight;const h=document.querySelector("thead th").getBoundingClientRect(),b=w.getBoundingClientRect();return {scroll:w.scrollTop,header:h.top,table:b.top,page:window.scrollY}})()');
-assert.ok(vertical.scroll>0);assert.ok(Math.abs(vertical.header-vertical.table)<3,JSON.stringify(vertical));assert.equal(vertical.page,0);
+assert.equal(vertical.scroll,0);assert.ok(Math.abs(vertical.header-vertical.table)<3,JSON.stringify(vertical));assert.equal(vertical.page,0);
 await evaljs('document.querySelector(".table-wrap").scrollTop=0');
 await shot('storage-mobile');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
 await evaljs('document.querySelector(".table-wrap").scrollLeft=0');await pause(250);await shot('storage-desktop');
 await evaljs('document.body.style.zoom="90%"');await pause(300);assert.ok(await evaljs('(()=>{const w=document.querySelector(".table-wrap");w.scrollLeft=500;return w.scrollLeft>0&&document.documentElement.scrollWidth<=innerWidth+1})()'));
-await evaljs('document.body.style.zoom=""');
+await evaljs('document.body.style.zoom=""');await pause(700);
+// All records remain reachable, with no skips or duplication, through adaptive server pages.
+await go('/container-storage');await pause(700);
+const expected=[];let apiPage=0,apiPages=1;
+do {const response=await(await fetch(base+'/api/container-storage-periods?size=100&page='+apiPage)).json();expected.push(...response.items.map(r=>r.id));apiPages=response.totalPages;apiPage++;} while(apiPage<apiPages);
+const seen=[];
+for(let n=0;n<expected.length+1;n++) {
+ await wait('document.querySelector(".registry-table-reveal").getAttribute("aria-busy")==="false"');await pause(250);
+ seen.push(...await evaljs('[...document.querySelectorAll("tbody tr[data-period-id]")].map(r=>r.dataset.periodId)'));
+ const nextDisabled=await evaljs('[...document.querySelectorAll(".pagination button")].find(b=>b.textContent==="Далее").disabled');
+ if(nextDisabled)break;
+ await evaljs('[...document.querySelectorAll(".pagination button")].find(b=>b.textContent==="Далее").click()');
+ await pause(500);
+}
+assert.deepEqual(seen,expected);
+// Shrinking the window preserves access to the current first record and keeps the final row visible.
+const previousFirst=await evaljs('document.querySelector("tbody tr[data-period-id]").dataset.periodId');
+await send('Emulation.setDeviceMetricsOverride',{width:1366,height:600,deviceScaleFactor:1,mobile:false});await pause(800);
+await wait('document.querySelector(".registry-table-reveal").getAttribute("aria-busy")==="false"');
+assert.ok((await evaljs('[...document.querySelectorAll("tbody tr[data-period-id]")].map(r=>r.dataset.periodId)')).includes(previousFirst));
+assert.ok(await evaljs('(()=>{const w=document.querySelector(".table-wrap");return w.scrollHeight<=w.clientHeight+1})()'));
+await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await pause(700);
 await go('/container-storage?query=NO-SUCH-STORAGE-CONTAINER');await wait('document.body?.textContent.includes("Периоды хранения не найдены")');
 const fixture=JSON.parse(fs.readFileSync(path.join(dir,'../backups/storage-fixtures.json'),'utf8'));assert.equal(fixture.db,'billing_storage_test');
 await go('/container-storage?periodId='+fixture.periodId);await wait('document.querySelectorAll("tbody td").length===15');
