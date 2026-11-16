@@ -45,7 +45,7 @@ public class ContainerStorageService {
                     receiving_at,receiving_client_id,receiving_owner_id,status,receiving_order_container_id,waybill_container_id)
                 select ?,?,?,id,?,?,client_id,?,'OPEN',?,? from receiving_order where id=?
                 """,period,container,area,history,at,owner,autoRow,waybillRow,order);
-            snapshotCargo(period,order,container,receiving);
+            snapshotEmpty(period);
         } else if(operation.equals("DEPARTURE")) {
             var source=tasks.finished(order,container,false);
             requireOpen(current,area);
@@ -91,25 +91,14 @@ public class ContainerStorageService {
             rs.getObject("id",UUID.class),rs.getObject("terminal_area_id",UUID.class),rs.getObject("receiving_order_id",UUID.class),
             rs.getObject("receiving_at",OffsetDateTime.class),rs.getString("status")),args);
     }
-    private void snapshotCargo(UUID period,UUID order,UUID container,boolean receiving) {
-        if(!receiving) return;
+    private void snapshotEmpty(UUID period) {
         jdbc.update("""
-            update container_storage_period set cargo_name=q.cargo,is_empty=q.empty from (
-              select string_agg(distinct ec.code,'; ') cargo,bool_and(rc.empty) empty
-              from receiving_order_container rc left join receiving_order_container_item i on i.receiving_order_container_id=rc.id
-              left join etsng_code ec on ec.id=i.etsng_code_id where rc.receiving_order_id=? and rc.container_id=?
-            ) q where id=?
-            """,order,container,period);
-        jdbc.update("""
-            update container_storage_period set cargo_name=q.cargo,is_empty=q.empty from (
-              select string_agg(distinct ec.code,'; ') cargo,bool_and(wc.net_weight=0) empty
-              from receiving_order r join waybill w on w.receiving_order_id=r.id
-              join waybill_railway_carriage wr on wr.waybill_id=w.id
-              join waybill_container wc on wc.waybill_railway_carriage_id=wr.id
-              left join waybill_product wp on wp.waybill_id=w.id left join etsng_code ec on ec.id=wp.etsng_code_id
-              where r.id=? and r.transport_type='RAILWAY' and wc.container_id=? having count(*)>0
-            ) q where id=?
-            """,order,container,period);
+            update container_storage_period p set is_empty=case
+              when p.receiving_order_container_id is not null then
+                (select rc.empty from receiving_order_container rc where rc.id=p.receiving_order_container_id)
+              else (select wc.net_weight=0 from waybill_container wc where wc.id=p.waybill_container_id)
+              end where p.id=?
+            """,period);
     }
     private ApiException conflict(String message) {return new ApiException(HttpStatus.CONFLICT,"STORAGE_PERIOD_CONFLICT",message);}
 }

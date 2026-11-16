@@ -25,7 +25,7 @@ public class ContainerStorageController {
         String departureCarrier,String consignee,String shippingClientName,String shippingOwnerName,Long storageDays,Boolean inStock,String status,
         String arrivalTimeSource,String departureTimeSource,UUID receivingOrderContainerId,UUID waybillContainerId,UUID shippingOrderContainerId) {}
     private static final String SELECT="""
-        select p.*,s.id as shipping_order_id,c.code container_name,a.name area_name,cl.name client_name,ow.name owner_name,
+        select p.*,cargo.cargo_name,s.id as shipping_order_id,c.code container_name,a.name area_name,cl.name client_name,ow.name owner_name,
           r.number::bigint receiving_number,s.number::bigint shipping_number,r.transport_type arrival_transport,s.transport_type departure_transport,
           ic.name arrival_carrier,oc.name departure_carrier,r.consignor,cons.name consignee,
           shipping_client.name shipping_client_name,shipping_owner.name shipping_owner_name,
@@ -48,6 +48,18 @@ public class ContainerStorageController {
         left join client_related_entity cons on cons.id=s.consignee_id
         join container_owner_history ah on ah.id=p.receiving_history_id
         left join container_owner_history dh on dh.id=p.shipping_history_id
+        left join lateral (
+          select string_agg(distinct ec.code,'; ' order by ec.code) cargo_name
+          from (
+            select i.etsng_code_id from receiving_order_container_item i
+            where i.receiving_order_container_id=p.receiving_order_container_id
+            union
+            select wp.etsng_code_id from waybill_container wc
+            join waybill_railway_carriage wr on wr.id=wc.waybill_railway_carriage_id
+            join waybill_product wp on wp.waybill_id=wr.waybill_id
+            where wc.id=p.waybill_container_id
+          ) products join etsng_code ec on ec.id=products.etsng_code_id
+        ) cargo on true
         """;
     record Filter(String sql,List<Object> args) {}
     private Filter filter(String query,String status,UUID clientId,UUID periodId,LocalDate from,LocalDate to,LocalDate asOf) {
