@@ -291,13 +291,16 @@ function createPanel(number) {
       const keys = data.columns.filter(c => c.primary).map(c => c.name);
       const identity = JSON.stringify([data.name, state.offset, state.limit, state.search, state.sort, state.direction, state.filter]);
       const comparable = identity === state.identity;
-      if (!comparable) state.highlights.clear();
-      const nextRows = new Map();
+      const rowKey = record => JSON.stringify(keys.length ? keys.map(k => record[k]) : record);
+      const nextRows = new Map(data.rows.map(record => [rowKey(record), JSON.stringify(record)]));
+      const changedSnapshot = nextRows.size !== state.rows.size ||
+        [...nextRows].some(([key, value]) => state.rows.get(key) !== value);
+      // A new batch replaces previous row and cell highlights, including recent inserts.
+      if (!comparable || changedSnapshot) state.highlights.clear();
       for (const [index, record] of data.rows.entries()) {
         const row = element('tr');
-        const key = JSON.stringify(keys.length ? keys.map(k => record[k]) : record);
-        const serialized = JSON.stringify(record);
-        nextRows.set(key, serialized);
+        const key = rowKey(record);
+        const serialized = nextRows.get(key);
         if (comparable && !state.rows.has(key)) state.highlights.set(key, { kind: 'new', until: Date.now() + 8000 });
         else if (comparable && state.rows.get(key) !== serialized) {
           const previous = JSON.parse(state.rows.get(key));
