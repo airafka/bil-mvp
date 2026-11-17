@@ -36,15 +36,13 @@ public class ContainerStorageService {
         UUID period=null;
         if(operation.equals("ARRIVAL")) {
             if(!opened.isEmpty()) throw conflict("Для КТК уже есть открытый период хранения. Требуется сверка истории");
-            var source=tasks.finished(order,container,true);
-            UUID autoRow=source.table().equals("receiving_order_container")?source.id():null;
-            UUID waybillRow=source.table().equals("waybill_container")?source.id():null;
+            tasks.finished(order,container,true);
             period=UUID.randomUUID();
             jdbc.update("""
                 insert into container_storage_period(id,container_id,receiving_order_id,receiving_history_id,
-                    status,receiving_order_container_id,waybill_container_id)
-                values(?,?,?,?,'OPEN',?,?)
-                """,period,container,order,history,autoRow,waybillRow);
+                    status)
+                values(?,?,?,?,'OPEN')
+                """,period,container,order,history);
         } else if(operation.equals("OWNER_CHANGE")) {
             OffsetDateTime latest=jdbc.queryForObject("select max(occurred_at) from container_owner_history where container_id=? and id<>?",
                 OffsetDateTime.class,container,history);
@@ -60,20 +58,19 @@ public class ContainerStorageService {
                 period=UUID.randomUUID();
                 jdbc.update("""
                     insert into container_storage_period(id,container_id,receiving_order_id,receiving_history_id,
-                        status,receiving_order_container_id,waybill_container_id)
-                    select ?,container_id,receiving_order_id,?,'OPEN',
-                        receiving_order_container_id,waybill_container_id from container_storage_period where id=?
+                        status)
+                    select ?,container_id,receiving_order_id,?,'OPEN' from container_storage_period where id=?
                     """,period,history,current.id());
             } else if(!opened.isEmpty()) throw conflict("Состояние КТК не согласовано с открытым периодом хранения");
         } else if(operation.equals("DEPARTURE")) {
-            var source=tasks.finished(order,container,false);
+            tasks.finished(order,container,false);
             requireOpen(current,area);
             requireSequence(current,at);
             period=current.id();
             jdbc.update("""
-                update container_storage_period set shipping_history_id=?,shipping_order_container_id=?,status='CLOSED',
+                update container_storage_period set shipping_history_id=?,status='CLOSED',
                     updated_at=billing_now() where id=?
-                """,history,source.id(),period);
+                """,history,period);
         } else if(operation.equals("CANCEL_ARRIVAL")) {
             requireOpen(current,area);
             if(!order.equals(current.receiving())) throw conflict("Открытый период относится к другой поставке");
@@ -91,7 +88,7 @@ public class ContainerStorageService {
                   where id in (select id from chain)
                 """,period);
         } else if(operation.equals("CANCEL_DEPARTURE")) {
-            var closed=periods("p.container_id=? and shipping_order_container_id in (select id from shipping_order_container where shipping_order_id=?) and p.status='CLOSED'",container,order);
+            var closed=periods("p.container_id=? and p.shipping_history_id in (select id from container_owner_history where order_id=? and order_type='SHIPPING_ORDER' and operation_type='DEPARTURE') and p.status='CLOSED'",container,order);
             if(closed.size()!=1 || !opened.isEmpty())
                 throw conflict("Нельзя открыть период отменяемого вывоза. Сначала отмените последующие операции или проверьте историю");
             current=closed.getFirst();period=current.id();
@@ -106,7 +103,7 @@ public class ContainerStorageService {
             if(laterOwnerChanges!=null && laterOwnerChanges>0)
                 throw conflict("Нельзя отменить вывоз после смены собственника вне площадки");
             jdbc.update("""
-                update container_storage_period set shipping_history_id=null,shipping_order_container_id=null,status='OPEN',
+                update container_storage_period set shipping_history_id=null,status='OPEN',
                     updated_at=billing_now() where id=?
                 """,period);
         } else {
