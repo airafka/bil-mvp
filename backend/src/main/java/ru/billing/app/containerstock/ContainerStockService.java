@@ -49,9 +49,6 @@ public class ContainerStockService {
         return rows.isEmpty()?null:rows.getFirst();
     }
     UUID transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type) {
-        return transition(container,client,status,receiving,shipping,order,type,false);
-    }
-    UUID transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type, boolean cancellation) {
         State old=state(container);
         if(old==null) jdbc.update("insert into container_owner(id,container_id,client_id,status,receiving_order_id,shipping_order_id) values(?,?,?,?,?,?)",
             UUID.randomUUID(),container,client,status,receiving,shipping);
@@ -65,8 +62,8 @@ public class ContainerStockService {
             """,client,container);
         if(old==null || !Objects.equals(old.client(),client) || !Objects.equals(old.status(),status)) {
             UUID history=UUID.randomUUID();
-            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,occurred_at,cancellation) values(?,?,?,?,?,?,?,?,billing_now(),?)",
-                history,container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type,cancellation);
+            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,occurred_at) values(?,?,?,?,?,?,?,?,billing_now())",
+                history,container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type);
             storage.onHistory(history,container,order,type,status);
             return history;
         }
@@ -174,7 +171,7 @@ public class ContainerStockService {
             // Receiving restores the owner before acceptance. Shipping preserves any later owner change.
             UUID previousOwner=previousOwners.get(id);
             transition(id,receiving&&previousOwner!=null?previousOwner:old.client(),receiving?"DEPARTED":"ON_TERMINAL",
-                receiving?previousOrder:old.receiving(),receiving?old.shipping():previousOrder,order,type,true);
+                receiving?previousOrder:old.receiving(),receiving?old.shipping():previousOrder,order,type);
         }
         tasks.cancel(order,receiving,previousStatus);
         jdbc.update("update container_movement set active=false,updated_at=billing_now() at time zone 'UTC' where order_id=?",order);

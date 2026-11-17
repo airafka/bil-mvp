@@ -1,7 +1,7 @@
-// Isolated databases only. Legacy migration modes compare V41/V42; lifecycle also covers V43–V50.
+// Isolated databases only. Legacy migration modes compare V41/V42; lifecycle also covers V43–V51.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_storage_owner_test',port=db==='billing_history_metadata_test'?'8209':db==='billing_history_operation_test'?'8208':db==='billing_storage_arrival_test'?'8207':db==='billing_storage_origin_test'?'8206':db==='billing_storage_sources_test'?'8205':db==='billing_storage_view_test'?'8204':db==='billing_stock_history_test'?'8203':'8202',base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+port+'/api';
-assert.ok(['billing_history_metadata_test','billing_history_operation_test','billing_storage_arrival_test','billing_storage_owner_test','billing_stock_history_test','billing_storage_view_test','billing_storage_sources_test','billing_storage_origin_test'].includes(db));
+const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_storage_owner_test',port=db==='billing_history_cancellation_test'?'8210':db==='billing_history_metadata_test'?'8209':db==='billing_history_operation_test'?'8208':db==='billing_storage_arrival_test'?'8207':db==='billing_storage_origin_test'?'8206':db==='billing_storage_sources_test'?'8205':db==='billing_storage_view_test'?'8204':db==='billing_stock_history_test'?'8203':'8202',base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+port+'/api';
+assert.ok(['billing_history_cancellation_test','billing_history_metadata_test','billing_history_operation_test','billing_storage_arrival_test','billing_storage_owner_test','billing_stock_history_test','billing_storage_view_test','billing_storage_sources_test','billing_storage_origin_test'].includes(db));
 const run=args=>execFileSync(docker,args,{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
 const rawSql=q=>run(['exec','billing-next-db-1','psql','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q]);
 const historySchema=Number(rawSql('select max(version::int) from flyway_schema_history where success'));
@@ -32,10 +32,10 @@ async function main(){
    fs.mkdirSync(path.dirname(captureFile),{recursive:true});fs.writeFileSync(captureFile,JSON.stringify(snapshot()));
    console.log('PASS: captured V41 business data, sequences and all column definitions');return;
  }
- const inspect=JSON.parse(run(['inspect',db==='billing_history_metadata_test'?'billing-next-history-metadata-test':db==='billing_history_operation_test'?'billing-next-history-operation-test':db==='billing_storage_arrival_test'?'billing-next-storage-arrival-test':db==='billing_storage_origin_test'?'billing-next-storage-origin-test':db==='billing_storage_sources_test'?'billing-next-storage-sources-test':db==='billing_storage_view_test'?'billing-next-storage-view-test':db==='billing_stock_history_test'?'billing-next-stock-history-test':'billing-next-storage-owner-test']))[0];
+ const inspect=JSON.parse(run(['inspect',db==='billing_history_cancellation_test'?'billing-next-history-cancellation-test':db==='billing_history_metadata_test'?'billing-next-history-metadata-test':db==='billing_history_operation_test'?'billing-next-history-operation-test':db==='billing_storage_arrival_test'?'billing-next-storage-arrival-test':db==='billing_storage_origin_test'?'billing-next-storage-origin-test':db==='billing_storage_sources_test'?'billing-next-storage-sources-test':db==='billing_storage_view_test'?'billing-next-storage-view-test':db==='billing_stock_history_test'?'billing-next-stock-history-test':'billing-next-storage-owner-test']))[0];
  assert.ok(inspect.Config.Env.includes('DB_NAME='+db));
  assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
- assert.ok(['42','43','44','45','46','47','48','49','50'].includes(sql('select max(version::int) from flyway_schema_history where success')));
+ assert.ok(['42','43','44','45','46','47','48','49','50','51'].includes(sql('select max(version::int) from flyway_schema_history where success')));
  if(process.argv[2]==='migration'){
    assert.deepEqual(snapshot(),JSON.parse(fs.readFileSync(captureFile,'utf8')));
    console.log('PASS: V42 preserves all business rows, sequences, table and column definitions; no retroactive splits');return;

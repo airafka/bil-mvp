@@ -1,7 +1,7 @@
 // V48 -> V49 preservation and exhaustive transition classification. Mutations are isolated and rolled back.
 const fs=require('fs'),assert=require('node:assert/strict'),crypto=require('crypto'),{execFileSync}=require('child_process');
 const db=process.env.STORAGE_TEST_DB||'billing_history_operation_test',docker=process.env.DOCKER_EXE||'docker',mode=process.argv[2];
-assert.ok(['billing_history_metadata_test','billing_history_operation_test','billing_history_operation_release_test','billing_history_operation_migration_test','billing_next'].includes(db));
+assert.ok(['billing_history_cancellation_test','billing_history_metadata_test','billing_history_operation_test','billing_history_operation_release_test','billing_history_operation_migration_test','billing_next'].includes(db));
 assert.ok(db!=='billing_next'||['capture','verify','api-capture','api-verify'].includes(mode),'Live database is read-only');
 const sql=q=>execFileSync(docker,['exec','-i','billing-next-db-1','psql','-X','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1'],{input:q,encoding:'utf8',stdio:['pipe','pipe','pipe'],maxBuffer:128*1024*1024}).trim();
 const json=q=>JSON.parse(sql(q)||'null');assert.equal(sql('select current_database()'),db);
@@ -41,7 +41,7 @@ if(mode==='capture'){
  assert.equal(sql("select count(*) from information_schema.columns where table_schema='public' and table_name='container_owner_history'"),'17');audit();
  console.log('PASS: operation_type removed; all remaining data/sequences, every historical event meaning, origins and complete report unchanged');
 }else if(mode==='matrix'){
- assert.ok(['billing_history_operation_test','billing_history_metadata_test'].includes(db));assert.ok([49,50].includes(schema));
+ assert.ok(['billing_history_operation_test','billing_history_metadata_test','billing_history_cancellation_test'].includes(db));assert.ok([49,50,51].includes(schema));
  const states=[null,'EXPECTED','ON_TERMINAL','RESERVED_OUT','DEPARTED'];
  const values=['RECEIVING_ORDER','SHIPPING_ORDER','SERVICE_ORDER'].flatMap(a=>states.flatMap(b=>states.map(c=>'('+[a,b,c].map(quote).join(',')+')'))).join(',');
  const result=json(`select json_agg(t) from (select kind,old_status,new_status,history_operation_type(kind,old_status,new_status) operation from (values ${values})v(kind,old_status,new_status))t`);
@@ -49,15 +49,22 @@ if(mode==='capture'){
  assert.equal(result.filter(r=>r.operation!==null).length,13);assert.equal(result.length,75);
  assert.equal(sql("select history_operation_type('UNKNOWN','EXPECTED','ON_TERMINAL') is null and history_operation_type('RECEIVING_ORDER','UNKNOWN','ON_TERMINAL') is null and history_operation_type(NULL,'EXPECTED','ON_TERMINAL') is null"),'t');
  const template=json("select row_to_json(h) from container_owner_history h where storage_period_id is null limit 1");assert.ok(template);
- const insert=(r,cancel)=>`INSERT INTO container_owner_history SELECT (jsonb_populate_record(null::container_owner_history,'${JSON.stringify({...template,id:crypto.randomUUID(),order_type:r.kind,old_status:r.old_status,new_status:r.new_status,cancellation:cancel,storage_period_id:null}).replaceAll("'","''")}'::jsonb)).*`;
+ const insert=(r,cancel,id=crypto.randomUUID())=>{
+  const value={...template,id,order_type:r.kind,old_status:r.old_status,new_status:r.new_status,cancellation:cancel,storage_period_id:null};
+  if(schema>=51)delete value.cancellation;
+  return "INSERT INTO container_owner_history SELECT (jsonb_populate_record(null::container_owner_history,'"+JSON.stringify(value).replaceAll("'","''")+"'::jsonb)).*";
+ };
  for(const r of result){
   if(r.operation===null)rejected(insert(r,false),/history_transition_known/);
   else {
-   sql('BEGIN; '+insert(r,r.operation.startsWith('CANCEL_'))+'; SET CONSTRAINTS ALL IMMEDIATE; ROLLBACK;');
-   rejected(insert(r,!r.operation.startsWith('CANCEL_')),/history_cancellation_matches_transition/);
+   const id=crypto.randomUUID(),expected=r.operation.startsWith('CANCEL_');
+   const actual=sql('BEGIN; '+insert(r,expected,id)+"; SET CONSTRAINTS ALL IMMEDIATE; SELECT cancellation FROM container_owner_history_view WHERE id='"+id+"'; ROLLBACK;");
+   assert.ok(actual.split(/\r?\n/).includes(expected?'t':'f'),'Stored transition yields exact cancellation');
+   if(schema<51)rejected(insert(r,!expected),/history_cancellation_matches_transition/);
+   else rejected("UPDATE container_owner_history_view SET cancellation="+(!expected)+" WHERE id='"+template.id+"'",/cannot update column "cancellation" of view/);
   }
  }
- audit();console.log('PASS: all 75 combinations checked; 13 valid transitions accepted, 62 invalid rejected; cancellation consistency enforced');
+ audit();console.log('PASS: all 75 combinations checked; 13 valid transitions accepted, 62 invalid rejected; exact cancellation values verified');
 }else if(mode==='migration-rejection'){
  assert.equal(db,'billing_history_operation_migration_test');assert.equal(schema,48);
  const before=state(),history=rows(source),migration=fs.readFileSync('backend/src/main/resources/db/baseline/V49__derive_history_operation_type.sql','utf8');
@@ -83,7 +90,7 @@ if(mode==='capture'){
   console.log('PASS: complete history API (both filters) for every KTK, report API and full CSV '+mode);
  })().catch(e=>{console.error(e);process.exitCode=1;});
 }else if(mode==='coverage'){
- assert.ok(['billing_history_operation_test','billing_history_metadata_test'].includes(db));assert.ok([49,50].includes(schema));audit();
+ assert.ok(['billing_history_operation_test','billing_history_metadata_test','billing_history_cancellation_test'].includes(db));assert.ok([49,50,51].includes(schema));audit();
  const actual=json('select json_agg(t) from (select distinct order_type,old_status,new_status from container_owner_history)t');
  assert.equal(new Set(actual.map(r=>key(r.order_type,r.old_status,r.new_status))).size,13);
  console.log('PASS: application lifecycle exercised all 13 valid transition combinations; all stored history meanings agree');
