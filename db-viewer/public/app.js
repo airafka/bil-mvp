@@ -208,6 +208,10 @@ function createPanel(number) {
   let searchTimer;
   const backHistory = [], forwardHistory = [];
   let pendingScroll = null;
+  const columnWidths = new Map();
+  let finishColumnResize;
+  const cancelColumnResize = () => finishColumnResize?.(true);
+  window.addEventListener('blur', cancelColumnResize);
   const panel = { root, number, state, select: selectTable, refresh: refreshPanel, options: updateOptions };
   root.id = 'table-panel-' + number;
   root.setAttribute('aria-label', 'Панель ' + number);
@@ -221,6 +225,7 @@ function createPanel(number) {
   $('close').onclick = () => {
     if (panels.length === 1) return;
     disposed = true; clearTimeout(searchTimer);
+    cancelColumnResize(); window.removeEventListener('blur', cancelColumnResize);
     const index = panels.indexOf(panel);
     panels.splice(index, 1); root.remove();
     if (active === panel) activate(panels[Math.min(index, panels.length - 1)]);
@@ -253,6 +258,7 @@ function createPanel(number) {
     $('history-forward').title = forwardHistory.length ? 'Вперёд: ' + forwardHistory.at(-1).selected : 'Нет следующей таблицы';
   }
   function openLocation(location) {
+    cancelColumnResize();
     clearTimeout(searchTimer);
     const { scrollTop, scrollLeft, ...selection } = location;
     Object.assign(state, selection);
@@ -290,7 +296,77 @@ function createPanel(number) {
   $('history-forward').onclick = () => travelHistory(forwardHistory, backHistory);
   updateHistoryButtons();
 
+  function configureColumns(heading, data) {
+    const table = $('data-table');
+    table.classList.add('column-grid');
+    const defaults = state.view === 'schema'
+      ? [200, 420, 160, 80, 150, 240]
+      : [42, ...data.columns.map(column => column.type === 'uuid' ? 116
+        : Math.min(280, Math.max(column.type.includes('timestamp') ? 210 : 130, column.name.length * 8 + 42)))];
+    const names = state.view === 'schema' ? ['Колонка', 'Примечание', 'Тип данных', 'NULL', 'Ключ', 'Связь']
+      : ['#', ...data.columns.map(column => column.name)];
+    const keys = names.map(name => JSON.stringify([data.name, state.view, name]));
+    const widths = defaults.map((width, index) => columnWidths.get(keys[index]) ?? width);
+    const group = element('colgroup');
+    const columns = widths.map(width => { const col = element('col'); col.style.width = width + 'px'; group.append(col); return col; });
+    const totalWidth = () => { table.style.width = widths.reduce((sum, width) => sum + width, 0) + 'px'; };
+    totalWidth();
+    for (const [index, th] of [...heading.children].entries()) {
+      th.title = names[index];
+      if (state.view === 'data' && index === 0) continue;
+      const handle = element('span', undefined, 'column-resize');
+      handle.tabIndex = 0;
+      handle.setAttribute('role', 'separator');
+      handle.setAttribute('aria-orientation', 'vertical');
+      handle.setAttribute('aria-label', 'Ширина столбца ' + names[index]);
+      handle.setAttribute('aria-valuemin', '64'); handle.setAttribute('aria-valuemax', '1200');
+      handle.setAttribute('aria-valuenow', String(widths[index]));
+      handle.title = 'Потяните границу столбца. Двойной щелчок — исходная ширина.';
+      const apply = width => {
+        widths[index] = Math.round(Math.max(64, Math.min(1200, width)));
+        columnWidths.set(keys[index], widths[index]);
+        columns[index].style.width = widths[index] + 'px';
+        handle.setAttribute('aria-valuenow', String(widths[index])); totalWidth();
+      };
+      let drag;
+      handle.onpointerdown = event => {
+        if (event.button !== 0) return;
+        cancelColumnResize(); event.preventDefault(); event.stopPropagation(); handle.focus();
+        drag = { id: event.pointerId, x: event.clientX, width: widths[index], saved: columnWidths.get(keys[index]) };
+        handle.setPointerCapture(event.pointerId); document.body.classList.add('resizing-columns');
+        finishColumnResize = (cancel = false) => {
+          const previous = drag; drag = null; finishColumnResize = null;
+          if (cancel) {
+            apply(previous.width);
+            if (previous.saved === undefined) columnWidths.delete(keys[index]);
+            else columnWidths.set(keys[index], previous.saved);
+          }
+          if (handle.hasPointerCapture(previous.id)) handle.releasePointerCapture(previous.id);
+          document.body.classList.remove('resizing-columns');
+          queueMicrotask(() => {
+            if (state.pending && !state.loading && !disposed) { state.pending = false; refreshPanel(true); }
+          });
+        };
+      };
+      handle.onpointermove = event => { if (drag && drag.id === event.pointerId) apply(drag.width + event.clientX - drag.x); };
+      handle.onpointerup = () => { if (drag) finishColumnResize?.(); };
+      handle.onpointercancel = handle.onlostpointercapture = () => { if (drag) cancelColumnResize(); };
+      handle.onclick = event => event.stopPropagation();
+      handle.ondblclick = event => { event.stopPropagation(); cancelColumnResize(); apply(defaults[index]); columnWidths.delete(keys[index]); };
+      handle.onkeydown = event => {
+        if (event.key === 'Escape') { cancelColumnResize(); return; }
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault(); event.stopPropagation(); cancelColumnResize();
+        const step = event.shiftKey ? 40 : 10;
+        apply(event.key === 'Home' ? 64 : event.key === 'End' ? 1200 : widths[index] + (event.key === 'ArrowLeft' ? -step : step));
+      };
+      th.append(handle);
+    }
+    return group;
+  }
+
   function renderData() {
+    cancelColumnResize();
     const data = state.data;
     if (!data) return;
     $('table-title').textContent = data.name;
@@ -364,13 +440,7 @@ function createPanel(number) {
             const filter = { column: relation.target_column, value };
             const openBelow = () => addPanel({ after: panel, table: target, filter });
             link.onclick = openBelow;
-            const below = element('button', '↧', 'fk-below');
-            below.type = 'button';
-            below.title = 'Открыть ' + target + ' в новой панели снизу';
-            below.setAttribute('aria-label', below.title + ': ' + value);
-            below.onclick = openBelow;
-            const actions = element('span', undefined, 'fk-actions');
-            actions.append(link, below); td.append(actions);
+            td.append(link);
           } else td.textContent = value === null ? 'NULL' : value === '' ? '""' : value;
           td.title = (changed ? 'Изменённое поле: ' : '') + (value === null ? 'NULL' : value); row.append(td);
         }
@@ -380,7 +450,8 @@ function createPanel(number) {
       $('empty').hidden = data.rows.length > 0;
       $('empty').textContent = state.search || state.filter ? 'Нет записей по заданному условию.' : 'В таблице пока нет записей. Новые появятся автоматически.';
     }
-    $('data-table').replaceChildren(head, body);
+    const columnGroup = configureColumns(heading, data);
+    $('data-table').replaceChildren(columnGroup, head, body);
     if (pendingScroll) {
       $('data-scroll').scrollTop = pendingScroll.top;
       $('data-scroll').scrollLeft = pendingScroll.left;
@@ -390,7 +461,7 @@ function createPanel(number) {
 
   async function refreshPanel(force = false) {
     if (disposed || !state.selected || (app.paused && !force)) return;
-    if (state.loading) { state.pending = true; return; }
+    if (state.loading || finishColumnResize) { state.pending = true; return; }
     state.loading = true;
     const version = state.version;
     try {
@@ -400,6 +471,7 @@ function createPanel(number) {
       if (disposed) return;
       if (version === state.version) {
         if (Number(data.total) > 0 && state.offset >= Number(data.total)) { state.offset = 0; state.version++; state.pending = true; }
+        else if (finishColumnResize) { state.pending = true; }
         else { state.data = data; renderData(); }
         showPanelError('');
       } else state.pending = true;

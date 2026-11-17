@@ -131,7 +131,7 @@ th.row-number { z-index: 3; padding-right: 10px; font-size: 11px; background: #4
 td.action-cell { z-index: 1; }
 .row-open { display: block; width: 100%; height: 25px; min-height: 25px; padding: 2px 9px; text-align: right; background: transparent; border: 0; border-radius: 0; color: #c7cdd3; font: inherit; }
 .row-open:hover { background: #415769; color: #fff; }
-.fk { text-decoration: none; padding: 0; min-height: 0; border: 0; border-radius: 0; font: inherit; color: inherit; background: transparent; max-width: 320px; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+.fk { text-decoration: none; padding: 0; min-height: 0; border: 0; border-radius: 0; font: inherit; color: inherit; background: transparent; display: block; width: 100%; max-width: 100%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
 .fk:hover { background: transparent; text-decoration: underline; text-underline-offset: 3px; color: #e5eff9; }
 .empty { text-align: center; padding: 65px 15px; color: var(--muted); }
 .table-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 31px; padding: 2px 8px; border-top: 1px solid var(--border); background: #303438; font-size: 11px; color: #b8c0c7; }
@@ -276,14 +276,18 @@ tbody tr:hover td.action-cell { background: #425a6d; }
 .fk::before { content: "↗"; display: inline-block; margin-right: 6px; color: #7baed0; font-weight: 600; text-decoration: none; }
 td:focus-within { box-shadow: inset 0 0 0 2px #85b4d7; }
 
-/* Related records can open below without replacing their source panel. */
-.fk-actions { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; vertical-align: top; }
-.fk-actions .fk { min-width: 0; flex: 1; }
-.fk-below { flex: none; min-height: 21px; height: 21px; width: 23px; padding: 0; border: 0; background: transparent; color: #9bbbd2; font-size: 17px; line-height: 21px; }
-.fk-below:hover { background: #43566a; color: #e2efff; }
 .sidebar-resize { display: flex; align-items: center; justify-content: center; cursor: col-resize; touch-action: none; min-height: 0; }
 .sidebar-resize::before { content: ""; width: 3px; height: 48px; background: #657990; border-radius: 2px; }
 .sidebar-resize:hover, .sidebar-resize:focus-visible { background: #28384b; outline: none; }
 .sidebar-resize:hover::before, .sidebar-resize:focus-visible::before { background: #c0d1e6; }
 .resizing-sidebar, .resizing-sidebar * { cursor: col-resize !important; user-select: none !important; }
 @media (max-width: 700px) { .sidebar-resize { display: none; } }
+
+/* Explicit column widths keep values clipped to the draggable grid boundary. */
+table.column-grid { table-layout: fixed; min-width: 0; }
+.column-grid td { min-width: 0; max-width: none; width: auto; }
+.column-grid th { overflow: hidden; text-overflow: ellipsis; padding-right: 15px; }
+.column-grid th button { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.column-resize { position: absolute; right: 0; top: 0; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; z-index: 4; }
+.column-resize:hover, .column-resize:focus-visible { background: #85b4d7; outline: none; }
+.resizing-columns, .resizing-columns * { cursor: col-resize !important; user-select: none !important; }
