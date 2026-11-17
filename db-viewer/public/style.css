@@ -291,3 +291,7 @@ table.column-grid { table-layout: fixed; min-width: 0; }
 .column-resize { position: absolute; right: 0; top: 0; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; z-index: 4; }
 .column-resize:hover, .column-resize:focus-visible { background: #85b4d7; outline: none; }
 .resizing-columns, .resizing-columns * { cursor: col-resize !important; user-select: none !important; }
+
+/* Measure headers at intrinsic width without displaying a second grid. */
+.column-measure { position: fixed; visibility: hidden; pointer-events: none; table-layout: auto !important; width: max-content !important; min-width: 0 !important; }
+.column-measure th button { width: max-content; overflow: visible; }

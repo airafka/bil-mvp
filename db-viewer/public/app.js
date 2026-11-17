@@ -299,14 +299,28 @@ function createPanel(number) {
   function configureColumns(heading, data) {
     const table = $('data-table');
     table.classList.add('column-grid');
-    const defaults = state.view === 'schema'
+    // Measure the actual header font, icon, sort arrow and padding before sizing the grid.
+    const probe = element('table', undefined, 'column-grid column-measure');
+    probe.setAttribute('aria-hidden', 'true');
+    const probeHead = element('thead'), probeRow = heading.cloneNode(true);
+    if (state.view === 'data') {
+      for (const [index, th] of [...probeRow.children].entries()) {
+        const button = th.querySelector('button');
+        if (button) button.lastChild.textContent = '↑ ' + data.columns[index - 1].name;
+      }
+    }
+    probeHead.append(probeRow); probe.append(probeHead); root.append(probe);
+    const minimums = [...probeRow.children].map((th, index) => state.view === 'data' && index === 0
+      ? 42 : Math.max(64, Math.ceil(th.getBoundingClientRect().width) + 1));
+    probe.remove();
+    const defaults = (state.view === 'schema'
       ? [200, 420, 160, 80, 150, 240]
-      : [42, ...data.columns.map(column => column.type === 'uuid' ? 116
-        : Math.min(280, Math.max(column.type.includes('timestamp') ? 210 : 130, column.name.length * 8 + 42)))];
+      : [42, ...data.columns.map(column => column.type === 'uuid' ? 0
+        : Math.min(280, Math.max(column.type.includes('timestamp') ? 210 : 130, column.name.length * 8 + 42)))]).map((width, index) => Math.max(width, minimums[index]));
     const names = state.view === 'schema' ? ['Колонка', 'Примечание', 'Тип данных', 'NULL', 'Ключ', 'Связь']
       : ['#', ...data.columns.map(column => column.name)];
     const keys = names.map(name => JSON.stringify([data.name, state.view, name]));
-    const widths = defaults.map((width, index) => columnWidths.get(keys[index]) ?? width);
+    const widths = defaults.map((width, index) => Math.max(minimums[index], columnWidths.get(keys[index]) ?? width));
     const group = element('colgroup');
     const columns = widths.map(width => { const col = element('col'); col.style.width = width + 'px'; group.append(col); return col; });
     const totalWidth = () => { table.style.width = widths.reduce((sum, width) => sum + width, 0) + 'px'; };
@@ -319,11 +333,11 @@ function createPanel(number) {
       handle.setAttribute('role', 'separator');
       handle.setAttribute('aria-orientation', 'vertical');
       handle.setAttribute('aria-label', 'Ширина столбца ' + names[index]);
-      handle.setAttribute('aria-valuemin', '64'); handle.setAttribute('aria-valuemax', '1200');
+      handle.setAttribute('aria-valuemin', String(minimums[index])); handle.setAttribute('aria-valuemax', '1200');
       handle.setAttribute('aria-valuenow', String(widths[index]));
       handle.title = 'Потяните границу столбца. Двойной щелчок — исходная ширина.';
       const apply = width => {
-        widths[index] = Math.round(Math.max(64, Math.min(1200, width)));
+        widths[index] = Math.round(Math.max(minimums[index], Math.min(1200, width)));
         columnWidths.set(keys[index], widths[index]);
         columns[index].style.width = widths[index] + 'px';
         handle.setAttribute('aria-valuenow', String(widths[index])); totalWidth();
@@ -358,7 +372,7 @@ function createPanel(number) {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault(); event.stopPropagation(); cancelColumnResize();
         const step = event.shiftKey ? 40 : 10;
-        apply(event.key === 'Home' ? 64 : event.key === 'End' ? 1200 : widths[index] + (event.key === 'ArrowLeft' ? -step : step));
+        apply(event.key === 'Home' ? minimums[index] : event.key === 'End' ? 1200 : widths[index] + (event.key === 'ArrowLeft' ? -step : step));
       };
       th.append(handle);
     }
