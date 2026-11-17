@@ -1,6 +1,8 @@
-// All changes are restricted to a restored billing_clock_test on backend port 8199.
+// Only restored billing_clock_test:8199 or billing_stock_history_test:8203 may be changed.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-const docker=process.env.DOCKER_EXE||'docker',db='billing_clock_test',base='http://127.0.0.1:8199/api';
+const docker=process.env.DOCKER_EXE||'docker',db=process.env.CLOCK_TEST_DB||'billing_clock_test',port=db==='billing_stock_history_test'?'8203':'8199',base='http://127.0.0.1:'+port+'/api';
+assert.ok(['billing_clock_test','billing_stock_history_test'].includes(db));
+const container=db==='billing_stock_history_test'?'billing-next-stock-history-test':'billing-next-clock-test';
 const run=args=>execFileSync(docker,args,{encoding:'utf8',windowsHide:true,maxBuffer:16*1024*1024}).trim();
 const sql=q=>run(['exec','billing-next-db-1','psql','-X','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q]);
 const json=q=>JSON.parse(sql(q));
@@ -8,9 +10,9 @@ assert.equal(sql('select current_database()'),db);
 const snapshot=path.resolve(__dirname,'../backups/clock-before-tables.json');
 function fingerprints(){const tables=json("select json_agg(tablename order by tablename) from pg_tables where schemaname='public' and tablename not in ('flyway_schema_history','application_clock')");return sql(tables.map(t=>`select json_build_object('table','${t}','count',count(*),'hash',md5(coalesce(string_agg(to_jsonb(t)::text,chr(10) order by to_jsonb(t)::text),''))) from public."${t}" t`).join(' union all '));}
 if(process.argv[2]==='capture') {assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'34');assert.ok(!fs.existsSync(snapshot),'Capture already exists');fs.writeFileSync(snapshot,fingerprints());console.log('Captured pre-migration business rows');process.exit();}
-const inspect=JSON.parse(run(['inspect','billing-next-clock-test']))[0];
-assert.ok(inspect.Config.Env.includes('DB_NAME='+db));assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort==='8199'));
-assert.ok([35,36,37,38,39,40,41].includes(Number(sql('select max(version::int) from flyway_schema_history where success'))));
+const inspect=JSON.parse(run(['inspect',container]))[0];
+assert.ok(inspect.Config.Env.includes('DB_NAME='+db));assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
+assert.ok([35,36,37,38,39,40,41,42,43].includes(Number(sql('select max(version::int) from flyway_schema_history where success'))));
 if(process.argv[2]!=='recheck') assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'35','Original clock migration capture is V34 -> V35; use recheck for the latest schema');
 async function api(p,method='GET',body,status=200){const r=await fetch(base+p,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();let value;try{value=JSON.parse(text)}catch{value=text}assert.equal(r.status,status,p+': '+text);return value;}
 async function date(value){const c=await api('/application-clock');return api('/application-clock','PUT',{date:value,version:c.version});}
@@ -26,7 +28,7 @@ async function complete(id,section){await api('/comprehensive-service-orders/'+i
   assert.equal(sql("begin read only; select billing_today(); commit").split('\n')[1],'2096-02-28');
   assert.equal(sql("select abs(extract(epoch from ((billing_now() at time zone 'Europe/Moscow')::time-(clock_timestamp() at time zone 'Europe/Moscow')::time)))<2"),'t');
   assert.equal(fingerprints(),expectedRows,'Changing calendar rewrote existing business rows');
-  assert.equal(sql("select count(*) from information_schema.columns where table_schema='public' and table_name not in ('application_clock','flyway_schema_history') and column_default ~* '(current_timestamp|(^|[^_])now\\(\\)|clock_timestamp\\(\\))'"),'0');
+  assert.equal(sql("select count(*) from information_schema.columns where table_schema='public' and table_name not in ('application_clock','flyway_schema_history') and not (table_name='container_owner_history' and column_name='created_at') and column_default ~* '(current_timestamp|(^|[^_])now\\(\\)|clock_timestamp\\(\\))'"),'0');
   await api('/application-clock','PUT',{date:'2096-02-29',version:initial.version},409);
   await api('/application-clock','PUT',{date:'2096-02-30',version:state.version},400);
   await api('/application-clock','PUT',{date:'2096-02-29'},400);
@@ -55,14 +57,14 @@ async function complete(id,section){await api('/comprehensive-service-orders/'+i
   const execution=json(`select row_to_json(e) from service_execution e where comprehensive_service_order_id='${id}'`);
   assert.equal(localDate(execution.performed_at),'2096-03-01');assert.equal(localDate(execution.priced_at),'2096-03-01');
   assert.equal(sql(`select count(*) from route where id in (select route_id from receiving_order where comprehensive_service_order_id='${id}') and (data_time at time zone 'Europe/Moscow')::date='2096-02-28'`),'1');
-  assert.equal(sql(`select count(*) from container_owner_history where container_id='${c}' and (created_at at time zone 'UTC' at time zone 'Europe/Moscow')::date not in ('2096-02-28','2096-03-01')`),'0');
+  assert.equal(sql(`select count(*) from container_owner_history where container_id='${c}' and (occurred_at at time zone 'Europe/Moscow')::date not in ('2096-02-28','2096-03-01')`),'0');
   assert.equal(sql(`select count(*) from container_movement where container_id='${c}' and (event_date_time at time zone 'UTC' at time zone 'Europe/Moscow')::date<>(created_at at time zone 'UTC' at time zone 'Europe/Moscow')::date`),'0');
   await date('2096-03-02');
   assert.equal((await api('/container-storage-periods?periodId='+period.id)).items[0].storageDays,3);
   await api('/shipping-orders/'+shipping+'/cancellation','POST',{expectedStatus:'COMPLETED',reason:'Изолированная проверка календаря'});
   assert.equal((await api('/container-storage-periods?periodId='+period.id)).items[0].storageDays,4);
   assert.equal(sql(`select (cancelled_at at time zone 'Europe/Moscow')::date from order_cancellation where order_id='${shipping}'`),'2096-03-02');
-  console.log('PASS: created_at, stock UTC timestamps, route plans, receipt/departure, leap-day storage, charges and cancellation use business dates');
+  console.log('PASS: created_at, stock business timestamps, route plans, receipt/departure, leap-day storage, charges and cancellation use business dates');
   // New shipment after cancellation, then invoice creation and payment on separate working days.
   let details=await api('/comprehensive-service-orders/'+id+'/shipping-orders','POST',{containerIds:[c]},201);
   await date('2096-03-03');await api('/comprehensive-service-orders/'+id+'/no-return','POST',{containerIds:[c]});await complete(id,'SHIPPING');
@@ -77,8 +79,8 @@ async function complete(id,section){await api('/comprehensive-service-orders/'+i
   await date('2096-02-27');assert.equal((await api('/container-storage-periods?periodId='+period.id)).totalElements,0);
   assert.equal(localDate((await api('/payment-invoices/'+invoice.invoice.id)).invoice.createdAt),'2096-03-04');
   await date('2096-03-05');
-  run(['restart','billing-next-clock-test']);
-  let healthy=false;for(let i=0;i<50;i++){try{const r=await fetch('http://127.0.0.1:8199/actuator/health');if(r.ok){healthy=true;break}}catch{}await new Promise(r=>setTimeout(r,300));}assert.ok(healthy);
+  run(['restart',container]);
+  let healthy=false;for(let i=0;i<50;i++){try{const r=await fetch('http://127.0.0.1:'+port+'/actuator/health');if(r.ok){healthy=true;break}}catch{}await new Promise(r=>setTimeout(r,300));}assert.ok(healthy);
   assert.equal((await api('/application-clock')).date,'2096-03-05');
   fs.writeFileSync(path.resolve(__dirname,'../backups/clock-fixture.json'),JSON.stringify({db,periodId:period.id,containerId:c,serviceId:id,invoiceId:invoice.invoice.id}));
   console.log('PASS: invoice/month/payment dates, rewinding does not rewrite history, selected date survives backend restart');

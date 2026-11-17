@@ -1,9 +1,9 @@
 // Mutating integration checks. Refuses any database/backend other than this isolated fixture.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_container_tasks_test';
-assert.ok(['billing_container_tasks_test','billing_storage_fields_test','billing_history_fields_test','billing_storage_owner_test'].includes(db));
-const ownerTest=db==='billing_storage_owner_test',historyTest=db==='billing_history_fields_test',fieldsTest=db==='billing_storage_fields_test',port=ownerTest?'8202':historyTest?'8201':fieldsTest?'8198':'8194',base='http://127.0.0.1:'+port+'/api';
-const inspect=JSON.parse(execFileSync(docker,['inspect',ownerTest?'billing-next-storage-owner-test':historyTest?'billing-next-history-fields-test':fieldsTest?'billing-next-storage-fields-test':'billing-next-container-tasks-test'],{encoding:'utf8',windowsHide:true}))[0];
+assert.ok(['billing_container_tasks_test','billing_storage_fields_test','billing_history_fields_test','billing_storage_owner_test','billing_stock_history_test'].includes(db));
+const stockTest=db==='billing_stock_history_test',ownerTest=db==='billing_storage_owner_test',historyTest=db==='billing_history_fields_test',fieldsTest=db==='billing_storage_fields_test',port=stockTest?'8203':ownerTest?'8202':historyTest?'8201':fieldsTest?'8198':'8194',base='http://127.0.0.1:'+port+'/api';
+const inspect=JSON.parse(execFileSync(docker,['inspect',stockTest?'billing-next-stock-history-test':ownerTest?'billing-next-storage-owner-test':historyTest?'billing-next-history-fields-test':fieldsTest?'billing-next-storage-fields-test':'billing-next-container-tasks-test'],{encoding:'utf8',windowsHide:true}))[0];
 assert.ok(inspect.Config.Env.includes('DB_NAME='+db));
 assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
 const sql=q=>execFileSync(docker,['exec','billing-next-db-1','psql','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q],{encoding:'utf8',windowsHide:true}).trim();

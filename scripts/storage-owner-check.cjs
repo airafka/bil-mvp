@@ -1,6 +1,7 @@
 // Only an isolated restored V41 database may be used. Run capture before starting V42.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-const docker=process.env.DOCKER_EXE||'docker',db='billing_storage_owner_test',port='8202',base='http://127.0.0.1:'+port+'/api';
+const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_storage_owner_test',port=db==='billing_stock_history_test'?'8203':'8202',base='http://127.0.0.1:'+port+'/api';
+assert.ok(['billing_storage_owner_test','billing_stock_history_test'].includes(db));
 const run=args=>execFileSync(docker,args,{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
 const sql=q=>run(['exec','billing-next-db-1','psql','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q]);
 const json=q=>JSON.parse(sql(q)||'null');
@@ -25,10 +26,10 @@ async function main(){
    fs.mkdirSync(path.dirname(captureFile),{recursive:true});fs.writeFileSync(captureFile,JSON.stringify(snapshot()));
    console.log('PASS: captured V41 business data, sequences and all column definitions');return;
  }
- const inspect=JSON.parse(run(['inspect','billing-next-storage-owner-test']))[0];
+ const inspect=JSON.parse(run(['inspect',db==='billing_stock_history_test'?'billing-next-stock-history-test':'billing-next-storage-owner-test']))[0];
  assert.ok(inspect.Config.Env.includes('DB_NAME='+db));
  assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
- assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'42');
+ assert.ok(['42','43'].includes(sql('select max(version::int) from flyway_schema_history where success')));
  if(process.argv[2]==='migration'){
    assert.deepEqual(snapshot(),JSON.parse(fs.readFileSync(captureFile,'utf8')));
    console.log('PASS: V42 preserves all business rows, sequences, table and column definitions; no retroactive splits');return;

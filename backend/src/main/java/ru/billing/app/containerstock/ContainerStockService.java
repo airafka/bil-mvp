@@ -34,6 +34,7 @@ public class ContainerStockService {
             UUID orderId, String orderType, Long orderNumber, LocalDateTime createdAt, boolean cancellation, String operationType, java.time.OffsetDateTime occurredAt,
             String timeSource, UUID storagePeriodId, UUID previousStoragePeriodId) {}
     record State(UUID id, UUID client, String status, UUID receiving, UUID shipping) {}
+    record Reservation(UUID container, UUID previousOwner) {}
 
     public void lockContainers(Collection<UUID> ids) {
         for (UUID id : new TreeSet<>(ids)) {
@@ -64,7 +65,7 @@ public class ContainerStockService {
             """,client,container);
         if(old==null || !Objects.equals(old.client(),client) || !Objects.equals(old.status(),status)) {
             UUID history=UUID.randomUUID();
-            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,created_at) values(?,?,?,?,?,?,?,?,billing_now() at time zone 'UTC')",
+            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,occurred_at) values(?,?,?,?,?,?,?,?,billing_now())",
                 history,container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type);
             storage.onHistory(history,container,order,type,old==null?null:old.status(),status,client,cancellation);
             return history;
@@ -101,10 +102,6 @@ public class ContainerStockService {
             tasks.change(row,completed?"UPLOADED":null,completed?"FINISHED":"UPLOADED");
             State old=state(row.container());
             UUID history;
-            if(!completed) jdbc.update("""
-                insert into container_stock_reservation(order_id,order_type,container_id,previous_client_id,previous_receiving_id,previous_shipping_id)
-                values(?,?,?,?,?,?) on conflict do nothing
-                """,order,receiving?"RECEIVING_ORDER":"SHIPPING_ORDER",row.container(),old==null?null:old.client(),old==null?null:old.receiving(),old==null?null:old.shipping());
             if(receiving) {
                 if(!completed) {
                     if(row.owner()==null) throw error("RECEIVING_OWNER_REQUIRED","Укажите собственника каждого КТК в заявке на поставку");
@@ -146,18 +143,20 @@ public class ContainerStockService {
         if("DRAFT".equals(previousStatus))return;
         boolean receiving=resource.equals("receiving-orders");
         String type=receiving?"RECEIVING_ORDER":"SHIPPING_ORDER";
-        var ids=jdbc.query("""
-            select container_id from container_stock_reservation where order_id=? and order_type=? order by container_id
-            """,(rs,n)->rs.getObject(1,UUID.class),order,type);
-        // Fail closed for pre-register legacy orders; never guess how to reverse physical stock.
-        Integer expected=receiving?jdbc.queryForObject("""
-            select count(distinct container_id) from (
-              select container_id from receiving_order_container where receiving_order_id=?
-              union select wc.container_id from waybill w join waybill_railway_carriage rc on rc.waybill_id=w.id
-              join waybill_container wc on wc.waybill_railway_carriage_id=rc.id where w.receiving_order_id=?) q
-            """,Integer.class,order,order):jdbc.queryForObject("select count(distinct container_id) from shipping_order_container where shipping_order_id=?",Integer.class,order);
-        if(expected!=ids.size())throw error("STOCK_HISTORY_REQUIRED","Недостаточно истории резервирования для отмены. Требуется сверка остатков");
+        var ids=tasks.rows(order,receiving).stream().map(ContainerTaskRows.Row::container).toList();
         lockContainers(ids);
+        var reservations=jdbc.query("""
+            select container_id,old_client_id from container_owner_history
+            where order_id=? and order_type=? and operation_type=? and not cancellation and new_status=?
+            """,(rs,n)->new Reservation(rs.getObject("container_id",UUID.class),rs.getObject("old_client_id",UUID.class)),
+            order,type,receiving?"RESERVE_RECEIVING":"RESERVE_SHIPPING",receiving?"EXPECTED":"RESERVED_OUT");
+        var previousOwners=new HashMap<UUID,UUID>();
+        for(var reservation:reservations) {
+            if(previousOwners.containsKey(reservation.container())) throw error("STOCK_HISTORY_REQUIRED","Неоднозначная история резервирования КТК");
+            previousOwners.put(reservation.container(),reservation.previousOwner());
+        }
+        if(!previousOwners.keySet().equals(new HashSet<>(ids)))
+            throw error("STOCK_HISTORY_REQUIRED","Состав заявки не совпадает с историей резервирования. Требуется сверка остатков");
         var conflicts=new ArrayList<String>();
         for(UUID id:ids) {
             State old=state(id);
@@ -167,11 +166,15 @@ public class ContainerStockService {
         if(!conflicts.isEmpty())throw error("CANCELLATION_STOCK_CONFLICT",String.join("; ",conflicts));
         for(UUID id:ids) {
             State old=state(id);
-            var previous=jdbc.queryForObject("select previous_client_id,previous_receiving_id,previous_shipping_id from container_stock_reservation where order_id=? and order_type=? and container_id=?",
-                (rs,n)->new State(null,rs.getObject(1,UUID.class),null,rs.getObject(2,UUID.class),rs.getObject(3,UUID.class)),order,type,id);
+            UUID previousOrder;
+            try { previousOrder=jdbc.queryForObject("select previous_stock_order(?,?,?)",UUID.class,id,order,type); }
+            catch(org.springframework.dao.DataIntegrityViolationException exception) {
+                throw error("STOCK_HISTORY_REQUIRED","Неоднозначный порядок истории резервирования. Требуется сверка остатков");
+            }
             // Receiving restores the owner before acceptance. Shipping preserves any later owner change.
-            transition(id,receiving&&previous.client()!=null?previous.client():old.client(),receiving?"DEPARTED":"ON_TERMINAL",
-                receiving?previous.receiving():old.receiving(),receiving?old.shipping():previous.shipping(),order,type,true);
+            UUID previousOwner=previousOwners.get(id);
+            transition(id,receiving&&previousOwner!=null?previousOwner:old.client(),receiving?"DEPARTED":"ON_TERMINAL",
+                receiving?previousOrder:old.receiving(),receiving?old.shipping():previousOrder,order,type,true);
         }
         tasks.cancel(order,receiving,previousStatus);
         jdbc.update("update container_movement set active=false,updated_at=billing_now() at time zone 'UTC' where order_id=?",order);

@@ -30,7 +30,7 @@ public class ContainerStorageService {
             : (newStatus.equals("RESERVED_OUT")?"RESERVE_SHIPPING":"DEPARTURE");
         UUID area=type.equals("SERVICE_ORDER")?null:jdbc.queryForObject(
             "select terminal_area_catalog_id from "+(receiving?"receiving_order":"shipping_order")+" where id=?",UUID.class,order);
-        OffsetDateTime at=jdbc.queryForObject("select created_at at time zone 'UTC' from container_owner_history where id=?",OffsetDateTime.class,history);
+        OffsetDateTime at=jdbc.queryForObject("select occurred_at from container_owner_history where id=?",OffsetDateTime.class,history);
         var opened=periods("container_id=? and status='OPEN'",container);
         Period current=opened.size()==1?opened.getFirst():null;
         UUID period=null;
