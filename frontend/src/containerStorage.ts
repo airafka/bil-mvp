@@ -5,6 +5,8 @@ export type StoragePeriod = {
   shippingOrderId?: string; shippingOrderNumber?: number; departureAt?: string; departureTransport?: string;
   departureCarrier?: string; consignee?: string; shippingClientName?: string; shippingOwnerName?: string; storageDays?: number; inStock?: boolean; status: string;
   arrivalTimeSource?: string; departureTimeSource?: string;
+  startOrderId?: string; startOrderType?: string; startOrderNumber?: number;
+  endOrderId?: string; endOrderType?: string; endOrderNumber?: number;
   arrivalOperationType?: string; departureOperationType?: string;
 }
 export const storageDate = (value?: string) => value ? new Date(value).toLocaleString('ru-RU', {

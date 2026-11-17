@@ -1,9 +1,10 @@
 // Mutating checks are restricted to this isolated restored database and backend.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-const docker=process.env.DOCKER_EXE||'docker',db='billing_stock_history_test',port='8203',base='http://127.0.0.1:'+port+'/api';
+const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_stock_history_test',port=db==='billing_storage_view_test'?'8204':'8203',base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+port+'/api';
 const run=args=>execFileSync(docker,args,{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe'],maxBuffer:32*1024*1024}).trim();
 const sql=q=>run(['exec','billing-next-db-1','psql','-X','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q]);
 const json=q=>JSON.parse(sql(q)||'null');
+assert.ok(['billing_stock_history_test','billing_storage_view_test'].includes(db));
 assert.equal(sql('select current_database()'),db);
 const capture=path.join(__dirname,'../backups/stock-history-before.json');
 function snapshot(){
@@ -24,9 +25,9 @@ async function main(){
   assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'42');
   fs.mkdirSync(path.dirname(capture),{recursive:true});fs.writeFileSync(capture,JSON.stringify(snapshot()));console.log('PASS: V42 data, sequences and columns captured');return;
  }
- const inspect=JSON.parse(run(['inspect','billing-next-stock-history-test']))[0];
+ const inspect=JSON.parse(run(['inspect',db==='billing_storage_view_test'?'billing-next-storage-view-test':'billing-next-stock-history-test']))[0];
  assert.ok(inspect.Config.Env.includes('DB_NAME='+db));assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
- assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'43');
+ assert.ok(['43','44','45'].includes(sql('select max(version::int) from flyway_schema_history where success')));
  assert.equal(sql("select to_regclass('container_stock_reservation') is null"),'t');
  if(process.argv[2]==='migration'){
   assert.deepEqual(snapshot(),JSON.parse(fs.readFileSync(capture,'utf8')));
@@ -67,7 +68,7 @@ async function main(){
   assert.equal(previous(c,s3.id,'SHIPPING_ORDER'),s1.id,'cancelled shipment is skipped');
   await cancel('shipping',s3.id,'COMPLETED');await cancel('receiving',r2.id,'COMPLETED');
   assert.equal(stock(c).receiving_order_id,r1.id);assert.equal(stock(c).shipping_order_id,s1.id);assert.equal(stock(c).client_id,owner);
-  const p=json(`select json_agg(p) from container_storage_period p where receiving_order_id='${r2.id}'`);
+  const p=json(`select json_agg(q) from (select p.*,h.occurred_at receiving_at from container_storage_period p join container_owner_history h on h.id=p.receiving_history_id where receiving_order_id='${r2.id}')q`);
   assert.equal(p.length,1);assert.equal(p[0].status,'CANCELLED');assert.match(p[0].receiving_at,/2095-05-01/);
   console.log('PASS: prior active documents and owner restored across repeated visits, cancelled orders skipped, draft creation order ignored, rewound calendar and future legacy timestamps supported');
   // Incomplete or duplicated history must fail atomically, including a multi-KTK order.

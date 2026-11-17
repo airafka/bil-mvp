@@ -1,3 +1,4 @@
+import { historyOrderPath } from '../containerStock'
 import { useApplicationClock } from '../applicationClock'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
@@ -19,8 +20,8 @@ export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; empty
       <th>Транспорт вывоза</th><th>Перевозчик вывоза</th><th>Грузополучатель</th></tr></thead>
     <tbody>{rows.length ? rows.map(row => <tr key={row.id} data-period-id={row.id}>
       <td><Link to={'/container-owners/' + row.containerId + '/history'}>{row.containerName}</Link></td>
-      <td title={timeSourceLabel(row.arrivalTimeSource)}>{storageDate(row.arrivalAt)}{row.arrivalOperationType && <div className="storage-note">{operationLabel(row.arrivalOperationType)}</div>}{row.arrivalTimeSource === 'HISTORY_CREATED' && <div className="storage-note">По старой истории</div>}</td>
-      <td title={row.departureAt ? timeSourceLabel(row.departureTimeSource) : undefined}>{storageDate(row.departureAt)}{row.departureOperationType && <div className="storage-note">{operationLabel(row.departureOperationType)}</div>}</td>
+      <td title={timeSourceLabel(row.arrivalTimeSource)}>{storageDate(row.arrivalAt)}{row.arrivalOperationType && <div className="storage-note">{row.startOrderId && row.startOrderType ? <Link to={historyOrderPath({ orderId: row.startOrderId, orderType: row.startOrderType })}>{operationLabel(row.arrivalOperationType)} № {row.startOrderNumber}</Link> : operationLabel(row.arrivalOperationType)}</div>}{row.arrivalTimeSource === 'HISTORY_CREATED' && <div className="storage-note">По старой истории</div>}</td>
+      <td title={row.departureAt ? timeSourceLabel(row.departureTimeSource) : undefined}>{storageDate(row.departureAt)}{row.departureOperationType && <div className="storage-note">{row.endOrderId && row.endOrderType ? <Link to={historyOrderPath({ orderId: row.endOrderId, orderType: row.endOrderType })}>{operationLabel(row.departureOperationType)} № {row.endOrderNumber}</Link> : operationLabel(row.departureOperationType)}</div>}</td>
       <td>{row.storageDays ?? '—'}</td>
       <td><Link to={'/receiving-orders/' + row.receivingOrderId}>{row.receivingOrderNumber}</Link></td>
       <td>{parties(row.clientName, row.ownerName)}</td><td>{row.consignor || '—'}</td><td>{transportLabel(row.arrivalTransport)}</td><td>{row.arrivalCarrier || '—'}</td>

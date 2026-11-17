@@ -1,7 +1,7 @@
-// Only an isolated restored V41 database may be used. Run capture before starting V42.
+// Isolated databases only. Legacy migration modes compare V41/V42; lifecycle also covers V43–V45.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_storage_owner_test',port=db==='billing_stock_history_test'?'8203':'8202',base='http://127.0.0.1:'+port+'/api';
-assert.ok(['billing_storage_owner_test','billing_stock_history_test'].includes(db));
+const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_storage_owner_test',port=db==='billing_storage_view_test'?'8204':db==='billing_stock_history_test'?'8203':'8202',base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+port+'/api';
+assert.ok(['billing_storage_owner_test','billing_stock_history_test','billing_storage_view_test'].includes(db));
 const run=args=>execFileSync(docker,args,{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
 const sql=q=>run(['exec','billing-next-db-1','psql','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q]);
 const json=q=>JSON.parse(sql(q)||'null');
@@ -16,7 +16,9 @@ function snapshot(){
  return {hashes,seq,columns};
 }
 async function api(p,method='GET',body,status=200){const r=await fetch(base+p,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();let v;try{v=JSON.parse(text)}catch{v=text}assert.equal(r.status,status,p+': '+text);return v;}
-const periods=c=>json(`select coalesce(json_agg(p order by receiving_at,created_at,id),'[]') from container_storage_period p where container_id='${c}'`);
+const normalized=Number(sql('select max(version::int) from flyway_schema_history where success'))>=44;
+const periodSource=normalized?"(select p.*,h.occurred_at receiving_at,e.occurred_at shipping_at,h.new_client_id receiving_owner_id,r.client_id receiving_client_id,r.terminal_area_catalog_id terminal_area_id,case when p.receiving_order_container_id is not null then rc.empty else wc.net_weight=0 end is_empty from container_storage_period p join container_owner_history h on h.id=p.receiving_history_id left join container_owner_history e on e.id=p.shipping_history_id join receiving_order r on r.id=p.receiving_order_id left join receiving_order_container rc on rc.id=p.receiving_order_container_id left join waybill_container wc on wc.id=p.waybill_container_id)":'container_storage_period';
+const periods=c=>json(`select coalesce(json_agg(p order by receiving_at,created_at,id),'[]') from ${periodSource} p where container_id='${c}'`);
 const finish=(kind,id,status=200)=>api('/'+kind+'-orders/'+id+'/events','POST',{eventCode:kind==='receiving'?'UNLOAD_FINISH':'LOAD_FINISH'},status);
 const cancel=(kind,id,expectedStatus,status=200)=>api('/'+kind+'-orders/'+id+'/cancellation','POST',{expectedStatus,reason:'Проверка периодов собственников'},status);
 async function clock(date){const c=await api('/application-clock');await api('/application-clock','PUT',{date,version:c.version});}
@@ -26,10 +28,10 @@ async function main(){
    fs.mkdirSync(path.dirname(captureFile),{recursive:true});fs.writeFileSync(captureFile,JSON.stringify(snapshot()));
    console.log('PASS: captured V41 business data, sequences and all column definitions');return;
  }
- const inspect=JSON.parse(run(['inspect',db==='billing_stock_history_test'?'billing-next-stock-history-test':'billing-next-storage-owner-test']))[0];
+ const inspect=JSON.parse(run(['inspect',db==='billing_storage_view_test'?'billing-next-storage-view-test':db==='billing_stock_history_test'?'billing-next-stock-history-test':'billing-next-storage-owner-test']))[0];
  assert.ok(inspect.Config.Env.includes('DB_NAME='+db));
  assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
- assert.ok(['42','43'].includes(sql('select max(version::int) from flyway_schema_history where success')));
+ assert.ok(['42','43','44','45'].includes(sql('select max(version::int) from flyway_schema_history where success')));
  if(process.argv[2]==='migration'){
    assert.deepEqual(snapshot(),JSON.parse(fs.readFileSync(captureFile,'utf8')));
    console.log('PASS: V42 preserves all business rows, sequences, table and column definitions; no retroactive splits');return;
@@ -55,7 +57,7 @@ async function main(){
  const report=async(id,asOf)=> (await api('/container-storage-periods?status=ALL&periodId='+id+(asOf?'&asOf='+asOf:''))).items[0];
  const history=c=>api('/containers/'+c+'/owner-history?includeReservations=true');
  // Include a real old unsplit period: it must close without rewriting its old owner snapshot.
- const legacy=json("select row_to_json(t) from (select p.*,o.client_id current_owner from container_storage_period p join container_owner o on o.container_id=p.container_id where p.status='OPEN' and o.client_id<>p.receiving_owner_id limit 1)t");
+ const legacy=json("select row_to_json(t) from (select p.*,o.client_id current_owner from "+periodSource+" p join container_owner o on o.container_id=p.container_id where p.status='OPEN' and o.client_id<>p.receiving_owner_id limit 1)t");
  if(legacy){
    await clock('2026-12-01');await change(legacy.container_id,clients.find(c=>c.id!==legacy.current_owner).id);
    const old=periods(legacy.container_id).find(p=>p.id===legacy.id);
@@ -95,7 +97,7 @@ async function main(){
  s=await manual('shipping',c);await confirm('shipping',s.id);await cancel('shipping',s.id,'CONFIRMED');assert.equal(periods(c).find(p=>p.id===p4.id).status,'OPEN');
  const beforeBackdate=periods(c);await clock('2026-11-16');await change(c,other[1],409);assert.deepEqual(periods(c),beforeBackdate);
  await clock('2026-11-21');await cancel('receiving',r.id,'COMPLETED');
- assert.ok(periods(c).every(p=>p.status==='CANCELLED'));assert.equal((await report(first.id)).storageDays,undefined);
+ assert.ok(periods(c).every(p=>p.status==='CANCELLED'));if(normalized)assert.equal(await report(first.id),undefined);else assert.equal((await report(first.id)).storageDays,undefined);
  console.log('PASS: multiple same-day changes, reserved stock, frozen shipment owner, departure/cancellation, chronological guard, whole-visit annulment');
  // Cancellation retains the owner boundaries. Re-arrival creates an independent root.
  r=await manual('receiving',c);await confirm('receiving',r.id);await finish('receiving',r.id);
@@ -113,10 +115,10 @@ async function main(){
  assert.equal((await report(railNext.id)).cargoName,(await report(railFirst.id)).cargoName);
  // Enforced by the DB even when a write bypasses the application.
  function rejected(q){let failed=false;try{sql('begin; '+q+'; set constraints all immediate; rollback;')}catch(e){failed=true;assert.match(String(e.stderr),/Invalid storage|requires its exact|does not match|violates (check|foreign key) constraint|duplicate key/);}assert.ok(failed,'Invalid write was accepted');}
- rejected(`update container_storage_period set shipping_history_id=receiving_history_id,shipping_at=receiving_at,status='CLOSED' where id='${railNext.id}'`);
- rejected(`update container_storage_period set receiving_owner_id='${other[1]}' where id='${railNext.id}'`);
+ rejected(`update container_storage_period set shipping_history_id=receiving_history_id,${normalized?'':'shipping_at=receiving_at,'}status='CLOSED' where id='${railNext.id}'`);
+ rejected(normalized?`update container_owner_history set new_client_id='${other[1]}' where id='${railNext.receiving_history_id}'`:`update container_storage_period set receiving_owner_id='${other[1]}' where id='${railNext.id}'`);
  rejected(`update container_owner_history set operation_type='DEPARTURE' where id='${railNext.receiving_history_id}'`);
- rejected(`update container_storage_period set receiving_at=receiving_at+interval '1 day' where id='${railNext.id}'`);
+ rejected(normalized?`update container_owner_history set occurred_at=occurred_at+interval '1 day' where id='${railNext.receiving_history_id}'`:`update container_storage_period set receiving_at=receiving_at+interval '1 day' where id='${railNext.id}'`);
  rejected(`delete from container_storage_period where id='${railFirst.id}'`);
  // One invalid row must roll back owner changes already attempted for other KTK.
  await clock('2026-11-22');const second=await generated();const secondReceipt=await manual('receiving',second.container);
