@@ -360,13 +360,10 @@ function createPanel(number) {
           const relation = data.relations.find(r => r.column === column.name);
           const target = relation?.target.replace(/^public\./, '');
           if (value !== null && relation && app.tables.some(t => t.name === target)) {
-            const link = element('button', value, 'fk'); link.title = `Открыть ${target}: ${value}`;
+            const link = element('button', value, 'fk'); link.title = `Открыть ${target} в новой панели снизу: ${value}`;
             const filter = { column: relation.target_column, value };
             const openBelow = () => addPanel({ after: panel, table: target, filter });
-            link.onclick = event => {
-              if (event.ctrlKey || event.metaKey) openBelow();
-              else selectTable(target, filter);
-            };
+            link.onclick = openBelow;
             const below = element('button', '↧', 'fk-below');
             below.type = 'button';
             below.title = 'Открыть ' + target + ' в новой панели снизу';
