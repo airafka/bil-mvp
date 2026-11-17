@@ -21,8 +21,8 @@
     <a class="app-link" href="http://localhost:3001" target="_blank" rel="noopener">Открыть MVP ↗</a>
   </header>
 
-  <main class="workspace">
-    <aside class="sidebar" aria-label="Навигатор базы данных">
+  <main id="viewer-workspace" class="workspace">
+    <aside id="database-sidebar" class="sidebar" aria-label="Навигатор базы данных">
       <div class="panel-title"><svg class="icon navigator-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16M13 9h4M13 13h4"/></svg><h1>Навигатор БД</h1></div>
       <div id="navigator-target" class="navigator-target" role="status">Выбор для панели 1</div>
       <div class="navigator-search"><label class="sr-only" for="table-search">Поиск таблицы</label><input id="table-search" type="search" placeholder="Фильтр таблиц…" autocomplete="off"></div>
@@ -40,6 +40,7 @@
       </div>
       <div class="sidebar-footer"><span class="db-icon small" aria-hidden="true"></span><span id="database">Подключение к базе…</span></div>
     </aside>
+    <div id="sidebar-resize" class="sidebar-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="database-sidebar" aria-label="Изменить ширину меню" title="Потяните для изменения ширины. Двойной щелчок — исходная ширина."></div>
 
     <section class="content" aria-label="Просмотр таблиц">
       <div id="error" class="error" role="alert" hidden></div>

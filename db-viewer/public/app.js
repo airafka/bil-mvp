@@ -185,15 +185,16 @@ function layoutPanels() {
   updatePanelHeights();
 }
 
-function addPanel() {
+function addPanel({ after = null, table = null, filter = null } = {}) {
   const panel = createPanel(nextPanel++);
-  panels.push(panel);
-  $('panels').append(panel.root);
+  const index = after ? panels.indexOf(after) + 1 : panels.length;
+  $('panels').insertBefore(panel.root, panels[index]?.root || null);
+  panels.splice(index, 0, panel);
   activate(panel); layoutPanels();
   panel.options();
   if (app.tables.length) {
-    const name = app.tables.find(table => !panels.some(item => item.state.selected === table.name))?.name || app.tables[0].name;
-    panel.select(name);
+    const name = table || app.tables.find(item => !panels.some(p => p.state.selected === item.name))?.name || app.tables[0].name;
+    panel.select(name, filter);
   }
   panel.root.querySelector('[data-role="table-select"]').focus();
   return panel;
@@ -360,7 +361,19 @@ function createPanel(number) {
           const target = relation?.target.replace(/^public\./, '');
           if (value !== null && relation && app.tables.some(t => t.name === target)) {
             const link = element('button', value, 'fk'); link.title = `Открыть ${target}: ${value}`;
-            link.onclick = () => selectTable(target, { column: relation.target_column, value }); td.append(link);
+            const filter = { column: relation.target_column, value };
+            const openBelow = () => addPanel({ after: panel, table: target, filter });
+            link.onclick = event => {
+              if (event.ctrlKey || event.metaKey) openBelow();
+              else selectTable(target, filter);
+            };
+            const below = element('button', '↧', 'fk-below');
+            below.type = 'button';
+            below.title = 'Открыть ' + target + ' в новой панели снизу';
+            below.setAttribute('aria-label', below.title + ': ' + value);
+            below.onclick = openBelow;
+            const actions = element('span', undefined, 'fk-actions');
+            actions.append(link, below); td.append(actions);
           } else td.textContent = value === null ? 'NULL' : value === '' ? '""' : value;
           td.title = (changed ? 'Изменённое поле: ' : '') + (value === null ? 'NULL' : value); row.append(td);
         }
@@ -480,11 +493,75 @@ $('toggle-events').onclick = () => {
   catch { /* Keep the toggle usable when browser storage is unavailable. */ }
 };
 $('table-search').oninput = renderTables;
-$('add-panel').onclick = addPanel;
+$('add-panel').onclick = () => addPanel();
 $('reset-heights').onclick = resetPanelHeights;
 $('pause').onclick = () => { app.paused = !app.paused; connectionStatus(); if (!app.paused) { renderEvents(); refresh(true); } };
 $('refresh').onclick = () => refresh(true);
 $('close-detail').onclick = () => $('detail').close();
 $('clear-events').onclick = () => { app.events = []; app.totalEvents = 0; app.changed.clear(); renderEvents(); renderTables(); };
+function initSidebarResize() {
+  const workspace = $('viewer-workspace'), sidebar = $('database-sidebar'), handle = $('sidebar-resize');
+  const storageKey = 'billing-db-viewer.navigator-width';
+  let preferredWidth = null, drag = null;
+  try {
+    const saved = Number(localStorage.getItem(storageKey));
+    if (Number.isFinite(saved) && saved > 0) preferredWidth = saved;
+  } catch { /* Resizing still works if browser storage is unavailable. */ }
+  const maximum = () => Math.max(180, Math.min(600, workspace.clientWidth - 430));
+  const clamp = width => Math.round(Math.max(180, Math.min(maximum(), width)));
+  function applyWidth() {
+    if (preferredWidth === null) workspace.style.removeProperty('--navigator-width');
+    else workspace.style.setProperty('--navigator-width', clamp(preferredWidth) + 'px');
+    handle.setAttribute('aria-valuemin', '180');
+    handle.setAttribute('aria-valuemax', String(maximum()));
+    handle.setAttribute('aria-valuenow', String(Math.round(sidebar.getBoundingClientRect().width)));
+    handle.setAttribute('aria-valuetext', 'Ширина меню: ' + Math.round(sidebar.getBoundingClientRect().width) + ' пикселей');
+  }
+  function saveWidth() {
+    try {
+      if (preferredWidth === null) localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, String(preferredWidth));
+    } catch { /* Keep the current width for this page. */ }
+  }
+  function finish(cancel = false) {
+    if (!drag) return;
+    const previous = drag;
+    drag = null;
+    if (cancel) preferredWidth = previous.preferred;
+    document.body.classList.remove('resizing-sidebar');
+    if (handle.hasPointerCapture(previous.id)) handle.releasePointerCapture(previous.id);
+    applyWidth();
+    if (!cancel) saveWidth();
+  }
+  handle.onpointerdown = event => {
+    if (event.button !== 0 || window.innerWidth <= 700) return;
+    event.preventDefault(); handle.focus();
+    drag = { id: event.pointerId, x: event.clientX, width: sidebar.getBoundingClientRect().width, preferred: preferredWidth };
+    handle.setPointerCapture(event.pointerId);
+    document.body.classList.add('resizing-sidebar');
+  };
+  handle.onpointermove = event => {
+    if (!drag || event.pointerId !== drag.id) return;
+    preferredWidth = clamp(drag.width + event.clientX - drag.x); applyWidth();
+  };
+  handle.onpointerup = () => finish();
+  handle.onpointercancel = () => finish(true);
+  handle.onlostpointercapture = () => finish(true);
+  handle.ondblclick = () => { finish(true); preferredWidth = null; applyWidth(); saveWidth(); };
+  handle.onkeydown = event => {
+    if (event.key === 'Escape') { finish(true); return; }
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault(); finish(true);
+    const step = event.shiftKey ? 80 : 20;
+    preferredWidth = event.key === 'Home' ? 180 : event.key === 'End' ? maximum()
+      : clamp(sidebar.getBoundingClientRect().width + (event.key === 'ArrowLeft' ? -step : step));
+    applyWidth(); saveWidth();
+  };
+  window.addEventListener('resize', () => { finish(true); applyWidth(); });
+  window.addEventListener('blur', () => finish(true));
+  applyWidth();
+}
+initSidebarResize();
+
 addPanel();
 refresh();
