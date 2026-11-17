@@ -39,10 +39,10 @@ public class ContainerStorageService {
             tasks.finished(order,container,true);
             period=UUID.randomUUID();
             jdbc.update("""
-                insert into container_storage_period(id,container_id,receiving_order_id,receiving_history_id,
+                insert into container_storage_period(id,container_id,receiving_history_id,
                     status)
-                values(?,?,?,?,'OPEN')
-                """,period,container,order,history);
+                values(?,?,?,'OPEN')
+                """,period,container,history);
         } else if(operation.equals("OWNER_CHANGE")) {
             OffsetDateTime latest=jdbc.queryForObject("select max(occurred_at) from container_owner_history where container_id=? and id<>?",
                 OffsetDateTime.class,container,history);
@@ -57,9 +57,9 @@ public class ContainerStorageService {
                     """,history,current.id());
                 period=UUID.randomUUID();
                 jdbc.update("""
-                    insert into container_storage_period(id,container_id,receiving_order_id,receiving_history_id,
+                    insert into container_storage_period(id,container_id,receiving_history_id,
                         status)
-                    select ?,container_id,receiving_order_id,?,'OPEN' from container_storage_period where id=?
+                    select ?,container_id,?,'OPEN' from container_storage_period where id=?
                     """,period,history,current.id());
             } else if(!opened.isEmpty()) throw conflict("Состояние КТК не согласовано с открытым периодом хранения");
         } else if(operation.equals("DEPARTURE")) {
@@ -134,8 +134,8 @@ public class ContainerStorageService {
             throw conflict("Не найден однозначный открытый период КТК на этой площадке. Требуется сверка истории хранения");
     }
     private List<Period> periods(String condition,Object... args) {
-        return jdbc.query("select p.*,r.terminal_area_catalog_id,h.occurred_at from container_storage_period p "
-            +"join receiving_order r on r.id=p.receiving_order_id join container_owner_history h on h.id=p.receiving_history_id "
+        return jdbc.query("select p.*,r.id receiving_order_id,r.terminal_area_catalog_id,h.occurred_at from container_storage_period p "
+            +"join receiving_order r on r.id=storage_receiving_order(p.id) join container_owner_history h on h.id=p.receiving_history_id "
             +"where "+condition+" for update of p",(rs,n)->new Period(
             rs.getObject("id",UUID.class),rs.getObject("terminal_area_catalog_id",UUID.class),rs.getObject("receiving_order_id",UUID.class),
             rs.getObject("occurred_at",OffsetDateTime.class),rs.getString("status")),args);

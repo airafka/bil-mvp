@@ -1,13 +1,15 @@
 // Destructive source-integrity scenarios are restricted to a dedicated restored test database.
 const fs=require('fs'),assert=require('node:assert/strict'),{execFileSync}=require('child_process');
-const db='billing_storage_sources_test',docker=process.env.DOCKER_EXE||'docker';
+const db=process.env.STORAGE_TEST_DB||'billing_storage_sources_test',docker=process.env.DOCKER_EXE||'docker';
 const sql=q=>execFileSync(docker,['exec','-i','billing-next-db-1','psql','-X','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1'],{input:q,encoding:'utf8',stdio:['pipe','pipe','pipe'],maxBuffer:32*1024*1024}).trim();
 const json=q=>JSON.parse(sql(q)||'null');
+assert.ok(['billing_storage_sources_test','billing_storage_origin_test'].includes(db));
 assert.equal(sql('select current_database()'),db);
-assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'46');
-const inspect=JSON.parse(execFileSync(docker,['inspect','billing-next-storage-sources-test'],{encoding:'utf8'}))[0];
-assert.ok(inspect.Config.Env.includes('DB_NAME='+db));assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort==='8205'));
-const base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':8205/api';
+const schema=Number(sql('select max(version::int) from flyway_schema_history where success'));assert.ok([46,47].includes(schema));
+const port=db==='billing_storage_origin_test'?'8206':'8205',receivingRef=schema>=47?'storage_receiving_order(id)':'receiving_order_id';
+const inspect=JSON.parse(execFileSync(docker,['inspect',db==='billing_storage_origin_test'?'billing-next-storage-origin-test':'billing-next-storage-sources-test'],{encoding:'utf8'}))[0];
+assert.ok(inspect.Config.Env.includes('DB_NAME='+db));assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
+const base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+port+'/api';
 async function api(p,method='GET',body,status=200){const r=await fetch(base+p,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();assert.equal(r.status,status,p+': '+text);return text?JSON.parse(text):null;}
 function rejected(q){let failed=false;try{sql('BEGIN; '+q+'; SET CONSTRAINTS ALL IMMEDIATE; ROLLBACK;');}catch(e){failed=true;assert.match(String(e.stderr),/Invalid storage.*source|requires its exact|violates.*constraint/);}assert.ok(failed,'Invalid write accepted: '+q);}
 (async()=>{
@@ -37,7 +39,7 @@ function rejected(q){let failed=false;try{sql('BEGIN; '+q+'; SET CONSTRAINTS ALL
  await api('/receiving-orders/'+fixture.receivingId+'/cancellation','POST',{expectedStatus:'COMPLETED',reason:'V46: повторное использование накладной'});
  assert.equal(sql("select count(*) from container_storage_period_view where receiving_order_id='"+fixture.receivingId+"'"),'0');
  assert.equal(sql("select receiving_order_id is null from waybill where id='"+fixture.waybillId+"'"),'t');
- assert.ok(Number(sql("select count(*) from container_storage_period where receiving_order_id='"+fixture.receivingId+"' and status='CANCELLED'"))>=2);
+ assert.ok(Number(sql("select count(*) from container_storage_period where "+receivingRef+"='"+fixture.receivingId+"' and status='CANCELLED'"))>=2);
  sql("update waybill_container set net_weight=0 where id='"+rail.waybill_container_id+"'");
  const r=await api('/receiving-orders','POST',{clientId:original.clientId,contractId:original.contractId,terminalAreaId:original.terminalArea.id,
  transportType:'RAILWAY',fillingType:'ALL',defaultContainerOwnerId:original.clientId,consignor:original.clientName,

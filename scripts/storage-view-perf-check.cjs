@@ -15,9 +15,10 @@ const queries={
  deepPage:select+where+' order by p.receiving_at desc,p.id limit 20 offset 5000',
  export:select+where+' order by p.receiving_at desc,p.id'
 };
-const summary={periods:Number(sql("select count(*) from container_storage_period_view")),queries:{},api:{}};
+const summary={periods:Number(sql("select count(*) from container_storage_period_view")),schema:Number(sql('select max(version::int) from flyway_schema_history where success')),queries:{},api:{}};
 function stats(a){a.sort((x,y)=>x-y);return {minMs:a[0],medianMs:a[Math.floor(a.length/2)],maxMs:a.at(-1)};}
 for(const [name,q]of Object.entries(queries)){
+ json('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) '+q); // Warm up before the five measured reads.
  const plans=Array.from({length:5},()=>json('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) '+q)[0]);
  fs.writeFileSync('backups/'+outputPrefix+'-plan-'+name+'.json',JSON.stringify(plans.at(-1),null,2));
  summary.queries[name]=stats(plans.map(p=>p['Execution Time']));
@@ -27,7 +28,8 @@ for(const [name,q]of Object.entries(queries)){
 (async()=>{
  const base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+(process.env.TEST_API_PORT||'8204')+'/api/container-storage-periods';
  for(const [name,path]of Object.entries({page20:'?size=20',deepPage:'?size=20&page=250',export:'/export'})){
-  const times=[];for(let i=0;i<5;i++){const start=performance.now(),r=await fetch(base+path);assert.equal(r.status,200);await r.arrayBuffer();times.push(performance.now()-start);}
+  const warm=await fetch(base+path);assert.equal(warm.status,200);await warm.arrayBuffer();
+   const times=[];for(let i=0;i<5;i++){const start=performance.now(),r=await fetch(base+path);assert.equal(r.status,200);await r.arrayBuffer();times.push(performance.now()-start);}
   summary.api[name]=stats(times);console.log('API '+name,summary.api[name]);
  }
  fs.writeFileSync('backups/'+outputPrefix+'-performance.json',JSON.stringify(summary,null,2));
