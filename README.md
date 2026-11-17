@@ -2,7 +2,7 @@
 
 Локальное приложение для оформления услуг контейнерной площадки: поставка КТК, вывоз, возврат, учёт собственников, начисления и счета на оплату. Репозиторий — [airafka/bil](https://github.com/airafka/bil), общая ветка — **main**. Название локальной папки bil-next не является названием ветки.
 
-Основная бизнес-логика описана по сверке 10.11.2026; правила хранения и отчёт актуализированы 17.11.2026. Проверка запуска после V48: frontend HTTP 200, backend UP, схема Flyway V48. В периоде восемь полей: добавлен arrival_history_id на исходный приём, границы переименованы в start_history_id/end_history_id. Чтение исходной поставки прямое; проверки цепочек при записи сохраняются. Все прежние бизнес-значения и последовательности сохранены, старые периоды не пересчитаны. Свежая резервная копия восстановлена и миграция проверена в billing_storage_arrival_release_test. Смены собственника, отмены, календарь, целостность и повторное использование накладной проверены в billing_storage_arrival_test; отказ миграции — в billing_storage_arrival_migration_test. На одном наборе billing_storage_view_test сравнили V47/V48: первая страница API быстрее на 18%, глубокая страница — на 33%, CSV — на 8%; полная методика в CONTAINER_STOCK.md. API/CSV до и после совпали побайтно. Отчёт и чтение периода просмотрщиком проверены. Это результат проверки на указанную дату, а не постоянная гарантия состояния окружения.
+Основная бизнес-логика описана по сверке 10.11.2026; правила истории и хранения актуализированы 17.11.2026. Проверка запуска после V49: frontend HTTP 200, backend UP, схема Flyway V49. Из container_owner_history удалён только operation_type: он вычисляется по order_type и old_status/new_status через обычный container_owner_history_view. Все старые типы событий совпали с вычисленными; остальные бизнес-поля, последовательности, история, периоды и отчёт сохранены. Проверены все 75 сочетаний статусов (13 допустимых), реальные смены собственника и отмены на billing_history_operation_test; отказ миграции — на billing_history_operation_migration_test. Свежая резервная копия восстановлена и выпуск проверен на billing_history_operation_release_test. API истории всех КТК, отчёт и CSV до/после совпали побайтно. Период хранения сохраняет восемь полей V48 и прямую ссылку arrival_history_id. Методика предыдущего сравнения скорости V47/V48 приведена в CONTAINER_STOCK.md; повторных замеров V49 не выполнялось. Это результат проверки на указанную дату, а не постоянная гарантия состояния окружения.
 
 ## Документация
 
@@ -83,7 +83,7 @@
 
 - Frontend: React, TypeScript, React Router, Vite; зависимости фиксирует [package-lock.json](frontend/package-lock.json).
 - Backend: Java 21, Spring Boot 4.1.0, Spring JDBC, Bean Validation.
-- БД: PostgreSQL 16, Flyway; активный каталог миграций — [db/baseline](backend/src/main/resources/db/baseline), V1–V48.
+- БД: PostgreSQL 16, Flyway; активный каталог миграций — [db/baseline](backend/src/main/resources/db/baseline), V1–V49.
 - Сборка и запуск: Docker Compose; frontend раздаёт Nginx.
 
 [Backend Dockerfile](backend/Dockerfile) выполняет Maven package с тестами; [frontend Dockerfile](frontend/Dockerfile) — ESLint, Vitest и TypeScript/Vite build. Локально: mvn test из backend; npm ci, npm run lint, npm run test, npm run build из frontend. Для frontend dev доступен npm run dev.

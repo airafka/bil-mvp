@@ -1,11 +1,12 @@
-// Isolated databases only. Legacy migration modes compare V41/V42; lifecycle also covers V43–V48.
+// Isolated databases only. Legacy migration modes compare V41/V42; lifecycle also covers V43–V49.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_storage_owner_test',port=db==='billing_storage_arrival_test'?'8207':db==='billing_storage_origin_test'?'8206':db==='billing_storage_sources_test'?'8205':db==='billing_storage_view_test'?'8204':db==='billing_stock_history_test'?'8203':'8202',base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+port+'/api';
-assert.ok(['billing_storage_arrival_test','billing_storage_owner_test','billing_stock_history_test','billing_storage_view_test','billing_storage_sources_test','billing_storage_origin_test'].includes(db));
+const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_storage_owner_test',port=db==='billing_history_operation_test'?'8208':db==='billing_storage_arrival_test'?'8207':db==='billing_storage_origin_test'?'8206':db==='billing_storage_sources_test'?'8205':db==='billing_storage_view_test'?'8204':db==='billing_stock_history_test'?'8203':'8202',base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+port+'/api';
+assert.ok(['billing_history_operation_test','billing_storage_arrival_test','billing_storage_owner_test','billing_stock_history_test','billing_storage_view_test','billing_storage_sources_test','billing_storage_origin_test'].includes(db));
 const run=args=>execFileSync(docker,args,{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
 const rawSql=q=>run(['exec','billing-next-db-1','psql','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q]);
-const v48=Number(rawSql('select max(version::int) from flyway_schema_history where success'))>=48;
-const sql=q=>rawSql(v48?q.replaceAll('receiving_history_id','start_history_id').replaceAll('shipping_history_id','end_history_id'):q);
+const historySchema=Number(rawSql('select max(version::int) from flyway_schema_history where success'));
+const v48=historySchema>=48;
+const sql=q=>{if(historySchema>=49)q=q.replaceAll('from container_owner_history ','from container_owner_history_view ').replaceAll('join container_owner_history ','join container_owner_history_view ');return rawSql(v48?q.replaceAll('receiving_history_id','start_history_id').replaceAll('shipping_history_id','end_history_id'):q);};
 const json=q=>JSON.parse(sql(q)||'null',function(k,v){if(v48&&v&&typeof v==='object'&&!Array.isArray(v)){if('start_history_id' in v)v.receiving_history_id=v.start_history_id;if('end_history_id' in v)v.shipping_history_id=v.end_history_id;}return v;});
 assert.equal(sql('select current_database()'),db);
 const captureFile=path.join(__dirname,'../backups/storage-owner-before.json');
@@ -31,10 +32,10 @@ async function main(){
    fs.mkdirSync(path.dirname(captureFile),{recursive:true});fs.writeFileSync(captureFile,JSON.stringify(snapshot()));
    console.log('PASS: captured V41 business data, sequences and all column definitions');return;
  }
- const inspect=JSON.parse(run(['inspect',db==='billing_storage_arrival_test'?'billing-next-storage-arrival-test':db==='billing_storage_origin_test'?'billing-next-storage-origin-test':db==='billing_storage_sources_test'?'billing-next-storage-sources-test':db==='billing_storage_view_test'?'billing-next-storage-view-test':db==='billing_stock_history_test'?'billing-next-stock-history-test':'billing-next-storage-owner-test']))[0];
+ const inspect=JSON.parse(run(['inspect',db==='billing_history_operation_test'?'billing-next-history-operation-test':db==='billing_storage_arrival_test'?'billing-next-storage-arrival-test':db==='billing_storage_origin_test'?'billing-next-storage-origin-test':db==='billing_storage_sources_test'?'billing-next-storage-sources-test':db==='billing_storage_view_test'?'billing-next-storage-view-test':db==='billing_stock_history_test'?'billing-next-stock-history-test':'billing-next-storage-owner-test']))[0];
  assert.ok(inspect.Config.Env.includes('DB_NAME='+db));
  assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
- assert.ok(['42','43','44','45','46','47','48'].includes(sql('select max(version::int) from flyway_schema_history where success')));
+ assert.ok(['42','43','44','45','46','47','48','49'].includes(sql('select max(version::int) from flyway_schema_history where success')));
  if(process.argv[2]==='migration'){
    assert.deepEqual(snapshot(),JSON.parse(fs.readFileSync(captureFile,'utf8')));
    console.log('PASS: V42 preserves all business rows, sequences, table and column definitions; no retroactive splits');return;
@@ -120,7 +121,7 @@ async function main(){
  function rejected(q){let failed=false;try{sql('begin; '+q+'; set constraints all immediate; rollback;')}catch(e){failed=true;assert.match(String(e.stderr),/Invalid storage|requires its exact|does not match|violates (check|foreign key) constraint|duplicate key/);}assert.ok(failed,'Invalid write was accepted');}
  rejected(`update container_storage_period set shipping_history_id=receiving_history_id,${normalized?'':'shipping_at=receiving_at,'}status='CLOSED' where id='${railNext.id}'`);
  rejected(normalized?`update container_owner_history set new_client_id='${other[1]}' where id='${railNext.receiving_history_id}'`:`update container_storage_period set receiving_owner_id='${other[1]}' where id='${railNext.id}'`);
- rejected(`update container_owner_history set operation_type='DEPARTURE' where id='${railNext.receiving_history_id}'`);
+ rejected(historySchema>=49?`update container_owner_history set old_status='RESERVED_OUT',new_status='DEPARTED',order_type='SHIPPING_ORDER' where id='${railNext.receiving_history_id}'`:`update container_owner_history set operation_type='DEPARTURE' where id='${railNext.receiving_history_id}'`);
  rejected(normalized?`update container_owner_history set occurred_at=occurred_at+interval '1 day' where id='${railNext.receiving_history_id}'`:`update container_storage_period set receiving_at=receiving_at+interval '1 day' where id='${railNext.id}'`);
  rejected(`delete from container_storage_period where id='${railFirst.id}'`);
  // One invalid row must roll back owner changes already attempted for other KTK.

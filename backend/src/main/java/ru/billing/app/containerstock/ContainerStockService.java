@@ -65,9 +65,9 @@ public class ContainerStockService {
             """,client,container);
         if(old==null || !Objects.equals(old.client(),client) || !Objects.equals(old.status(),status)) {
             UUID history=UUID.randomUUID();
-            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,occurred_at) values(?,?,?,?,?,?,?,?,billing_now())",
-                history,container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type);
-            storage.onHistory(history,container,order,type,old==null?null:old.status(),status,client,cancellation);
+            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,occurred_at,cancellation) values(?,?,?,?,?,?,?,?,billing_now(),?)",
+                history,container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type,cancellation);
+            storage.onHistory(history,container,order,type,status);
             return history;
         }
         return null;
@@ -123,7 +123,7 @@ public class ContainerStockService {
             }
             if(completed) jdbc.update("""
                 insert into container_movement(id,order_id,container_id,event_code,transport_type,event_date_time)
-                select ?,?,?,?,transport_type,(select occurred_at at time zone 'UTC' from container_owner_history
+                select ?,?,?,?,transport_type,(select occurred_at at time zone 'UTC' from container_owner_history_view
                     where id=?) from %s where id=?
                 on conflict(order_id,container_id,event_code) do nothing
                 """.formatted(receiving?"receiving_order":"shipping_order"),UUID.randomUUID(),order,row.container(),receiving?"UNLOAD_FINISH":"LOAD_FINISH",
@@ -146,7 +146,7 @@ public class ContainerStockService {
         var ids=tasks.rows(order,receiving).stream().map(ContainerTaskRows.Row::container).toList();
         lockContainers(ids);
         var reservations=jdbc.query("""
-            select container_id,old_client_id from container_owner_history
+            select container_id,old_client_id from container_owner_history_view
             where order_id=? and order_type=? and operation_type=? and not cancellation and new_status=?
             """,(rs,n)->new Reservation(rs.getObject("container_id",UUID.class),rs.getObject("old_client_id",UUID.class)),
             order,type,receiving?"RESERVE_RECEIVING":"RESERVE_SHIPPING",receiving?"EXPECTED":"RESERVED_OUT");
@@ -206,7 +206,7 @@ public class ContainerStockService {
                 coalesce(r.number,s.number,so.number) as order_number,
                 (select p.id from container_storage_period p where p.end_history_id=h.id
                   and h.operation_type='OWNER_CHANGE') as previous_storage_period_id
-            from container_owner_history h left join client old on old.id=h.old_client_id
+            from container_owner_history_view h left join client old on old.id=h.old_client_id
             left join client new on new.id=h.new_client_id
             left join receiving_order r on h.order_type='RECEIVING_ORDER' and r.id=h.order_id
             left join shipping_order s on h.order_type='SHIPPING_ORDER' and s.id=h.order_id
