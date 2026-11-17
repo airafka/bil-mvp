@@ -1,9 +1,11 @@
+import { useBusinessDateTime } from '../applicationClock'
 import { useState } from 'react'
 import { UiInput, UiSelect, UiTextarea } from '../components/FormControls'
 import { ActionIcon } from '../components/ActionIcon'
 
 /** Interactive visual reference using the same components/styles as working pages. No API writes. */
 export function UiKitPage() {
+  const [date, setDate] = useBusinessDateTime()
   const [owner, setOwner] = useState('one')
   const [expanded, setExpanded] = useState(true)
   return <section className="form-page">
@@ -13,7 +15,7 @@ export function UiKitPage() {
       <section className="form-section ui-form-section"><div className="form-section-heading"><h2>Поля</h2></div><div className="form-fields-grid"><div className="form-fields-column">
         <label className="field horizontal-field"><span>Наименование <b>*</b></span><UiInput placeholder="Введите наименование" required /></label>
         <label className="field horizontal-field"><span>Собственник <b>*</b></span><UiSelect value={owner} onChange={e=>setOwner(e.target.value)}><option value="one">ООО «Мангуст»</option><option value="two">ООО «Опт-Логистика»</option></UiSelect></label>
-        <label className="field horizontal-field"><span>Дата и время</span><UiInput type="datetime-local" /></label>
+        <label className="field horizontal-field"><span>Дата и время</span><UiInput type="datetime-local" value={date} onChange={e=>setDate(e.target.value)} /></label>
         <label className="field horizontal-field"><span>Комментарий</span><UiTextarea /></label>
       </div><div className="form-fields-column">
         <label className="field horizontal-field"><span>Только просмотр</span><UiInput value="Контейнерная площадка" readOnly /></label>

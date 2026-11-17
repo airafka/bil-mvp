@@ -1,3 +1,4 @@
+import { useBusinessDateTime, businessDateTimeToInstant } from '../applicationClock'
 import { AppOverlay } from './AppOverlay'
 import { RouteLogisticsFields } from './RouteLogisticsFields'
 import { Notification } from './Notification'
@@ -29,7 +30,8 @@ export function RoutePicker({routes,routeType,transportType,terminalAreaId,selec
   const [creating,setCreating]=useState(false)
   const [saving,setSaving]=useState(false)
   const [createError,setCreateError]=useState('')
-  const [date,setDate]=useState(''),[carrier,setCarrier]=useState(''),[driver,setDriver]=useState(''),[vehicle,setVehicle]=useState(''),[comment,setComment]=useState('')
+  const [date,setDate]=useBusinessDateTime()
+  const [carrier,setCarrier]=useState(''),[driver,setDriver]=useState(''),[vehicle,setVehicle]=useState(''),[comment,setComment]=useState('')
   const saveLock=useRef(false),createButton=useRef<HTMLButtonElement>(null)
   const rows=matchingRoutes(routes,routeType,transportType,terminalAreaId,'')
   const close=()=>{if(!saveLock.current){setCreating(false);setCreateError('');createButton.current?.focus()}}
@@ -46,13 +48,13 @@ export function RoutePicker({routes,routeType,transportType,terminalAreaId,selec
     event.preventDefault();event.stopPropagation();if(saveLock.current)return
     saveLock.current=true;setSaving(true);setCreateError('')
     try{
-      const result=await createRoute({routeType,transportType,terminalAreaId,departureAt:new Date(date).toISOString(),carrierId:transportType==='VEHICLE'?carrier||null:null,driverId:transportType==='VEHICLE'?driver||null:null,vehicleId:transportType==='VEHICLE'?vehicle||null:null,comment,orderIds:[]})
-      onCreated(result.route);onSelect(result.route.id);setCreating(false);setDate('');setCarrier('');setDriver('');setVehicle('');setComment('');createButton.current?.focus()
+      const result=await createRoute({routeType,transportType,terminalAreaId,departureAt:businessDateTimeToInstant(date),carrierId:transportType==='VEHICLE'?carrier||null:null,driverId:transportType==='VEHICLE'?driver||null:null,vehicleId:transportType==='VEHICLE'?vehicle||null:null,comment,orderIds:[]})
+      onCreated(result.route);onSelect(result.route.id);setCreating(false);setDate(undefined);setCarrier('');setDriver('');setVehicle('');setComment('');createButton.current?.focus()
     }catch(cause){setCreateError(cause instanceof Error?cause.message:'Не удалось создать рейс')}
     finally{saveLock.current=false;setSaving(false)}
   }
   return <div className="route-picker">
-    <div className="route-picker-toolbar"><div className="route-picker-actions"><button ref={createButton} type="button" className="outline-action-button create-route-button" disabled={disabled||!terminalAreaId} onClick={()=>setCreating(true)}>Создать рейс</button></div></div>
+    <div className="route-picker-toolbar"><div className="route-picker-actions"><button ref={createButton} type="button" className="outline-action-button create-route-button" disabled={disabled||!terminalAreaId} onClick={()=>{setDate(undefined);setCreating(true)}}>Создать рейс</button></div></div>
     {error&&<Notification kind="error">{error}</Notification>}
     <div className="route-picker-scroll"><table className="route-picker-table" aria-label="Выбор рейса">
       <colgroup><col className="route-picker-choice"/><col className="route-picker-code"/><col/><col className="route-picker-date"/><col/></colgroup>

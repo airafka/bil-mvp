@@ -1,3 +1,4 @@
+import { useBusinessDateTime, businessDateTimeToInstant } from '../applicationClock'
 import { AppOverlay } from './AppOverlay'
 import { RouteLogisticsFields } from './RouteLogisticsFields'
 import { Notification } from './Notification'
@@ -24,7 +25,7 @@ function RouteDrawer({ order, onClose, onCreated }: { order: ServiceTransportOrd
   const lock = useRef(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [date, setDate] = useState('')
+  const [date, setDate] = useBusinessDateTime()
   const [carrier, setCarrier] = useState('')
   const [driver, setDriver] = useState('')
   const [vehicle, setVehicle] = useState('')
@@ -37,7 +38,7 @@ function RouteDrawer({ order, onClose, onCreated }: { order: ServiceTransportOrd
     lock.current = true; setBusy(true); setError('')
     try {
       const result = await createRoute({ routeType: order.kind, transportType: order.transportType, terminalAreaId: order.terminalAreaId,
-        departureAt: new Date(date).toISOString(), carrierId:order.transportType==='VEHICLE'?carrier||null:null,driverId:order.transportType==='VEHICLE'?driver||null:null,vehicleId:order.transportType==='VEHICLE'?vehicle||null:null,comment, orderIds: [order.id] })
+        departureAt: businessDateTimeToInstant(date), carrierId:order.transportType==='VEHICLE'?carrier||null:null,driverId:order.transportType==='VEHICLE'?driver||null:null,vehicleId:order.transportType==='VEHICLE'?vehicle||null:null,comment, orderIds: [order.id] })
       onCreated(result.route)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось создать рейс') }
     finally { lock.current = false; setBusy(false) }

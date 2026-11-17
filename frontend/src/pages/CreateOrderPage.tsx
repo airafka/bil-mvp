@@ -1,4 +1,4 @@
-import { businessDateLabel, useApplicationClock } from '../applicationClock'
+import { businessDateLabel, useApplicationClock, useBusinessDateTime } from '../applicationClock'
 import { catalogDate } from '../transportCatalogs'
 import { WaybillFilterFields } from '../components/WaybillFilterFields'
 import { validateWaybillSelection } from '../waybillSelection'
@@ -53,7 +53,9 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
   const [waybillFilter, setWaybillFilter] = useState<GroupedWaybillFilter>({})
   const [ownerActionTarget, setOwnerActionTarget] = useState<HTMLDivElement | null>(null)
   const [step, setStep] = useState(1)
-  const [form, setForm] = useState<OrderFormState>(() => ({ ...initialOrderFormState, transportType: serviceMode ? 'RAILWAY' as const : '' as const }))
+  const [formDraft, setForm] = useState<OrderFormState>(() => ({ ...initialOrderFormState, transportType: serviceMode ? 'RAILWAY' as const : '' as const }))
+  const [plannedAt, setPlannedAt] = useBusinessDateTime()
+  const form = { ...formDraft, [config.kind === 'receiving' ? 'arrivalAt' : 'departureAt']: plannedAt }
   const [routes, setRoutes] = useState<RouteSummary[]>([])
   const [routeLoadError, setRouteLoadError] = useState('')
   const [routesLoading,setRoutesLoading]=useState(true)
@@ -397,7 +399,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
                 </div>
                 {<div className="form-fields-column">
                   <div className="field horizontal-field"><span>Валюта стоимости груза:</span><div className="ui-readonly-value">RUB</div></div>
-                  <label className="field horizontal-field"><span>{config.kind === 'receiving' ? 'Дата и время поступления:' : 'Дата и время вывоза:'}</span><UiInput type="datetime-local" step={60} value={config.kind === 'receiving' ? form.arrivalAt : form.departureAt} onChange={event => setForm(state => ({ ...state, [config.kind === 'receiving' ? 'arrivalAt' : 'departureAt']: event.target.value }))} /></label>
+                  <label className="field horizontal-field"><span>{config.kind === 'receiving' ? 'Дата и время поступления:' : 'Дата и время вывоза:'}</span><UiInput type="datetime-local" step={60} value={config.kind === 'receiving' ? form.arrivalAt : form.departureAt} onChange={event => setPlannedAt(event.target.value)} /></label>
                 {config.kind === 'receiving' && <label className="field horizontal-field"><span>Собственник КТК по умолчанию:<b>*</b></span><UiSelect aria-label="Собственник КТК по умолчанию" required value={form.defaultContainerOwnerId || ''} disabled={loadingReferences || !form.clientId} onChange={event => setForm(current => ({ ...current, defaultContainerOwnerId: event.target.value }))}><option value="" hidden disabled />{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</UiSelect></label>}
                 </div>}
               </div>
