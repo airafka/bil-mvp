@@ -22,8 +22,8 @@ export function VehicleCargoEditor({ containers, cargoOptions, disabled = false,
   })
   return <div className="table-wrap order-composition-wrap">
     <table className="composition-table composition-outline vehicle-cargo-table vehicle-cargo-editor" aria-label="Добавление груза по КТК">
-      <colgroup><col className="composition-index" /><col /><col /><col /><col className="cargo-editor-actions" /></colgroup>
-      <thead><tr><th scope="col">№</th><th scope="col">Код ЕТСНГ <span className="cargo-required">*</span></th><th scope="col">Наименование груза</th><th scope="col">Масса брутто, кг <span className="cargo-required">*</span></th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead>
+      <colgroup>{[44, 240, 320, 180, 44].map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
+      <thead><tr><th className="composition-index" scope="col">№</th><th scope="col">Код ЕТСНГ <span className="cargo-required">*</span></th><th scope="col">Наименование груза</th><th scope="col">Масса брутто, кг <span className="cargo-required">*</span></th><th className="cargo-editor-actions" scope="col"><span className="sr-only">Действия</span></th></tr></thead>
       {containers.filter(container => !container.empty).map((container, index) => {
         const items = containerCargoItems(container)
         const open = !collapsed.has(container.id)
