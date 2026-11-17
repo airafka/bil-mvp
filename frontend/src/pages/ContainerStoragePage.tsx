@@ -5,7 +5,7 @@ import { request } from '../http'
 import type { PagedResponse, ReferenceOption } from '../domain'
 import { UiSelect } from '../components/FormControls'
 import { TableReveal } from '../components/TableReveal'
-import { storageCargoName, storageDate, timeSourceLabel, transportLabel, type StoragePeriod } from '../containerStorage'
+import { operationLabel, storageCargoName, storageDate, timeSourceLabel, transportLabel, type StoragePeriod } from '../containerStorage'
 import './ContainerStoragePage.css'
 
 const columns = [160, 175, 175, 100, 155, 260, 200, 110, 190, 180, 155, 260, 110, 190, 190]
@@ -13,14 +13,14 @@ const parties = (client?: string, owner?: string) => `${client || '—'} / ${own
 
 export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; emptyText: string }) {
   return <table className="storage-table"><colgroup>{columns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
-    <thead><tr><th>Номер КТК</th><th>Прибыл</th><th>Вывезен</th><th>Дней хранения</th>
-      <th>Заявка поставки</th><th>Клиент/собственник поставки</th><th>Грузоотправитель</th>
+    <thead><tr><th>Номер КТК</th><th>Начало периода</th><th>Окончание периода</th><th>Дней хранения</th>
+      <th>Заявка поставки</th><th>Клиент поставки / собственник периода</th><th>Грузоотправитель</th>
       <th>Транспорт поставки</th><th>Перевозчик поставки</th><th>Груз</th><th>Заявка вывоза</th><th>Клиент/собственник вывоза</th>
       <th>Транспорт вывоза</th><th>Перевозчик вывоза</th><th>Грузополучатель</th></tr></thead>
     <tbody>{rows.length ? rows.map(row => <tr key={row.id} data-period-id={row.id}>
       <td><Link to={'/container-owners/' + row.containerId + '/history'}>{row.containerName}</Link></td>
-      <td title={timeSourceLabel(row.arrivalTimeSource)}>{storageDate(row.arrivalAt)}{row.arrivalTimeSource === 'HISTORY_CREATED' && <div className="storage-note">По старой истории</div>}</td>
-      <td title={row.departureAt ? timeSourceLabel(row.departureTimeSource) : undefined}>{storageDate(row.departureAt)}</td>
+      <td title={timeSourceLabel(row.arrivalTimeSource)}>{storageDate(row.arrivalAt)}{row.arrivalOperationType && <div className="storage-note">{operationLabel(row.arrivalOperationType)}</div>}{row.arrivalTimeSource === 'HISTORY_CREATED' && <div className="storage-note">По старой истории</div>}</td>
+      <td title={row.departureAt ? timeSourceLabel(row.departureTimeSource) : undefined}>{storageDate(row.departureAt)}{row.departureOperationType && <div className="storage-note">{operationLabel(row.departureOperationType)}</div>}</td>
       <td>{row.storageDays ?? '—'}</td>
       <td><Link to={'/receiving-orders/' + row.receivingOrderId}>{row.receivingOrderNumber}</Link></td>
       <td>{parties(row.clientName, row.ownerName)}</td><td>{row.consignor || '—'}</td><td>{transportLabel(row.arrivalTransport)}</td><td>{row.arrivalCarrier || '—'}</td>

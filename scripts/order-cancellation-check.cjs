@@ -1,9 +1,9 @@
 // Mutating regression suite: only the explicitly isolated cancellation database/backend.
 const assert=require('node:assert/strict'),fs=require('node:fs'),{execFileSync}=require('node:child_process');
 const docker=process.env.DOCKER_EXE||'docker',db=process.env.CANCELLATION_TEST_DB||'billing_cancel_test';
-assert.ok(['billing_cancel_test','billing_history_fields_test'].includes(db));
-const historyTest=db==='billing_history_fields_test',port=historyTest?'8201':'8193',base='http://127.0.0.1:'+port+'/api';
-const inspect=JSON.parse(execFileSync(docker,['inspect',historyTest?'billing-next-history-fields-test':'billing-next-cancellation-test'],{encoding:'utf8',windowsHide:true}))[0];
+assert.ok(['billing_cancel_test','billing_history_fields_test','billing_storage_owner_test'].includes(db));
+const ownerTest=db==='billing_storage_owner_test',historyTest=db==='billing_history_fields_test',port=ownerTest?'8202':historyTest?'8201':'8193',base='http://127.0.0.1:'+port+'/api';
+const inspect=JSON.parse(execFileSync(docker,['inspect',ownerTest?'billing-next-storage-owner-test':historyTest?'billing-next-history-fields-test':'billing-next-cancellation-test'],{encoding:'utf8',windowsHide:true}))[0];
 assert.ok(inspect.Config.Env.includes('DB_NAME='+db));
 assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
 const sql=q=>execFileSync(docker,['exec','billing-next-db-1','psql','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q],{encoding:'utf8',windowsHide:true}).trim();

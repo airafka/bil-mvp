@@ -5,11 +5,12 @@ export type StoragePeriod = {
   shippingOrderId?: string; shippingOrderNumber?: number; departureAt?: string; departureTransport?: string;
   departureCarrier?: string; consignee?: string; shippingClientName?: string; shippingOwnerName?: string; storageDays?: number; inStock?: boolean; status: string;
   arrivalTimeSource?: string; departureTimeSource?: string;
+  arrivalOperationType?: string; departureOperationType?: string;
 }
 export const storageDate = (value?: string) => value ? new Date(value).toLocaleString('ru-RU', {
   timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
 }) : '—'
-export const storageStatus = (status: string) => ({ OPEN: 'На терминале', CLOSED: 'Вывезен', CANCELLED: 'Аннулирован' }[status] ?? status)
+export const storageStatus = (status: string) => ({ OPEN: 'Открыт', CLOSED: 'Завершён', CANCELLED: 'Аннулирован' }[status] ?? status)
 export const transportLabel = (value?: string) => value === 'VEHICLE' ? 'Авто' : value === 'RAILWAY' ? 'ЖД' : value || '—'
 export const timeSourceLabel = (value?: string) => ({ MOVEMENT: 'Дата складского события', HISTORY_CREATED: 'Дата записи старой истории', MANUAL_COMPLETION: 'Время ручного выполнения операции' }[value ?? ''] ?? 'Источник времени не указан')
 export const operationLabel = (value?: string) => ({

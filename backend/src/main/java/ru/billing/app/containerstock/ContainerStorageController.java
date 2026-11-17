@@ -23,15 +23,18 @@ public class ContainerStorageController {
         String arrivalTransport,String arrivalCarrier,String consignor,String cargoName,Boolean empty,
         UUID shippingOrderId,Long shippingOrderNumber,OffsetDateTime departureAt,String departureTransport,
         String departureCarrier,String consignee,String shippingClientName,String shippingOwnerName,Long storageDays,Boolean inStock,String status,
-        String arrivalTimeSource,String departureTimeSource,UUID receivingOrderContainerId,UUID waybillContainerId,UUID shippingOrderContainerId) {}
+        String arrivalTimeSource,String departureTimeSource,UUID receivingOrderContainerId,UUID waybillContainerId,UUID shippingOrderContainerId,
+        String arrivalOperationType,String departureOperationType) {}
     private static final String SELECT="""
         select p.*,cargo.cargo_name,s.id as shipping_order_id,c.code container_name,a.name area_name,cl.name client_name,ow.name owner_name,
           r.number::bigint receiving_number,s.number::bigint shipping_number,r.transport_type arrival_transport,s.transport_type departure_transport,
           ic.name arrival_carrier,oc.name departure_carrier,r.consignor,cons.name consignee,
           shipping_client.name shipping_client_name,shipping_owner.name shipping_owner_name,
           ah.time_source arrival_time_source,dh.time_source departure_time_source,
+          ah.operation_type arrival_operation_type,dh.operation_type departure_operation_type,
           case when p.status='CANCELLED' then null
-            else greatest(0,(least(coalesce((p.shipping_at at time zone 'Europe/Moscow')::date,?::date),?::date)
+            else greatest(0,(least(coalesce((p.shipping_at at time zone 'Europe/Moscow')::date
+              - case when dh.operation_type='OWNER_CHANGE' then 1 else 0 end,?::date),?::date)
               -(p.receiving_at at time zone 'Europe/Moscow')::date)+1)::bigint end storage_days
         from container_storage_period p join container c on c.id=p.container_id
         join terminal_area_catalog a on a.id=p.terminal_area_id
@@ -107,15 +110,15 @@ public class ContainerStorageController {
             @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf) {
         var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,date(asOf));
         var out=new StringBuilder("\uFEFF");
-        csv(out,"Номер КТК","Площадка","Заявка поставки","Прибыл","Клиент заявки поставки","Собственник при приёме",
-            "Транспорт поставки","Перевозчик поставки","Груз (ЕТСНГ)","Груж/порож","Заявка вывоза","Вывезен",
-            "Транспорт вывоза","Перевозчик вывоза","Грузополучатель","Кол-во дней хранения","В стоке","Состояние");
+        csv(out,"Номер КТК","Площадка","Заявка поставки","Начало периода","Основание начала","Клиент заявки поставки","Собственник периода",
+            "Транспорт поставки","Перевозчик поставки","Груз (ЕТСНГ)","Груж/порож","Заявка вывоза","Окончание периода","Основание окончания",
+            "Транспорт вывоза","Перевозчик вывоза","Грузополучатель","Кол-во дней хранения","Период открыт","Состояние");
         jdbc.query(SELECT+f.sql()+" order by p.receiving_at desc,p.id",rs->{
-            Row r=row(rs);csv(out,r.containerName(),r.terminalAreaName(),r.receivingOrderNumber(),format(r.arrivalAt()),r.clientName(),r.ownerName(),
+            Row r=row(rs);csv(out,r.containerName(),r.terminalAreaName(),r.receivingOrderNumber(),format(r.arrivalAt()),boundary(r.arrivalOperationType()),r.clientName(),r.ownerName(),
                 transport(r.arrivalTransport()),r.arrivalCarrier(),r.cargoName(),r.empty()==null?"Не указан":r.empty()?"Порожний":"Гружёный",
-                r.shippingOrderNumber(),format(r.departureAt()),transport(r.departureTransport()),r.departureCarrier(),r.consignee(),
+                r.shippingOrderNumber(),format(r.departureAt()),boundary(r.departureOperationType()),transport(r.departureTransport()),r.departureCarrier(),r.consignee(),
                 r.storageDays(),r.inStock()?"Да":"Нет",
-                switch(r.status()){case "OPEN"->"На терминале";case "CLOSED"->"Вывезен";default->"Аннулирован";});
+                switch(r.status()){case "OPEN"->"Открыт";case "CLOSED"->"Завершён";default->"Аннулирован";});
         },f.args().toArray());
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=container-storage.csv")
             .contentType(new MediaType("text","csv",StandardCharsets.UTF_8)).body(out.toString().getBytes(StandardCharsets.UTF_8));
@@ -129,6 +132,7 @@ public class ContainerStorageController {
     private static String format(OffsetDateTime value){return value==null?"":value.atZoneSameInstant(ZoneId.of("Europe/Moscow"))
         .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));}
     private static String transport(String s){return s==null?"":s.equals("VEHICLE")?"Авто":s.equals("RAILWAY")?"ЖД":s;}
+    private static String boundary(String s){return s==null?"":switch(s){case "ARRIVAL"->"Приём";case "DEPARTURE"->"Вывоз";case "OWNER_CHANGE"->"Смена собственника";default->s;};}
     private LocalDate date(LocalDate d) {
         LocalDate today=jdbc.queryForObject("select billing_today()",LocalDate.class);
         if(d!=null && d.isAfter(today)) throw bad("Дата расчёта не может быть позже рабочей даты");
@@ -144,6 +148,7 @@ public class ContainerStorageController {
             rs.getObject("shipping_number",Long.class),rs.getObject("shipping_at",OffsetDateTime.class),rs.getString("departure_transport"),
             rs.getString("departure_carrier"),rs.getString("consignee"),rs.getString("shipping_client_name"),rs.getString("shipping_owner_name"),rs.getObject("storage_days",Long.class),status.equals("OPEN"),
             status,rs.getString("arrival_time_source"),rs.getString("departure_time_source"),rs.getObject("receiving_order_container_id",UUID.class),
-            rs.getObject("waybill_container_id",UUID.class),rs.getObject("shipping_order_container_id",UUID.class));
+            rs.getObject("waybill_container_id",UUID.class),rs.getObject("shipping_order_container_id",UUID.class),
+            rs.getString("arrival_operation_type"),rs.getString("departure_operation_type"));
     }
 }

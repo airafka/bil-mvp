@@ -136,6 +136,7 @@ public class OwnershipOrderService {
         stock.lockContainers(links.stream().map(Link::containerId).toList());
         for(var l:links){var state=stock.state(l.containerId());
             if(state==null)throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_NOT_FOUND","У КТК нет текущего собственника");
+            if(state.client().equals(h.clientId()))throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_UNCHANGED","КТК уже принадлежит выбранному собственнику; обновите состав заявки");
             stock.transition(l.containerId(),h.clientId(),state.status(),state.receiving(),state.shipping(),id,"SERVICE_ORDER");
         }
         jdbc.update("update service_order set status='DONE',completion_at=billing_now() at time zone 'UTC',updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",id);
