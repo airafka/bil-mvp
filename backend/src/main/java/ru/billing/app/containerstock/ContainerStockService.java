@@ -204,7 +204,7 @@ public class ContainerStockService {
         return jdbc.query("""
             select h.*,old.name as old_name,new.name as new_name,
                 coalesce(r.number,s.number,so.number) as order_number,
-                (select p.id from container_storage_period p where p.shipping_history_id=h.id
+                (select p.id from container_storage_period p where p.end_history_id=h.id
                   and h.operation_type='OWNER_CHANGE') as previous_storage_period_id
             from container_owner_history h left join client old on old.id=h.old_client_id
             left join client new on new.id=h.new_client_id

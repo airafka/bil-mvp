@@ -3,11 +3,11 @@ const fs=require('fs'),assert=require('node:assert/strict'),{execFileSync}=requi
 const db=process.env.STORAGE_TEST_DB||'billing_storage_sources_test',docker=process.env.DOCKER_EXE||'docker';
 const sql=q=>execFileSync(docker,['exec','-i','billing-next-db-1','psql','-X','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1'],{input:q,encoding:'utf8',stdio:['pipe','pipe','pipe'],maxBuffer:32*1024*1024}).trim();
 const json=q=>JSON.parse(sql(q)||'null');
-assert.ok(['billing_storage_sources_test','billing_storage_origin_test'].includes(db));
+assert.ok(['billing_storage_arrival_test','billing_storage_sources_test','billing_storage_origin_test'].includes(db));
 assert.equal(sql('select current_database()'),db);
-const schema=Number(sql('select max(version::int) from flyway_schema_history where success'));assert.ok([46,47].includes(schema));
-const port=db==='billing_storage_origin_test'?'8206':'8205',receivingRef=schema>=47?'storage_receiving_order(id)':'receiving_order_id';
-const inspect=JSON.parse(execFileSync(docker,['inspect',db==='billing_storage_origin_test'?'billing-next-storage-origin-test':'billing-next-storage-sources-test'],{encoding:'utf8'}))[0];
+const schema=Number(sql('select max(version::int) from flyway_schema_history where success'));assert.ok([46,47,48].includes(schema));
+const port=db==='billing_storage_arrival_test'?'8207':db==='billing_storage_origin_test'?'8206':'8205',receivingRef=schema>=47?'storage_receiving_order(id)':'receiving_order_id';
+const inspect=JSON.parse(execFileSync(docker,['inspect',db==='billing_storage_arrival_test'?'billing-next-storage-arrival-test':db==='billing_storage_origin_test'?'billing-next-storage-origin-test':'billing-next-storage-sources-test'],{encoding:'utf8'}))[0];
 assert.ok(inspect.Config.Env.includes('DB_NAME='+db));assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
 const base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+port+'/api';
 async function api(p,method='GET',body,status=200){const r=await fetch(base+p,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();assert.equal(r.status,status,p+': '+text);return text?JSON.parse(text):null;}

@@ -39,10 +39,10 @@ public class ContainerStorageService {
             tasks.finished(order,container,true);
             period=UUID.randomUUID();
             jdbc.update("""
-                insert into container_storage_period(id,container_id,receiving_history_id,
+                insert into container_storage_period(id,container_id,start_history_id,arrival_history_id,
                     status)
-                values(?,?,?,'OPEN')
-                """,period,container,history);
+                values(?,?,?,?,'OPEN')
+                """,period,container,history,history);
         } else if(operation.equals("OWNER_CHANGE")) {
             OffsetDateTime latest=jdbc.queryForObject("select max(occurred_at) from container_owner_history where container_id=? and id<>?",
                 OffsetDateTime.class,container,history);
@@ -52,14 +52,14 @@ public class ContainerStorageService {
                 requireSequence(current,at);
                 area=current.area();
                 jdbc.update("""
-                    update container_storage_period set shipping_history_id=?,status='CLOSED',
+                    update container_storage_period set end_history_id=?,status='CLOSED',
                         updated_at=billing_now() where id=?
                     """,history,current.id());
                 period=UUID.randomUUID();
                 jdbc.update("""
-                    insert into container_storage_period(id,container_id,receiving_history_id,
+                    insert into container_storage_period(id,container_id,start_history_id,arrival_history_id,
                         status)
-                    select ?,container_id,?,'OPEN' from container_storage_period where id=?
+                    select ?,container_id,?,arrival_history_id,'OPEN' from container_storage_period where id=?
                     """,period,history,current.id());
             } else if(!opened.isEmpty()) throw conflict("Состояние КТК не согласовано с открытым периодом хранения");
         } else if(operation.equals("DEPARTURE")) {
@@ -68,7 +68,7 @@ public class ContainerStorageService {
             requireSequence(current,at);
             period=current.id();
             jdbc.update("""
-                update container_storage_period set shipping_history_id=?,status='CLOSED',
+                update container_storage_period set end_history_id=?,status='CLOSED',
                     updated_at=billing_now() where id=?
                 """,history,period);
         } else if(operation.equals("CANCEL_ARRIVAL")) {
@@ -78,17 +78,11 @@ public class ContainerStorageService {
             requireSequence(current,at);
             // Annul the entire physical visit, retaining ownership boundaries and their history.
             jdbc.update("""
-                with recursive chain as (
-                  select id,receiving_history_id from container_storage_period where id=?
-                  union
-                  select p.id,p.receiving_history_id from container_storage_period p
-                  join chain c on p.shipping_history_id=c.receiving_history_id
-                  join container_owner_history h on h.id=c.receiving_history_id and h.operation_type='OWNER_CHANGE'
-                ) update container_storage_period set status='CANCELLED',updated_at=billing_now()
-                  where id in (select id from chain)
+                update container_storage_period set status='CANCELLED',updated_at=billing_now()
+                  where arrival_history_id=(select arrival_history_id from container_storage_period where id=?)
                 """,period);
         } else if(operation.equals("CANCEL_DEPARTURE")) {
-            var closed=periods("p.container_id=? and p.shipping_history_id in (select id from container_owner_history where order_id=? and order_type='SHIPPING_ORDER' and operation_type='DEPARTURE') and p.status='CLOSED'",container,order);
+            var closed=periods("p.container_id=? and p.end_history_id in (select id from container_owner_history where order_id=? and order_type='SHIPPING_ORDER' and operation_type='DEPARTURE') and p.status='CLOSED'",container,order);
             if(closed.size()!=1 || !opened.isEmpty())
                 throw conflict("Нельзя открыть период отменяемого вывоза. Сначала отмените последующие операции или проверьте историю");
             current=closed.getFirst();period=current.id();
@@ -96,14 +90,14 @@ public class ContainerStorageService {
             Integer laterOwnerChanges=jdbc.queryForObject("""
                 select count(*) from container_owner_history h
                 join container_storage_period p on p.id=?
-                join container_owner_history departure on departure.id=p.shipping_history_id
+                join container_owner_history departure on departure.id=p.end_history_id
                 where h.container_id=p.container_id and h.operation_type='OWNER_CHANGE'
                   and h.storage_period_id is null and h.created_at>=departure.created_at
                 """,Integer.class,period);
             if(laterOwnerChanges!=null && laterOwnerChanges>0)
                 throw conflict("Нельзя отменить вывоз после смены собственника вне площадки");
             jdbc.update("""
-                update container_storage_period set shipping_history_id=null,status='OPEN',
+                update container_storage_period set end_history_id=null,status='OPEN',
                     updated_at=billing_now() where id=?
                 """,period);
         } else {
@@ -123,8 +117,8 @@ public class ContainerStorageService {
         OffsetDateTime latest=jdbc.queryForObject("""
             select greatest(a.occurred_at,z.occurred_at,(select max(h.occurred_at)
               from container_owner_history h where h.storage_period_id=p.id))
-            from container_storage_period p join container_owner_history a on a.id=p.receiving_history_id
-            left join container_owner_history z on z.id=p.shipping_history_id where p.id=?
+            from container_storage_period p join container_owner_history a on a.id=p.start_history_id
+            left join container_owner_history z on z.id=p.end_history_id where p.id=?
             """,OffsetDateTime.class,period.id());
         if(at.isBefore(latest)) throw conflict("Операция не может быть раньше начала периода или последней операции хранения");
     }
@@ -135,7 +129,7 @@ public class ContainerStorageService {
     }
     private List<Period> periods(String condition,Object... args) {
         return jdbc.query("select p.*,r.id receiving_order_id,r.terminal_area_catalog_id,h.occurred_at from container_storage_period p "
-            +"join receiving_order r on r.id=storage_receiving_order(p.id) join container_owner_history h on h.id=p.receiving_history_id "
+            +"join receiving_order r on r.id=storage_receiving_order(p.id) join container_owner_history h on h.id=p.start_history_id "
             +"where "+condition+" for update of p",(rs,n)->new Period(
             rs.getObject("id",UUID.class),rs.getObject("terminal_area_catalog_id",UUID.class),rs.getObject("receiving_order_id",UUID.class),
             rs.getObject("occurred_at",OffsetDateTime.class),rs.getString("status")),args);
