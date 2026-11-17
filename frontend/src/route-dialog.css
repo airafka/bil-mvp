@@ -12,7 +12,7 @@
   gap: 12px; flex: 0 0 auto; padding: 20px 24px; border-bottom: 1px solid var(--line);
 }
 #app-overlay-root .route-dialog-heading h2 { flex: 1 1 150px; min-width: 0; margin: 0; font-size: 20px; line-height: 28px; overflow-wrap: anywhere; }
-#app-overlay-root .route-dialog-heading .header-actions { flex: 0 0 auto; margin-left: auto; gap: 8px; }
+#app-overlay-root .route-dialog-heading .header-actions { flex: 0 1 auto; flex-wrap: wrap; max-width: 100%; margin-left: auto; gap: 8px; }
 #app-overlay-root .route-dialog-heading .primary-button { height: 40px; min-height: 40px; white-space: nowrap; }
 #app-overlay-root .route-dialog-heading .close-button { flex: 0 0 40px; width: 40px; min-width: 40px; height: 40px; min-height: 40px; padding: 0; font-size: 25px; line-height: 1; }
 #app-overlay-root .route-drawer-body, #app-overlay-root .route-picker-dialog > form {

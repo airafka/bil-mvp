@@ -1,3 +1,4 @@
+import { useRouteAutofill } from '../useRouteAutofill'
 import { useBusinessDateTime, businessDateTimeToInstant } from '../applicationClock'
 import { AppOverlay } from './AppOverlay'
 import { RouteLogisticsFields } from './RouteLogisticsFields'
@@ -32,9 +33,10 @@ export function RoutePicker({routes,routeType,transportType,terminalAreaId,selec
   const [createError,setCreateError]=useState('')
   const [date,setDate]=useBusinessDateTime()
   const [carrier,setCarrier]=useState(''),[driver,setDriver]=useState(''),[vehicle,setVehicle]=useState(''),[comment,setComment]=useState('')
+  const { filling, fill } = useRouteAutofill(transportType, { date, carrier, driver, vehicle }, next => { setDate(next.date); setCarrier(next.carrier); setDriver(next.driver); setVehicle(next.vehicle) }, setCreateError)
   const saveLock=useRef(false),createButton=useRef<HTMLButtonElement>(null)
   const rows=matchingRoutes(routes,routeType,transportType,terminalAreaId,'')
-  const close=()=>{if(!saveLock.current){setCreating(false);setCreateError('');createButton.current?.focus()}}
+  const close=()=>{if(!saveLock.current&&!filling){setCreating(false);setCreateError('');createButton.current?.focus()}}
   const keys=(event:KeyboardEvent<HTMLElement>)=>{
     if(event.key==='Escape'){event.preventDefault();close()}
     if(event.key==='Tab'){
@@ -45,7 +47,7 @@ export function RoutePicker({routes,routeType,transportType,terminalAreaId,selec
     }
   }
   async function save(event:FormEvent){
-    event.preventDefault();event.stopPropagation();if(saveLock.current)return
+    event.preventDefault();event.stopPropagation();if(saveLock.current||filling)return
     saveLock.current=true;setSaving(true);setCreateError('')
     try{
       const result=await createRoute({routeType,transportType,terminalAreaId,departureAt:businessDateTimeToInstant(date),carrierId:transportType==='VEHICLE'?carrier||null:null,driverId:transportType==='VEHICLE'?driver||null:null,vehicleId:transportType==='VEHICLE'?vehicle||null:null,comment,orderIds:[]})
@@ -67,13 +69,13 @@ export function RoutePicker({routes,routeType,transportType,terminalAreaId,selec
       </tr>):<tr><td colSpan={5}>Подходящих черновых рейсов пока нет</td></tr>}</tbody>
     </table></div>
     {creating&&<AppOverlay><div className="route-picker-backdrop" onDoubleClick={event=>event.stopPropagation()}><section role="dialog" aria-modal="true" aria-labelledby="route-picker-create-title" className="route-picker-dialog" onKeyDown={keys}>
-      <div className="route-picker-dialog-heading route-dialog-heading"><h2 id="route-picker-create-title">Создать рейс</h2><div className="header-actions"><button type="submit" form={createFormId} className="primary-button create-action-button" disabled={saving}>{saving?'Создаём…':'Создать и выбрать'}</button><button type="button" className="close-button" title="Закрыть" aria-label="Закрыть создание рейса" disabled={saving} onClick={close}>×</button></div></div>
+      <div className="route-picker-dialog-heading route-dialog-heading"><h2 id="route-picker-create-title">Создать рейс</h2><div className="header-actions"><button type="button" className="secondary-button" disabled={saving||filling} onClick={()=>void fill()}>{filling?'Заполняем…':'Автозаполнить'}</button><button type="submit" form={createFormId} className="primary-button create-action-button" disabled={saving||filling}>{saving?'Создаём…':'Создать и выбрать'}</button><button type="button" className="close-button" title="Закрыть" aria-label="Закрыть создание рейса" disabled={saving||filling} onClick={close}>×</button></div></div>
       <form id={createFormId} onSubmit={save}>
-        <label className="field"><span>Дата и время <b>*</b></span><UiInput autoFocus required type="datetime-local" value={date} disabled={saving} onChange={e=>setDate(e.target.value)}/></label>
-        {transportType==='VEHICLE' && <RouteLogisticsFields carrierId={carrier} driverId={driver} vehicleId={vehicle} onCarrier={setCarrier} onDriver={setDriver} onVehicle={setVehicle} disabled={saving} referenceInfo={<p>{routeTypeLabel(routeType)} · {transportTypeLabel(transportType)}</p>}>
-        <label className="field"><span>Комментарий</span><UiTextarea value={comment} maxLength={200} disabled={saving} onChange={e=>setComment(e.target.value)}/></label>
+        <label className="field"><span>Дата и время <b>*</b></span><UiInput autoFocus required type="datetime-local" value={date} disabled={saving||filling} onChange={e=>setDate(e.target.value)}/></label>
+        {transportType==='VEHICLE' && <RouteLogisticsFields carrierId={carrier} driverId={driver} vehicleId={vehicle} onCarrier={setCarrier} onDriver={setDriver} onVehicle={setVehicle} disabled={saving||filling} referenceInfo={<p>{routeTypeLabel(routeType)} · {transportTypeLabel(transportType)}</p>}>
+        <label className="field"><span>Комментарий</span><UiTextarea value={comment} maxLength={200} disabled={saving||filling} onChange={e=>setComment(e.target.value)}/></label>
         </RouteLogisticsFields>}
-        {!(transportType==='VEHICLE') && <label className="field"><span>Комментарий</span><UiTextarea value={comment} maxLength={200} disabled={saving} onChange={e=>setComment(e.target.value)}/></label>}
+        {!(transportType==='VEHICLE') && <label className="field"><span>Комментарий</span><UiTextarea value={comment} maxLength={200} disabled={saving||filling} onChange={e=>setComment(e.target.value)}/></label>}
         {transportType !== 'VEHICLE' && <section className="route-reference-section"><h2>Справочная информация</h2><p>{routeTypeLabel(routeType)} · {transportTypeLabel(transportType)}</p></section>}
         {createError&&<Notification kind="error">{createError}</Notification>}
 
