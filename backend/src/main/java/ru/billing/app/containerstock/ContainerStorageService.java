@@ -43,7 +43,6 @@ public class ContainerStorageService {
             if(Set.of("ON_TERMINAL","RESERVED_OUT").contains(newStatus)) {
                 if(current==null) throw conflict("Не найден однозначный открытый период для смены собственника");
                 requireSequence(current,at);
-                area=current.area();
                 jdbc.update("""
                     update container_storage_period set end_history_id=?,status='CLOSED',
                         updated_at=billing_now() where id=?
@@ -96,14 +95,12 @@ public class ContainerStorageService {
         } else {
             if(current!=null && !operation.equals("RESERVE_RECEIVING") && !operation.equals("CANCEL_RECEIVING_RESERVATION")) {
                 period=current.id();
-                if(area==null) area=current.area();
             }
 
         }
         jdbc.update("""
-            update container_owner_history set occurred_at=?,time_source='MANUAL_COMPLETION',terminal_area_id=?,
-              storage_period_id=? where id=?
-            """,at,area,period,history);
+            update container_owner_history set storage_period_id=? where id=?
+            """,period,history);
     }
 
     private void requireSequence(Period period,OffsetDateTime at) {

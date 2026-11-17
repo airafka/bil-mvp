@@ -1,7 +1,7 @@
 // V48 -> V49 preservation and exhaustive transition classification. Mutations are isolated and rolled back.
 const fs=require('fs'),assert=require('node:assert/strict'),crypto=require('crypto'),{execFileSync}=require('child_process');
 const db=process.env.STORAGE_TEST_DB||'billing_history_operation_test',docker=process.env.DOCKER_EXE||'docker',mode=process.argv[2];
-assert.ok(['billing_history_operation_test','billing_history_operation_release_test','billing_history_operation_migration_test','billing_next'].includes(db));
+assert.ok(['billing_history_metadata_test','billing_history_operation_test','billing_history_operation_release_test','billing_history_operation_migration_test','billing_next'].includes(db));
 assert.ok(db!=='billing_next'||['capture','verify','api-capture','api-verify'].includes(mode),'Live database is read-only');
 const sql=q=>execFileSync(docker,['exec','-i','billing-next-db-1','psql','-X','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1'],{input:q,encoding:'utf8',stdio:['pipe','pipe','pipe'],maxBuffer:128*1024*1024}).trim();
 const json=q=>JSON.parse(sql(q)||'null');assert.equal(sql('select current_database()'),db);
@@ -41,7 +41,7 @@ if(mode==='capture'){
  assert.equal(sql("select count(*) from information_schema.columns where table_schema='public' and table_name='container_owner_history'"),'17');audit();
  console.log('PASS: operation_type removed; all remaining data/sequences, every historical event meaning, origins and complete report unchanged');
 }else if(mode==='matrix'){
- assert.equal(db,'billing_history_operation_test');assert.equal(schema,49);
+ assert.ok(['billing_history_operation_test','billing_history_metadata_test'].includes(db));assert.ok([49,50].includes(schema));
  const states=[null,'EXPECTED','ON_TERMINAL','RESERVED_OUT','DEPARTED'];
  const values=['RECEIVING_ORDER','SHIPPING_ORDER','SERVICE_ORDER'].flatMap(a=>states.flatMap(b=>states.map(c=>'('+[a,b,c].map(quote).join(',')+')'))).join(',');
  const result=json(`select json_agg(t) from (select kind,old_status,new_status,history_operation_type(kind,old_status,new_status) operation from (values ${values})v(kind,old_status,new_status))t`);
@@ -83,7 +83,7 @@ if(mode==='capture'){
   console.log('PASS: complete history API (both filters) for every KTK, report API and full CSV '+mode);
  })().catch(e=>{console.error(e);process.exitCode=1;});
 }else if(mode==='coverage'){
- assert.equal(db,'billing_history_operation_test');assert.equal(schema,49);audit();
+ assert.ok(['billing_history_operation_test','billing_history_metadata_test'].includes(db));assert.ok([49,50].includes(schema));audit();
  const actual=json('select json_agg(t) from (select distinct order_type,old_status,new_status from container_owner_history)t');
  assert.equal(new Set(actual.map(r=>key(r.order_type,r.old_status,r.new_status))).size,13);
  console.log('PASS: application lifecycle exercised all 13 valid transition combinations; all stored history meanings agree');

@@ -18,12 +18,12 @@ import ru.billing.app.order.PagedResponse;
 public class ContainerStorageController {
     private final JdbcTemplate jdbc;
     public ContainerStorageController(JdbcTemplate jdbc) {this.jdbc=jdbc;}
-    public record Row(UUID id,UUID containerId,String containerName,String terminalAreaName,
+    public record Row(UUID id,UUID containerId,String containerName,
         UUID receivingOrderId,Long receivingOrderNumber,OffsetDateTime arrivalAt,String clientName,String ownerName,
         String arrivalTransport,String arrivalCarrier,String consignor,String cargoName,Boolean empty,
         UUID shippingOrderId,Long shippingOrderNumber,OffsetDateTime departureAt,String departureTransport,
         String departureCarrier,String consignee,String shippingClientName,String shippingOwnerName,Long storageDays,Boolean inStock,String status,
-        String arrivalTimeSource,String departureTimeSource,UUID receivingOrderContainerId,UUID waybillContainerId,UUID shippingOrderContainerId,
+        UUID receivingOrderContainerId,UUID waybillContainerId,UUID shippingOrderContainerId,
         String arrivalOperationType,String departureOperationType,
         UUID startOrderId,String startOrderType,Long startOrderNumber,UUID endOrderId,String endOrderType,Long endOrderNumber) {}
     private static final String SELECT="""
@@ -79,11 +79,11 @@ public class ContainerStorageController {
             @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf) {
         var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,date(asOf));
         var out=new StringBuilder("\uFEFF");
-        csv(out,"Номер КТК","Площадка","Заявка поставки","Начало периода","Основание начала","Клиент заявки поставки","Собственник периода",
+        csv(out,"Номер КТК","Заявка поставки","Начало периода","Основание начала","Клиент заявки поставки","Собственник периода",
             "Транспорт поставки","Перевозчик поставки","Груз (ЕТСНГ)","Груж/порож","Заявка вывоза","Окончание периода","Основание окончания",
             "Транспорт вывоза","Перевозчик вывоза","Грузополучатель","Кол-во дней хранения","Период открыт","Состояние","Заявка начала: тип","Заявка начала: номер","Заявка окончания: тип","Заявка окончания: номер");
         jdbc.query(SELECT+f.sql()+" order by p.receiving_at desc,p.id",rs->{
-            Row r=row(rs);csv(out,r.containerName(),r.terminalAreaName(),r.receivingOrderNumber(),format(r.arrivalAt()),boundary(r.arrivalOperationType()),r.clientName(),r.ownerName(),
+            Row r=row(rs);csv(out,r.containerName(),r.receivingOrderNumber(),format(r.arrivalAt()),boundary(r.arrivalOperationType()),r.clientName(),r.ownerName(),
                 transport(r.arrivalTransport()),r.arrivalCarrier(),r.cargoName(),r.empty()==null?"Не указан":r.empty()?"Порожний":"Гружёный",
                 r.shippingOrderNumber(),format(r.departureAt()),boundary(r.departureOperationType()),transport(r.departureTransport()),r.departureCarrier(),r.consignee(),
                 r.storageDays(),r.inStock()?"Да":"Нет",
@@ -111,13 +111,13 @@ public class ContainerStorageController {
     private static ApiException bad(String message){return new ApiException(HttpStatus.BAD_REQUEST,"INVALID_STORAGE_FILTER",message);}
     private Row row(ResultSet rs)throws SQLException {
         String status=rs.getString("status");
-        return new Row(rs.getObject("id",UUID.class),rs.getObject("container_id",UUID.class),rs.getString("container_name"),rs.getString("area_name"),
+        return new Row(rs.getObject("id",UUID.class),rs.getObject("container_id",UUID.class),rs.getString("container_name"),
             rs.getObject("receiving_order_id",UUID.class),rs.getObject("receiving_number",Long.class),rs.getObject("receiving_at",OffsetDateTime.class),
             rs.getString("client_name"),rs.getString("owner_name"),rs.getString("arrival_transport"),rs.getString("arrival_carrier"),rs.getString("consignor"),
             rs.getString("cargo_name"),rs.getObject("is_empty",Boolean.class),rs.getObject("shipping_order_id",UUID.class),
             rs.getObject("shipping_number",Long.class),rs.getObject("shipping_at",OffsetDateTime.class),rs.getString("departure_transport"),
             rs.getString("departure_carrier"),rs.getString("consignee"),rs.getString("shipping_client_name"),rs.getString("shipping_owner_name"),rs.getObject("storage_days",Long.class),status.equals("OPEN"),
-            status,rs.getString("arrival_time_source"),rs.getString("departure_time_source"),rs.getObject("receiving_order_container_id",UUID.class),
+            status,rs.getObject("receiving_order_container_id",UUID.class),
             rs.getObject("waybill_container_id",UUID.class),rs.getObject("shipping_order_container_id",UUID.class),
             rs.getString("arrival_operation_type"),rs.getString("departure_operation_type"),
             rs.getObject("start_order_id",UUID.class),rs.getString("start_order_type"),rs.getObject("start_order_number",Long.class),

@@ -32,7 +32,7 @@ public class ContainerStockService {
     public record History(UUID id, UUID containerId, UUID oldClientId, String oldClientName,
             UUID newClientId, String newClientName, String oldStatus, String newStatus,
             UUID orderId, String orderType, Long orderNumber, LocalDateTime createdAt, boolean cancellation, String operationType, java.time.OffsetDateTime occurredAt,
-            String timeSource, UUID storagePeriodId, UUID previousStoragePeriodId) {}
+            UUID storagePeriodId, UUID previousStoragePeriodId) {}
     record State(UUID id, UUID client, String status, UUID receiving, UUID shipping) {}
     record Reservation(UUID container, UUID previousOwner) {}
 
@@ -217,7 +217,7 @@ public class ContainerStockService {
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("old_client_id",UUID.class),rs.getString("old_name"),
                 rs.getObject("new_client_id",UUID.class),rs.getString("new_name"),rs.getString("old_status"),rs.getString("new_status"),
                 rs.getObject("order_id",UUID.class),rs.getString("order_type"),rs.getObject("order_number",Long.class),rs.getObject("created_at",LocalDateTime.class),rs.getBoolean("cancellation"),rs.getString("operation_type"),rs.getObject("occurred_at",java.time.OffsetDateTime.class),
-                rs.getString("time_source"),rs.getObject("storage_period_id",UUID.class),rs.getObject("previous_storage_period_id",UUID.class)),container,all);
+                rs.getObject("storage_period_id",UUID.class),rs.getObject("previous_storage_period_id",UUID.class)),container,all);
     }
     ApiException error(String code,String message){return new ApiException(HttpStatus.CONFLICT,code,message);}
 }

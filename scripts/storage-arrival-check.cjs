@@ -1,7 +1,7 @@
 // V47 -> V48 preservation. Live modes only read; integrity mutations always roll back on the isolated test DB.
 const fs=require('fs'),assert=require('node:assert/strict'),{execFileSync}=require('child_process'),crypto=require('crypto');
 const db=process.env.STORAGE_TEST_DB||'billing_storage_arrival_test',docker=process.env.DOCKER_EXE||'docker',mode=process.argv[2];
-assert.ok(['billing_history_operation_test','billing_storage_arrival_test','billing_storage_arrival_release_test','billing_storage_view_test','billing_next'].includes(db));
+assert.ok(['billing_history_metadata_test','billing_history_operation_test','billing_storage_arrival_test','billing_storage_arrival_release_test','billing_storage_view_test','billing_next'].includes(db));
 assert.ok(db!=='billing_next'||['capture','verify','api-capture','api-verify'].includes(mode));
 const sql=q=>execFileSync(docker,['exec','-i','billing-next-db-1','psql','-X','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1'],{input:q,encoding:'utf8',stdio:['pipe','pipe','pipe'],maxBuffer:128*1024*1024}).trim();
 const json=q=>JSON.parse(sql(q)||'null');
@@ -36,7 +36,7 @@ if(mode==='capture'){
  assert.equal(sql("select count(*) from container_storage_period where storage_arrival_history(id)<>arrival_history_id"),'0');
  console.log('PASS: eight columns; all business data, sequence values, exact arrivals and complete report preserved');
 }else if(mode==='integrity'){
- assert.ok(['billing_storage_arrival_test','billing_history_operation_test'].includes(db));assert.ok([48,49].includes(schema));
+ assert.ok(['billing_storage_arrival_test','billing_history_operation_test','billing_history_metadata_test'].includes(db));assert.ok([48,49,50].includes(schema));
  const f=JSON.parse(fs.readFileSync('backups/storage-owner-fixtures.json'));assert.equal(f.db,db);
  const p=json("select row_to_json(p) from container_storage_period p where id='"+f.periodId+"'");
  function rejected(q,pattern=/Invalid storage|violates.*constraint|duplicate key|cannot be null/){let failed=false;try{sql("BEGIN; SET LOCAL statement_timeout='5s'; "+q+"; SET CONSTRAINTS ALL IMMEDIATE; ROLLBACK;");}catch(e){failed=true;assert.match(String(e.stderr),pattern);}assert.ok(failed,'Invalid data accepted');}
