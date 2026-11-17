@@ -272,7 +272,7 @@ function createPanel(number) {
     $('table-title').textContent = state.selected;
     $('table-description').textContent = labels[state.selected] || 'Таблица БД';
     $('relation-filter').hidden = !state.filter;
-    $('filter-text').textContent = state.filter ? state.filter.column + ' = ' + state.filter.value : '';
+    $('filter-text').textContent = state.filter ? (state.filter.conditions || [state.filter]).map(condition => condition.column + ' = ' + condition.value).join(' · ') : '';
     $('data-table').replaceChildren(); $('empty').hidden = false; $('empty').textContent = 'Загружаем данные…';
     updateHistoryButtons(); renderTables(); refreshPanel(true);
   }
@@ -435,9 +435,12 @@ function createPanel(number) {
           if (/^(smallint|integer|bigint|numeric|real|double)/.test(column.type)) td.classList.add('numeric');
           const relation = data.relations.find(r => r.column === column.name);
           const target = relation?.target.replace(/^public\./, '');
-          if (value !== null && relation && app.tables.some(t => t.name === target)) {
+          const sourceColumns = relation?.columns || [column.name];
+          if (value !== null && relation && sourceColumns.every(name => record[name] != null) && app.tables.some(t => t.name === target)) {
             const link = element('button', value, 'fk'); link.title = `Открыть ${target} в новой панели снизу: ${value}`;
-            const filter = { column: relation.target_column, value };
+            const filter = { conditions: sourceColumns.map((name, index) => ({
+              column: relation.target_columns?.[index] || relation.target_column, value: record[name],
+            })) };
             const openBelow = () => addPanel({ after: panel, table: target, filter });
             link.onclick = openBelow;
             td.append(link);
@@ -466,7 +469,9 @@ function createPanel(number) {
     const version = state.version;
     try {
       const params = new URLSearchParams({ name: state.selected, offset: state.offset, limit: state.limit, search: state.search, sort: state.sort, direction: state.direction });
-      if (state.filter) { params.set('column', state.filter.column); params.set('value', state.filter.value); }
+      for (const condition of state.filter?.conditions || (state.filter ? [state.filter] : [])) {
+        params.append('column', condition.column); params.append('value', condition.value);
+      }
       const data = await get('/api/table?' + params);
       if (disposed) return;
       if (version === state.version) {

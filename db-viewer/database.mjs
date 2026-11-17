@@ -69,22 +69,37 @@ export async function tablePage(params) {
         AND a.attnum=ANY(i.indkey)) AS primary
       FROM pg_attribute a WHERE a.attrelid=$1::regclass AND a.attnum>0 AND NOT a.attisdropped
       ORDER BY a.attnum`, [`public.${quote(name)}`])).rows;
-    const relations = (await client.query(`SELECT a.attname AS column, c.confrelid::regclass::text AS target,
-      af.attname AS target_column FROM pg_constraint c
-      JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=c.conkey[1]
-      JOIN pg_attribute af ON af.attrelid=c.confrelid AND af.attnum=c.confkey[1]
-      WHERE c.conrelid=$1::regclass AND c.contype='f' AND cardinality(c.conkey)=1`, [`public.${quote(name)}`])).rows;
+    const foreignKeys = (await client.query(`SELECT c.confrelid::regclass::text AS target,
+      array_agg(a.attname::text ORDER BY k.position) AS columns,
+      array_agg(af.attname::text ORDER BY k.position) AS target_columns,
+      array_agg(EXISTS(SELECT 1 FROM pg_index i WHERE i.indrelid=c.confrelid
+        AND i.indisunique AND i.indnkeyatts=1 AND i.indpred IS NULL AND i.indexprs IS NULL
+        AND i.indkey[0]=af.attnum) ORDER BY k.position) AS unique_targets
+      FROM pg_constraint c
+      CROSS JOIN LATERAL unnest(c.conkey, c.confkey) WITH ORDINALITY AS k(source, target, position)
+      JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.source
+      JOIN pg_attribute af ON af.attrelid=c.confrelid AND af.attnum=k.target
+      WHERE c.conrelid=$1::regclass AND c.contype='f'
+      GROUP BY c.oid, c.confrelid
+      ORDER BY cardinality(c.conkey), c.oid`, [`public.${quote(name)}`])).rows;
+    // Prefer the referenced record's own unique key over a shared context field.
+    const relations = foreignKeys.flatMap(key => key.columns.map((column, index) => ({
+      target: key.target, columns: key.columns, target_columns: key.target_columns,
+      column, target_column: key.target_columns[index], target_unique: key.unique_targets[index],
+    }))).sort((a, b) => Number(b.target_unique) - Number(a.target_unique) || a.columns.length - b.columns.length);
     const sort = params.get('sort') || '';
-    const filterColumn = params.get('column') || '';
-    if ([sort, filterColumn].some(v => v && !columns.some(c => c.name === v))) throw new InputError('Неизвестная колонка');
+    const filterColumns = params.getAll('column'), filterValues = params.getAll('value');
+    if (filterColumns.length !== filterValues.length || filterColumns.length > 32) throw new InputError('Некорректный фильтр связи');
+    if ((sort && !columns.some(c => c.name === sort)) ||
+        filterColumns.some(v => !columns.some(c => c.name === v))) throw new InputError('Неизвестная колонка');
     const values = [];
     const filters = [];
     if (search) {
       values.push('%' + search.replace(/[\\%_]/g, '\\$&') + '%');
       filters.push(`to_jsonb(t)::text ILIKE $${values.length}`);
     }
-    if (filterColumn) {
-      const filterValue = params.get('value') || '';
+    for (const [index, filterColumn] of filterColumns.entries()) {
+      const filterValue = filterValues[index];
       if (filterValue.length > 200) throw new InputError('Слишком длинное значение');
       values.push(filterValue);
       filters.push(`t.${quote(filterColumn)}::text = $${values.length}`);
