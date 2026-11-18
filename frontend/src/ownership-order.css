@@ -8,8 +8,8 @@
 .ownership-comment textarea { min-height: 80px; resize: vertical; }
 .ownership-comment-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ownership-status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px; font-size: 12px; line-height: 18px; color: #667085; background: #f2f4f7; white-space: nowrap; }
-.ownership-status::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .ownership-status-done { color: #039855; background: #ecfdf3; }
+.ownership-status-scheduled { color: #175cd3; background: #eff8ff; }
 .ownership-status-field { min-height: 40px; display: flex; align-items: center; }
 .ownership-registry-table { min-width: 980px; }
 .ownership-container-table { min-width: 600px; }

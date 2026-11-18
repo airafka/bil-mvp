@@ -20,6 +20,7 @@ public class ContainerStockService {
     public record Lookup(UUID containerId, UUID ownerClientId, String ownerClientName, String status) {}
     @Transactional(readOnly=true)
     public List<Lookup> lookup(List<UUID> containerIds) {
+        OwnershipScheduleGuard.requireCurrent(jdbc);
         var ids = containerIds.stream().distinct().toList();
         String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
         var result = jdbc.query("select c.id, o.client_id, cl.name, coalesce(o.status,'DEPARTED') from container c "
@@ -37,9 +38,19 @@ public class ContainerStockService {
     record Reservation(UUID container, UUID previousOwner) {}
 
     public void lockContainers(Collection<UUID> ids) {
+        lockContainers(ids,null);
+    }
+    public void lockContainers(Collection<UUID> ids,UUID executingOwnershipOrder) {
+        jdbc.queryForObject("select billing_today()",java.time.LocalDate.class);
         for (UUID id : new TreeSet<>(ids)) {
             var found=jdbc.query("select id from container where id=? for update",(rs,n)->rs.getObject(1,UUID.class),id);
             if(found.isEmpty()) throw error("CONTAINER_NOT_FOUND","КТК не найден");
+            if(Boolean.TRUE.equals(jdbc.queryForObject("""
+                select exists(select 1 from service_order s join service_order_container c on c.service_order_id=s.id
+                  where c.container_id=? and s.status='SCHEDULED' and s.effective_date<=billing_today()
+                    and (?::uuid is null or s.id<>?))
+                """,Boolean.class,id,executingOwnershipOrder,executingOwnershipOrder)))
+                throw error("OWNERSHIP_SCHEDULE_PENDING","Для КТК наступила дата передачи. Дождитесь выполнения смены собственника или проверьте ожидающую заявку");
         }
     }
     State state(UUID id) {
@@ -49,6 +60,9 @@ public class ContainerStockService {
         return rows.isEmpty()?null:rows.getFirst();
     }
     UUID transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type) {
+        return transition(container,client,status,receiving,shipping,order,type,null);
+    }
+    UUID transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type,java.time.OffsetDateTime effectiveAt) {
         State old=state(container);
         if(old==null) jdbc.update("insert into container_owner(id,container_id,client_id,status,receiving_order_id,shipping_order_id) values(?,?,?,?,?,?)",
             UUID.randomUUID(),container,client,status,receiving,shipping);
@@ -62,8 +76,8 @@ public class ContainerStockService {
             """,client,container);
         if(old==null || !Objects.equals(old.client(),client) || !Objects.equals(old.status(),status)) {
             UUID history=UUID.randomUUID();
-            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,occurred_at) values(?,?,?,?,?,?,?,?,billing_now())",
-                history,container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type);
+            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,occurred_at) values(?,?,?,?,?,?,?,?,coalesce(?::timestamptz,billing_now()))",
+                history,container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type,effectiveAt);
             storage.onHistory(history,container,order,type,status);
             return history;
         }
@@ -187,6 +201,7 @@ public class ContainerStockService {
     }
     @Transactional(readOnly=true)
     public PagedResponse<Owner> page(String query, UUID client, String status, boolean remains, int page, int size) {
+        OwnershipScheduleGuard.requireCurrent(jdbc);
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
         if(status!=null&&!Set.of("EXPECTED","ON_TERMINAL","RESERVED_OUT","DEPARTED").contains(status))throw error("INVALID_CONTAINER_STATUS","Неизвестный статус КТК");
         String filter=" where (?='' or position(lower(?) in lower(c.code||' '||cl.name))>0) and (?::uuid is null or o.client_id=?) and (?::text is null or o.status=?) and (not ? or o.status in ('ON_TERMINAL','RESERVED_OUT'))";
@@ -197,6 +212,7 @@ public class ContainerStockService {
     }
     @Transactional(readOnly=true)
     public List<History> history(UUID container, boolean all) {
+        OwnershipScheduleGuard.requireCurrent(jdbc);
         if(jdbc.queryForObject("select count(*) from container where id=?",Integer.class,container)==0)throw error("CONTAINER_NOT_FOUND","КТК не найден");
         return jdbc.query("""
             select h.*,old.name as old_name,new.name as new_name,

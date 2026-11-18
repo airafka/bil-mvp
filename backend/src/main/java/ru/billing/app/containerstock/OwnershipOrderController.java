@@ -18,6 +18,7 @@ public class OwnershipOrderController {
     @PutMapping("/{id}") public OwnershipOrderService.Details update(@PathVariable UUID id,@Valid @RequestBody OwnershipOrderService.Update request){return service.update(id,request);}
     @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void delete(@PathVariable UUID id){service.delete(id);}
     @PostMapping("/{id}/accept") public OwnershipOrderService.Details accept(@PathVariable UUID id){return service.accept(id);}
+    @PostMapping("/{id}/withdraw") public OwnershipOrderService.Details withdraw(@PathVariable UUID id){return service.withdraw(id);}
     @GetMapping("/{id}/containers/available") public PagedResponse<OwnershipOrderService.Link> available(@PathVariable UUID id,@RequestParam(defaultValue="")String query,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="20")int size){return service.available(id,query.trim(),page,size);}
     @PutMapping("/{id}/containers") public OwnershipOrderService.Details select(@PathVariable UUID id,@Valid @RequestBody @NotNull List<@NotNull @Valid Selection> selected){return service.select(id,selected);}
 }

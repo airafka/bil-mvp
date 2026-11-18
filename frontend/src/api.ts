@@ -171,11 +171,12 @@ export function getContainerStock(query = '', clientId = '', status = '', page =
 export function getOwnerHistory(id: string, includeReservations = false) { return request<import('./containerStock').OwnerHistory[]>('/api/containers/' + id + '/owner-history?includeReservations=' + includeReservations) }
 export function getOwnershipOrders(query = '', page = 0) { return request<PagedResponse<import('./containerStock').OwnershipHeader>>('/api/service-orders?' + new URLSearchParams({ query, page: String(page) })) }
 export function getOwnershipOrder(id: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id) }
-export function createOwnershipOrder(clientId: string, comment: string, containerOwnerIds: string[]) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders', { method: 'POST', body: JSON.stringify({ clientId, service: 'CHANGE_OWNER', comment, containerOwnerIds }) }) }
-export function updateOwnershipOrder(id: string, comment: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id, { method: 'PUT', body: JSON.stringify({ id, service: 'CHANGE_OWNER', comment }) }) }
+export function createOwnershipOrder(clientId: string, comment: string, containerOwnerIds: string[], effectiveDate: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders', { method: 'POST', body: JSON.stringify({ clientId, service: 'CHANGE_OWNER', comment, containerOwnerIds, effectiveDate }) }) }
+export function updateOwnershipOrder(id: string, comment: string, effectiveDate: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id, { method: 'PUT', body: JSON.stringify({ id, service: 'CHANGE_OWNER', comment, effectiveDate }) }) }
 export function getOwnershipAvailable(id: string, query = '', page = 0) { return request<PagedResponse<import('./containerStock').OwnershipContainer>>('/api/service-orders/' + id + '/containers/available?' + new URLSearchParams({ query, page: String(page) })) }
 export function saveOwnershipSelection(id: string, containerOwnerIds: string[]) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id + '/containers', { method: 'PUT', body: JSON.stringify(containerOwnerIds.map(containerOwnerId => ({ containerOwnerId }))) }) }
 export function acceptOwnershipOrder(id: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id + '/accept', { method: 'POST' }) }
+export function withdrawOwnershipOrder(id: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id + '/withdraw', { method: 'POST' }) }
 export function deleteOwnershipOrder(id: string) { return request<void>('/api/service-orders/' + id, { method: 'DELETE' }) }
 
 export function lookupContainerStock(containerIds: string[]) {

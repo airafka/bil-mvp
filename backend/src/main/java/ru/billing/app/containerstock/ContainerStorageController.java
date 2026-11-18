@@ -113,6 +113,7 @@ public class ContainerStorageController {
             @RequestParam(required=false)UUID clientId,@RequestParam(required=false)UUID periodId,@RequestParam(required=false)LocalDate arrivalFrom,
             @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf,
             @RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="20")int size) {
+        OwnershipScheduleGuard.requireCurrent(jdbc);
         var reportDate=date(asOf);
         var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,reportDate);
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
@@ -124,6 +125,7 @@ public class ContainerStorageController {
     public record ContainerOption(UUID id, String name) {}
     @GetMapping("/containers")
     public List<ContainerOption> containers() {
+        OwnershipScheduleGuard.requireCurrent(jdbc);
         return jdbc.query("""
             select c.id,c.code from container c
             where exists(select 1 from container_storage_period p where p.container_id=c.id and p.status in ('OPEN','CLOSED'))
@@ -134,6 +136,7 @@ public class ContainerStorageController {
     public ResponseEntity<byte[]> export(@RequestParam(defaultValue="")String query,@RequestParam(defaultValue="ACTIVE")String status,
             @RequestParam(required=false)UUID clientId,@RequestParam(required=false)UUID periodId,@RequestParam(required=false)LocalDate arrivalFrom,
             @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf) {
+        OwnershipScheduleGuard.requireCurrent(jdbc);
         var reportDate=date(asOf);
         var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,reportDate);
         var out=new StringBuilder("\uFEFF");
