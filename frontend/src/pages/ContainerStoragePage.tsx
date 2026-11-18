@@ -6,29 +6,22 @@ import { request } from '../http'
 import type { PagedResponse, ReferenceOption } from '../domain'
 import { UiSelect } from '../components/FormControls'
 import { TableReveal } from '../components/TableReveal'
-import { operationLabel, storageCargoName, storageDate, transportLabel, type StoragePeriod } from '../containerStorage'
+import { storageBoundaryLabel, storageDate, storageStatus, type StoragePeriod } from '../containerStorage'
 import './ContainerStoragePage.css'
 
-const columns = [160, 175, 175, 100, 155, 260, 200, 110, 190, 180, 155, 260, 110, 190, 190]
-const parties = (client?: string, owner?: string) => `${client || '—'} / ${owner || '—'}`
+const columns = [145, 200, 150, 160, 115, 150, 160, 115, 110]
 
 export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; emptyText: string }) {
   return <table className="storage-table"><colgroup>{columns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
-    <thead><tr><th>Номер КТК</th><th>Начало периода</th><th>Окончание периода</th><th>Дней хранения</th>
-      <th>Заявка поставки</th><th>Клиент поставки / собственник периода</th><th>Грузоотправитель</th>
-      <th>Транспорт поставки</th><th>Перевозчик поставки</th><th>Груз</th><th>Заявка вывоза</th><th>Клиент/собственник вывоза</th>
-      <th>Транспорт вывоза</th><th>Перевозчик вывоза</th><th>Грузополучатель</th></tr></thead>
+    <thead><tr><th>Номер КТК</th><th>Собственник КТК</th><th>Начало периода</th><th>Тип начала</th><th>Номер заявки начала</th>
+      <th>Окончание периода</th><th>Тип окончания</th><th>Номер заявки окончания</th><th>Статус хранения</th></tr></thead>
     <tbody>{rows.length ? rows.map(row => <tr key={row.id} data-period-id={row.id}>
       <td><Link to={'/container-owners/' + row.containerId + '/history'}>{row.containerName}</Link></td>
-      <td>{storageDate(row.arrivalAt)}{row.arrivalOperationType && <div className="storage-note">{row.startOrderId && row.startOrderType ? <Link to={historyOrderPath({ orderId: row.startOrderId, orderType: row.startOrderType })}>{operationLabel(row.arrivalOperationType)} № {row.startOrderNumber}</Link> : operationLabel(row.arrivalOperationType)}</div>}</td>
-      <td>{storageDate(row.departureAt)}{row.departureOperationType && <div className="storage-note">{row.endOrderId && row.endOrderType ? <Link to={historyOrderPath({ orderId: row.endOrderId, orderType: row.endOrderType })}>{operationLabel(row.departureOperationType)} № {row.endOrderNumber}</Link> : operationLabel(row.departureOperationType)}</div>}</td>
-      <td>{row.storageDays ?? '—'}</td>
-      <td><Link to={'/receiving-orders/' + row.receivingOrderId}>{row.receivingOrderNumber}</Link></td>
-      <td>{parties(row.clientName, row.ownerName)}</td><td>{row.consignor || '—'}</td><td>{transportLabel(row.arrivalTransport)}</td><td>{row.arrivalCarrier || '—'}</td>
-      <td>{storageCargoName(row.cargoName)}</td>
-      <td>{row.shippingOrderId ? <Link to={'/shipping-orders/' + row.shippingOrderId}>{row.shippingOrderNumber}</Link> : '—'}</td>
-      <td>{row.shippingOrderId ? parties(row.shippingClientName, row.shippingOwnerName) : '—'}</td>
-      <td>{transportLabel(row.departureTransport)}</td><td>{row.departureCarrier || '—'}</td><td>{row.consignee || '—'}</td>
+      <td>{row.ownerName || '—'}</td><td>{storageDate(row.arrivalAt)}</td><td>{storageBoundaryLabel(row.startOrderType)}</td>
+      <td>{row.startOrderId && row.startOrderType ? <Link to={historyOrderPath({ orderId: row.startOrderId, orderType: row.startOrderType })}>{row.startOrderNumber}</Link> : null}</td>
+      <td>{row.departureAt ? storageDate(row.departureAt) : ''}</td><td>{storageBoundaryLabel(row.endOrderType)}</td>
+      <td>{row.endOrderId && row.endOrderType ? <Link to={historyOrderPath({ orderId: row.endOrderId, orderType: row.endOrderType })}>{row.endOrderNumber}</Link> : null}</td>
+      <td>{storageStatus(row.status)}</td>
     </tr>) : <tr><td colSpan={columns.length} className="table-message">{emptyText}</td></tr>}</tbody>
   </table>
 }
