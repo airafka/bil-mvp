@@ -32,10 +32,10 @@ public class ContainerStorageService {
             tasks.finished(order,container,true);
             period=UUID.randomUUID();
             jdbc.update("""
-                insert into container_storage_period(id,container_id,start_history_id,arrival_history_id,
+                insert into container_storage_period(id,container_id,start_history_id,
                     status)
-                values(?,?,?,?,'OPEN')
-                """,period,container,history,history);
+                values(?,?,?,'OPEN')
+                """,period,container,history);
         } else if(operation.equals("OWNER_CHANGE")) {
             OffsetDateTime latest=jdbc.queryForObject("select max(occurred_at) from container_owner_history_view where container_id=? and id<>?",
                 OffsetDateTime.class,container,history);
@@ -49,9 +49,9 @@ public class ContainerStorageService {
                     """,history,current.id());
                 period=UUID.randomUUID();
                 jdbc.update("""
-                    insert into container_storage_period(id,container_id,start_history_id,arrival_history_id,
+                    insert into container_storage_period(id,container_id,start_history_id,
                         status)
-                    select ?,container_id,?,arrival_history_id,'OPEN' from container_storage_period where id=?
+                    select ?,container_id,?,'OPEN' from container_storage_period where id=?
                     """,period,history,current.id());
             } else if(!opened.isEmpty()) throw conflict("Состояние КТК не согласовано с открытым периодом хранения");
         } else if(operation.equals("DEPARTURE")) {
@@ -71,8 +71,8 @@ public class ContainerStorageService {
             // Annul the entire physical visit, retaining ownership boundaries and their history.
             jdbc.update("""
                 update container_storage_period set status='CANCELLED',updated_at=billing_now()
-                  where arrival_history_id=(select arrival_history_id from container_storage_period where id=?)
-                """,period);
+                  where container_id=? and storage_arrival_history(id)=storage_arrival_history(?)
+                """,container,period);
         } else if(operation.equals("CANCEL_DEPARTURE")) {
             var closed=periods("p.container_id=? and p.end_history_id in (select id from container_owner_history_view where order_id=? and order_type='SHIPPING_ORDER' and operation_type='DEPARTURE') and p.status='CLOSED'",container,order);
             if(closed.size()!=1 || !opened.isEmpty())

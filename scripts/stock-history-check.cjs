@@ -1,13 +1,13 @@
 // Mutating checks are restricted to this isolated restored database and backend.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_stock_history_test',port=db==='billing_history_cancellation_test'?'8210':db==='billing_history_metadata_test'?'8209':db==='billing_history_operation_test'?'8208':db==='billing_storage_arrival_test'?'8207':db==='billing_storage_origin_test'?'8206':db==='billing_storage_sources_test'?'8205':db==='billing_storage_view_test'?'8204':'8203',base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+port+'/api';
+const docker=process.env.DOCKER_EXE||'docker',db=process.env.STORAGE_TEST_DB||'billing_stock_history_test',port=db==='billing_storage_chain_test'?'8211':db==='billing_history_cancellation_test'?'8210':db==='billing_history_metadata_test'?'8209':db==='billing_history_operation_test'?'8208':db==='billing_storage_arrival_test'?'8207':db==='billing_storage_origin_test'?'8206':db==='billing_storage_sources_test'?'8205':db==='billing_storage_view_test'?'8204':'8203',base=(process.env.TEST_API_HOST||'http://127.0.0.1')+':'+port+'/api';
 const run=args=>execFileSync(docker,args,{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe'],maxBuffer:32*1024*1024}).trim();
 const rawSql=q=>run(['exec','billing-next-db-1','psql','-X','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1','-c',q]);
 const historySchema=Number(rawSql('select max(version::int) from flyway_schema_history where success'));
 const v48=historySchema>=48;
 const sql=q=>{if(historySchema>=49)q=q.replaceAll('from container_owner_history ','from container_owner_history_view ').replaceAll('join container_owner_history ','join container_owner_history_view ');return rawSql(v48?q.replaceAll('receiving_history_id','start_history_id').replaceAll('shipping_history_id','end_history_id'):q);};
 const json=q=>JSON.parse(sql(q)||'null',function(k,v){if(v48&&v&&typeof v==='object'&&!Array.isArray(v)){if('start_history_id' in v)v.receiving_history_id=v.start_history_id;if('end_history_id' in v)v.shipping_history_id=v.end_history_id;}return v;});
-assert.ok(['billing_history_cancellation_test','billing_history_metadata_test','billing_history_operation_test','billing_storage_arrival_test','billing_stock_history_test','billing_storage_view_test','billing_storage_sources_test','billing_storage_origin_test'].includes(db));
+assert.ok(['billing_storage_chain_test','billing_history_cancellation_test','billing_history_metadata_test','billing_history_operation_test','billing_storage_arrival_test','billing_stock_history_test','billing_storage_view_test','billing_storage_sources_test','billing_storage_origin_test'].includes(db));
 assert.equal(sql('select current_database()'),db);
 const periodReceipt=Number(sql('select max(version::int) from flyway_schema_history where success'))>=47?'storage_receiving_order(p.id)':'p.receiving_order_id';
 const capture=path.join(__dirname,'../backups/stock-history-before.json');
@@ -29,9 +29,9 @@ async function main(){
   assert.equal(sql('select max(version::int) from flyway_schema_history where success'),'42');
   fs.mkdirSync(path.dirname(capture),{recursive:true});fs.writeFileSync(capture,JSON.stringify(snapshot()));console.log('PASS: V42 data, sequences and columns captured');return;
  }
- const inspect=JSON.parse(run(['inspect',db==='billing_history_cancellation_test'?'billing-next-history-cancellation-test':db==='billing_history_metadata_test'?'billing-next-history-metadata-test':db==='billing_history_operation_test'?'billing-next-history-operation-test':db==='billing_storage_arrival_test'?'billing-next-storage-arrival-test':db==='billing_storage_origin_test'?'billing-next-storage-origin-test':db==='billing_storage_sources_test'?'billing-next-storage-sources-test':db==='billing_storage_view_test'?'billing-next-storage-view-test':'billing-next-stock-history-test']))[0];
+ const inspect=JSON.parse(run(['inspect',db==='billing_storage_chain_test'?'billing-next-storage-chain-test':db==='billing_history_cancellation_test'?'billing-next-history-cancellation-test':db==='billing_history_metadata_test'?'billing-next-history-metadata-test':db==='billing_history_operation_test'?'billing-next-history-operation-test':db==='billing_storage_arrival_test'?'billing-next-storage-arrival-test':db==='billing_storage_origin_test'?'billing-next-storage-origin-test':db==='billing_storage_sources_test'?'billing-next-storage-sources-test':db==='billing_storage_view_test'?'billing-next-storage-view-test':'billing-next-stock-history-test']))[0];
  assert.ok(inspect.Config.Env.includes('DB_NAME='+db));assert.ok(inspect.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort===port));
- assert.ok(['43','44','45','46','47','48','49','50','51'].includes(sql('select max(version::int) from flyway_schema_history where success')));
+ assert.ok(['43','44','45','46','47','48','49','50','51','52','53'].includes(sql('select max(version::int) from flyway_schema_history where success')));
  assert.equal(sql("select to_regclass('container_stock_reservation') is null"),'t');
  if(process.argv[2]==='migration'){
   assert.deepEqual(snapshot(),JSON.parse(fs.readFileSync(capture,'utf8')));

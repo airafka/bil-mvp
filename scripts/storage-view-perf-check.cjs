@@ -1,10 +1,16 @@
 // Read-only EXPLAIN and API timings after storage-view-perf-fixture.sql, on the isolated database only.
 const fs=require('fs'),assert=require('node:assert/strict'),{execFileSync}=require('child_process');
-const db='billing_storage_view_test',docker=process.env.DOCKER_EXE||'docker';
+const db=process.env.STORAGE_TEST_DB||'billing_storage_view_test',docker=process.env.DOCKER_EXE||'docker';
+assert.ok(['billing_storage_view_test','billing_storage_chain_perf_test'].includes(db));
 const outputPrefix=process.env.STORAGE_PERF_PREFIX||'storage-view';assert.match(outputPrefix,/^[a-z-]+$/);
 const sql=q=>execFileSync(docker,['exec','-i','billing-next-db-1','psql','-X','-U','billing','-d',db,'-At','-v','ON_ERROR_STOP=1'],{input:q,encoding:'utf8',maxBuffer:64*1024*1024}).trim();
 const json=q=>JSON.parse(sql(q));assert.equal(sql('select current_database()'),db);
 assert.ok(Number(sql("select count(*) from container where code like 'VIEU%'"))>=10000);
+if(db==='billing_storage_chain_perf_test'){
+ const info=JSON.parse(execFileSync(docker,['inspect','billing-next-storage-chain-perf-test'],{encoding:'utf8'}))[0];
+ assert.ok(info.Config.Env.includes('DB_NAME='+db));assert.ok(info.NetworkSettings.Ports['8080/tcp'].some(p=>p.HostPort==='8212'));
+ assert.equal(process.env.TEST_API_PORT,'8212');
+}
 const asOf=sql('select billing_today()');
 const select="select p.*,greatest(0,(least(coalesce((p.shipping_at at time zone 'Europe/Moscow')::date-case when p.departure_operation_type='OWNER_CHANGE' then 1 else 0 end,DATE '"+asOf+"'),DATE '"+asOf+"')-(p.receiving_at at time zone 'Europe/Moscow')::date)+1)::bigint storage_days from container_storage_period_view p";
 const where=" where (p.receiving_at at time zone 'Europe/Moscow')::date<=DATE '"+asOf+"'";
