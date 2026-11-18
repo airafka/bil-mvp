@@ -6,22 +6,27 @@ import { request } from '../http'
 import type { PagedResponse, ReferenceOption } from '../domain'
 import { UiSelect } from '../components/FormControls'
 import { TableReveal } from '../components/TableReveal'
-import { storageBoundaryLabel, storageDate, storageStatus, type StoragePeriod } from '../containerStorage'
+import { storageBoundaryLabel, storageDate, storageClientOwner, storageTransport, type StoragePeriod } from '../containerStorage'
 import './ContainerStoragePage.css'
 
-const columns = [140, 180, 145, 145, 105, 145, 145, 105, 90, 105]
+const columns = [140, 180, 90, 145, 145, 105, 145, 145, 105, 240, 110, 240, 220, 240, 110, 240, 220]
 
 export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; emptyText: string }) {
   return <table className="storage-table"><colgroup>{columns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
-    <thead><tr><th>Номер КТК</th><th>Собственник КТК</th><th>Начало периода</th><th>Тип начала</th><th>Номер заявки начала</th>
-      <th>Окончание периода</th><th>Тип окончания</th><th>Номер заявки окончания</th><th>Дней хранения</th><th>Статус хранения</th></tr></thead>
+    <thead><tr><th>Номер КТК</th><th>Собственник КТК</th><th>Дней хранения</th><th>Начало периода</th>
+      <th>Событие</th><th>Заявка</th><th>Конец периода</th><th>Событие</th><th>Заявка</th>
+      <th>Клиент/Собственник поставки</th><th>Транспорт поставки</th><th>Грузоперевозчик/грузоотправитель поставки</th><th>Груз поставки</th>
+      <th>Клиент/Собственник вывоза</th><th>Транспорт вывоза</th><th>Грузоперевозчик/грузополучатель вывоза</th><th>Груз вывоза</th></tr></thead>
     <tbody>{rows.length ? rows.map(row => <tr key={row.id} data-period-id={row.id}>
       <td><Link to={'/container-owners/' + row.containerId + '/history'}>{row.containerName}</Link></td>
-      <td>{row.ownerName || '—'}</td><td>{storageDate(row.arrivalAt)}</td><td>{storageBoundaryLabel(row.startOrderType)}</td>
+      <td>{row.ownerName || '—'}</td><td>{row.storageDays}</td><td>{storageDate(row.arrivalAt)}</td><td>{storageBoundaryLabel(row.startOrderType)}</td>
       <td>{row.startOrderId && row.startOrderType ? <Link to={historyOrderPath({ orderId: row.startOrderId, orderType: row.startOrderType })}>{row.startOrderNumber}</Link> : null}</td>
       <td>{row.departureAt ? storageDate(row.departureAt) : ''}</td><td>{storageBoundaryLabel(row.endOrderType)}</td>
       <td>{row.endOrderId && row.endOrderType ? <Link to={historyOrderPath({ orderId: row.endOrderId, orderType: row.endOrderType })}>{row.endOrderNumber}</Link> : null}</td>
-      <td>{row.storageDays}</td><td>{storageStatus(row.status)}</td>
+      <td>{storageClientOwner(row.receivingClientName, row.receivingOwnerName)}</td><td>{storageTransport(row.arrivalTransport)}</td>
+      <td>{row.arrivalParty}</td><td>{row.arrivalCargo}</td>
+      <td>{storageClientOwner(row.shippingClientName, row.shippingOwnerName)}</td><td>{storageTransport(row.departureTransport)}</td>
+      <td>{row.departureParty}</td><td>{row.departureCargo}</td>
     </tr>) : <tr><td colSpan={columns.length} className="table-message">{emptyText}</td></tr>}</tbody>
   </table>
 }

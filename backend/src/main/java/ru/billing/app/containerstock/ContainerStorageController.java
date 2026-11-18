@@ -21,7 +21,9 @@ public class ContainerStorageController {
     public ContainerStorageController(JdbcTemplate jdbc) {this.jdbc=jdbc;}
     public record Row(UUID id,UUID containerId,String containerName,
         String ownerName,OffsetDateTime arrivalAt,OffsetDateTime departureAt,String status,long storageDays,
-        UUID startOrderId,String startOrderType,Long startOrderNumber,UUID endOrderId,String endOrderType,Long endOrderNumber) {}
+        UUID startOrderId,String startOrderType,Long startOrderNumber,UUID endOrderId,String endOrderType,Long endOrderNumber,
+        String receivingClientName,String receivingOwnerName,String arrivalTransport,String arrivalParty,String arrivalCargo,
+        String shippingClientName,String shippingOwnerName,String departureTransport,String departureParty,String departureCargo) {}
     private static final String FROM="""
         from container_storage_period p
         join container_owner_history h on h.id=p.start_history_id
@@ -33,15 +35,59 @@ public class ContainerStorageController {
           h.order_id start_order_id,h.order_type start_order_type,
           case h.order_type when 'RECEIVING_ORDER' then r.number when 'SERVICE_ORDER' then so.number end::bigint start_order_number,
           e.order_id end_order_id,e.order_type end_order_type,
-          case e.order_type when 'SHIPPING_ORDER' then s.number when 'SERVICE_ORDER' then eo.number end::bigint end_order_number
-        """+FROM+"""
+          case e.order_type when 'SHIPPING_ORDER' then s.number when 'SERVICE_ORDER' then eo.number end::bigint end_order_number,
+          rc.name receiving_client_name,ro.name receiving_owner_name,r.transport_type arrival_transport,
+          case r.transport_type when 'VEHICLE' then ic.name when 'RAILWAY' then r.consignor end arrival_party,
+          incoming.cargo_name arrival_cargo,
+          sc.name shipping_client_name,sw.name shipping_owner_name,s.transport_type departure_transport,
+          case s.transport_type when 'VEHICLE' then oc.name when 'RAILWAY' then cons.name end departure_party,
+          outgoing.cargo_name departure_cargo
+        from report_periods p
+        join container_owner_history h on h.id=p.start_history_id
+        join container c on c.id=p.container_id
         left join container_owner_history e on e.id=p.end_history_id
         left join client ow on ow.id=h.new_client_id
-        left join receiving_order r on r.id=h.order_id and h.order_type='RECEIVING_ORDER'
+        join container_owner_history origin on origin.id=storage_arrival_history(p.id)
+        join receiving_order r on r.id=origin.order_id
         left join service_order so on so.id=h.order_id and h.order_type='SERVICE_ORDER'
         left join shipping_order s on s.id=e.order_id and e.order_type='SHIPPING_ORDER'
         left join service_order eo on eo.id=e.order_id and e.order_type='SERVICE_ORDER'
+        left join receiving_order_container rr on rr.receiving_order_id=r.id and rr.container_id=p.container_id and r.transport_type='VEHICLE'
+        left join lateral (
+          select wc.owner_container_id,wr.waybill_id
+          from waybill w join waybill_railway_carriage wr on wr.waybill_id=w.id
+          join waybill_container wc on wc.waybill_railway_carriage_id=wr.id
+          where w.receiving_order_id=r.id and wc.container_id=p.container_id and r.transport_type='RAILWAY'
+        ) rail on true
+        left join shipping_order_container sr on sr.shipping_order_id=s.id and sr.container_id=p.container_id
+        left join client rc on rc.id=r.client_id
+        left join client ro on ro.id=coalesce(rr.owner_container_id,rail.owner_container_id,r.default_container_owner_id)
+        left join client sc on sc.id=s.client_id
+        left join client sw on sw.id=sr.owner_container_id
+        left join route ir on ir.id=r.route_id
+        left join client_related_entity ic on ic.id=ir.client_related_entity_id
+        left join route outr on outr.id=s.route_id
+        left join client_related_entity oc on oc.id=outr.client_related_entity_id
+        left join client_related_entity cons on cons.id=s.consignee_id
+        left join lateral (
+          select string_agg(distinct ec.code,'; ' order by ec.code) cargo_name
+          from (
+            select i.etsng_code_id from receiving_order_container_item i where i.receiving_order_container_id=rr.id
+            union select wp.etsng_code_id from waybill_product wp where wp.waybill_id=rail.waybill_id
+          ) products join etsng_code ec on ec.id=products.etsng_code_id
+        ) incoming on true
+        left join lateral (
+          select string_agg(distinct ec.code,'; ' order by ec.code) cargo_name
+          from shipping_order_container_item i join etsng_code ec on ec.id=i.etsng_code_id
+          where i.shipping_order_container_id=sr.id
+        ) outgoing on true
         """;
+    private static String reportQuery(Filter filter,boolean paged) {
+        // Resolve source documents only for selected rows; keep the count independent of cargo joins.
+        return "with report_periods as materialized (select p.* "+FROM+filter.sql()
+            +" order by h.occurred_at desc,p.id"+(paged?" limit ? offset ?":"")+") "
+            +SELECT+" order by h.occurred_at desc,p.id";
+    }
     record Filter(String sql,List<Object> args) {}
     private Filter filter(String query,String status,UUID clientId,UUID periodId,LocalDate from,LocalDate to,LocalDate asOf) {
         if(!Set.of("ACTIVE","OPEN","CLOSED","CANCELLED","ALL").contains(status))
@@ -72,7 +118,7 @@ public class ContainerStorageController {
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
         long count=jdbc.queryForObject("select count(*) "+FROM+f.sql(),Long.class,f.args().toArray());
         var args=new ArrayList<>(f.args());args.add(size);args.add((long)page*size);
-        return PagedResponse.of(jdbc.query(SELECT+f.sql()+" order by h.occurred_at desc,p.id limit ? offset ?",
+        return PagedResponse.of(jdbc.query(reportQuery(f,true),
             (rs,n)->row(rs,reportDate),args.toArray()),page,size,count);
     }
     public record ContainerOption(UUID id, String name) {}
@@ -91,11 +137,15 @@ public class ContainerStorageController {
         var reportDate=date(asOf);
         var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,reportDate);
         var out=new StringBuilder("\uFEFF");
-        csv(out,"Номер КТК","Собственник КТК","Начало периода","Тип начала","Номер заявки начала",
-            "Окончание периода","Тип окончания","Номер заявки окончания","Дней хранения","Статус хранения");
-        jdbc.query(SELECT+f.sql()+" order by h.occurred_at desc,p.id",rs->{
-            Row r=row(rs,reportDate);csv(out,r.containerName(),r.ownerName(),format(r.arrivalAt()),boundary(r.startOrderType()),r.startOrderNumber(),
-                format(r.departureAt()),boundary(r.endOrderType()),r.endOrderNumber(),r.storageDays(),r.status().equals("OPEN")?"Открыт":"Закрыт");
+        csv(out,"Номер КТК","Собственник КТК","Дней хранения","Начало периода","Событие","Заявка",
+            "Конец периода","Событие","Заявка","Клиент/Собственник поставки","Транспорт поставки",
+            "Грузоперевозчик/грузоотправитель поставки","Груз поставки","Клиент/Собственник вывоза","Транспорт вывоза",
+            "Грузоперевозчик/грузополучатель вывоза","Груз вывоза");
+        jdbc.query(reportQuery(f,false),rs->{
+            Row r=row(rs,reportDate);csv(out,r.containerName(),r.ownerName(),r.storageDays(),format(r.arrivalAt()),
+                boundary(r.startOrderType()),r.startOrderNumber(),format(r.departureAt()),boundary(r.endOrderType()),r.endOrderNumber(),
+                clientOwner(r.receivingClientName(),r.receivingOwnerName()),transport(r.arrivalTransport()),r.arrivalParty(),r.arrivalCargo(),
+                clientOwner(r.shippingClientName(),r.shippingOwnerName()),transport(r.departureTransport()),r.departureParty(),r.departureCargo());
         },f.args().toArray());
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=container-storage.csv")
             .contentType(new MediaType("text","csv",StandardCharsets.UTF_8)).body(out.toString().getBytes(StandardCharsets.UTF_8));
@@ -109,6 +159,12 @@ public class ContainerStorageController {
     private static String format(OffsetDateTime value){return value==null?"":value.atZoneSameInstant(ZoneId.of("Europe/Moscow"))
         .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));}
     private static String boundary(String s){return s==null?"":switch(s){case "RECEIVING_ORDER"->"Поставка";case "SHIPPING_ORDER"->"Вывоз";case "SERVICE_ORDER"->"Смена собственника";default->s;};}
+    private static String clientOwner(String client,String owner) {
+        return client==null && owner==null?"":(client==null?"—":client)+" / "+(owner==null?"—":owner);
+    }
+    private static String transport(String value) {
+        return value==null?"":switch(value){case "VEHICLE"->"Авто";case "RAILWAY"->"ЖД";default->value;};
+    }
     private LocalDate date(LocalDate d) {
         LocalDate today=jdbc.queryForObject("select billing_today()",LocalDate.class);
         if(d!=null && d.isAfter(today)) throw bad("Дата расчёта не может быть позже рабочей даты");
@@ -131,6 +187,8 @@ public class ContainerStorageController {
         return new Row(rs.getObject("id",UUID.class),rs.getObject("container_id",UUID.class),rs.getString("container_name"),
             rs.getString("owner_name"),start,end,status,storageDays(start,end,endType,asOf),
             rs.getObject("start_order_id",UUID.class),rs.getString("start_order_type"),rs.getObject("start_order_number",Long.class),
-            rs.getObject("end_order_id",UUID.class),rs.getString("end_order_type"),rs.getObject("end_order_number",Long.class));
+            rs.getObject("end_order_id",UUID.class),rs.getString("end_order_type"),rs.getObject("end_order_number",Long.class),
+            rs.getString("receiving_client_name"),rs.getString("receiving_owner_name"),rs.getString("arrival_transport"),rs.getString("arrival_party"),rs.getString("arrival_cargo"),
+            rs.getString("shipping_client_name"),rs.getString("shipping_owner_name"),rs.getString("departure_transport"),rs.getString("departure_party"),rs.getString("departure_cargo"));
     }
 }
