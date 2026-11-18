@@ -1,6 +1,7 @@
 package ru.billing.app.containerstock;
 
 import java.time.*;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -19,7 +20,7 @@ public class ContainerStorageController {
     private final JdbcTemplate jdbc;
     public ContainerStorageController(JdbcTemplate jdbc) {this.jdbc=jdbc;}
     public record Row(UUID id,UUID containerId,String containerName,
-        String ownerName,OffsetDateTime arrivalAt,OffsetDateTime departureAt,String status,
+        String ownerName,OffsetDateTime arrivalAt,OffsetDateTime departureAt,String status,long storageDays,
         UUID startOrderId,String startOrderType,Long startOrderNumber,UUID endOrderId,String endOrderType,Long endOrderNumber) {}
     private static final String FROM="""
         from container_storage_period p
@@ -66,12 +67,13 @@ public class ContainerStorageController {
             @RequestParam(required=false)UUID clientId,@RequestParam(required=false)UUID periodId,@RequestParam(required=false)LocalDate arrivalFrom,
             @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf,
             @RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="20")int size) {
-        var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,date(asOf));
+        var reportDate=date(asOf);
+        var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,reportDate);
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
         long count=jdbc.queryForObject("select count(*) "+FROM+f.sql(),Long.class,f.args().toArray());
         var args=new ArrayList<>(f.args());args.add(size);args.add((long)page*size);
         return PagedResponse.of(jdbc.query(SELECT+f.sql()+" order by h.occurred_at desc,p.id limit ? offset ?",
-            (rs,n)->row(rs),args.toArray()),page,size,count);
+            (rs,n)->row(rs,reportDate),args.toArray()),page,size,count);
     }
     public record ContainerOption(UUID id, String name) {}
     @GetMapping("/containers")
@@ -86,13 +88,14 @@ public class ContainerStorageController {
     public ResponseEntity<byte[]> export(@RequestParam(defaultValue="")String query,@RequestParam(defaultValue="ACTIVE")String status,
             @RequestParam(required=false)UUID clientId,@RequestParam(required=false)UUID periodId,@RequestParam(required=false)LocalDate arrivalFrom,
             @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf) {
-        var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,date(asOf));
+        var reportDate=date(asOf);
+        var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,reportDate);
         var out=new StringBuilder("\uFEFF");
         csv(out,"Номер КТК","Собственник КТК","Начало периода","Тип начала","Номер заявки начала",
-            "Окончание периода","Тип окончания","Номер заявки окончания","Статус хранения");
+            "Окончание периода","Тип окончания","Номер заявки окончания","Дней хранения","Статус хранения");
         jdbc.query(SELECT+f.sql()+" order by h.occurred_at desc,p.id",rs->{
-            Row r=row(rs);csv(out,r.containerName(),r.ownerName(),format(r.arrivalAt()),boundary(r.startOrderType()),r.startOrderNumber(),
-                format(r.departureAt()),boundary(r.endOrderType()),r.endOrderNumber(),r.status().equals("OPEN")?"Открыт":"Закрыт");
+            Row r=row(rs,reportDate);csv(out,r.containerName(),r.ownerName(),format(r.arrivalAt()),boundary(r.startOrderType()),r.startOrderNumber(),
+                format(r.departureAt()),boundary(r.endOrderType()),r.endOrderNumber(),r.storageDays(),r.status().equals("OPEN")?"Открыт":"Закрыт");
         },f.args().toArray());
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=container-storage.csv")
             .contentType(new MediaType("text","csv",StandardCharsets.UTF_8)).body(out.toString().getBytes(StandardCharsets.UTF_8));
@@ -112,10 +115,21 @@ public class ContainerStorageController {
         return d==null?today:d;
     }
     private static ApiException bad(String message){return new ApiException(HttpStatus.BAD_REQUEST,"INVALID_STORAGE_FILTER",message);}
-    private Row row(ResultSet rs)throws SQLException {
+    static long storageDays(OffsetDateTime start,OffsetDateTime end,String endOrderType,LocalDate asOf) {
+        var zone=ZoneId.of("Europe/Moscow");
+        var first=start.atZoneSameInstant(zone).toLocalDate();
+        var last=end==null?asOf:end.atZoneSameInstant(zone).toLocalDate();
+        if(end!=null && "SERVICE_ORDER".equals(endOrderType))last=last.minusDays(1);
+        if(last.isAfter(asOf))last=asOf;
+        return Math.max(0,ChronoUnit.DAYS.between(first,last)+1);
+    }
+    private Row row(ResultSet rs,LocalDate asOf)throws SQLException {
         String status=rs.getString("status");
+        var start=rs.getObject("receiving_at",OffsetDateTime.class);
+        var end=rs.getObject("shipping_at",OffsetDateTime.class);
+        var endType=rs.getString("end_order_type");
         return new Row(rs.getObject("id",UUID.class),rs.getObject("container_id",UUID.class),rs.getString("container_name"),
-            rs.getString("owner_name"),rs.getObject("receiving_at",OffsetDateTime.class),rs.getObject("shipping_at",OffsetDateTime.class),status,
+            rs.getString("owner_name"),start,end,status,storageDays(start,end,endType,asOf),
             rs.getObject("start_order_id",UUID.class),rs.getString("start_order_type"),rs.getObject("start_order_number",Long.class),
             rs.getObject("end_order_id",UUID.class),rs.getString("end_order_type"),rs.getObject("end_order_number",Long.class));
     }

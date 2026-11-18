@@ -27,6 +27,8 @@ function fingerprint(){
 function csvParse(s){const rows=[];let row=[],cell='',quoted=false;s=s.replace(/^\uFEFF/,'');for(let i=0;i<s.length;i++){const c=s[i];if(c==='"'){if(quoted&&s[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(c===';'&&!quoted){row.push(cell);cell='';}else if(c==='\n'&&!quoted){row.push(cell.replace(/\r$/,''));rows.push(row);row=[];cell='';}else cell+=c;}assert.equal(quoted,false);return rows;}
 const date=s=>s?new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(s)).replace(',',''):'';
 const label=s=>({RECEIVING_ORDER:'Поставка',SHIPPING_ORDER:'Вывоз',SERVICE_ORDER:'Смена собственника'}[s]||'');
+const day=s=>Math.floor((Date.parse(s)+3*3600000)/86400000);
+const days=(r,asOf)=>Math.max(0,Math.min(r.departureAt?day(r.departureAt)-(r.endOrderType==='SERVICE_ORDER'?1:0):Infinity,day(asOf+'T00:00:00+03:00'))-day(r.arrivalAt)+1);
 (async()=>{
  const beforeFile=path.join(dir,'storage-report-before.json'),baseline=mode==='after'?JSON.parse(fs.readFileSync(beforeFile)):null;
  const hashes=fingerprint();if(baseline)assert.deepEqual(hashes,baseline.hashes,'Same database contents required');
@@ -54,8 +56,8 @@ const label=s=>({RECEIVING_ORDER:'Поставка',SHIPPING_ORDER:'Вывоз',
  for(const query of ['status=INVALID','arrivalFrom=2026-02-01&arrivalTo=2026-01-01','asOf=9999-12-31'])assert.equal((await fetch(base+'?'+query)).status,400);
  const csv=await (await get('/export')).text(),parsed=csvParse(csv);assert.equal(parsed.length,rows.length+1);
  if(mode==='after'){
-  assert.deepEqual(parsed[0],['Номер КТК','Собственник КТК','Начало периода','Тип начала','Номер заявки начала','Окончание периода','Тип окончания','Номер заявки окончания','Статус хранения']);
-  assert.deepEqual(parsed.slice(1),rows.map(r=>[r.containerName,r.ownerName||'',date(r.arrivalAt),label(r.startOrderType),String(r.startOrderNumber??''),date(r.departureAt),label(r.endOrderType),String(r.endOrderNumber??''),r.status==='OPEN'?'Открыт':'Закрыт']));
+  assert.deepEqual(parsed[0],['Номер КТК','Собственник КТК','Начало периода','Тип начала','Номер заявки начала','Окончание периода','Тип окончания','Номер заявки окончания','Дней хранения','Статус хранения']);
+  assert.deepEqual(parsed.slice(1),rows.map(r=>[r.containerName,r.ownerName||'',date(r.arrivalAt),label(r.startOrderType),String(r.startOrderNumber??''),date(r.departureAt),label(r.endOrderType),String(r.endOrderNumber??''),String(days(r,asOf)),r.status==='OPEN'?'Открыт':'Закрыт']));
  }
  for(const [key,p]of Object.entries({page20:'?size=20',deepPage:'?size=20&page=250',filtered:'?size=20&query=VIEU0000051',export:'/export'})){
   for(let i=0;i<3;i++)await (await get(p)).arrayBuffer();

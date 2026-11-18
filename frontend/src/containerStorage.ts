@@ -1,6 +1,6 @@
 export type StoragePeriod = {
   id: string; containerId: string; containerName: string;
-  arrivalAt: string; ownerName?: string; departureAt?: string; status: string;
+  arrivalAt: string; ownerName?: string; departureAt?: string; status: string; storageDays: number;
   startOrderId?: string; startOrderType?: string; startOrderNumber?: number;
   endOrderId?: string; endOrderType?: string; endOrderNumber?: number;
 }

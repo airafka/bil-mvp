@@ -15,7 +15,7 @@ const cancel=(kind,id)=>api('/'+kind+'-orders/'+id+'/cancellation','POST',{expec
 (async()=>{
  const saved=await api('/application-clock');
  try{
- await clock('2026-12-01');
+ await clock('2026-09-15');
  const tariff=json('select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where active order by id limit 1)t');
  const clients=await api('/references/clients'),owner=tariff.client_id,others=clients.filter(c=>c.id!==owner).slice(0,2),party=clients.find(c=>c.id===owner).name;
  assert.equal(others.length,2);
@@ -34,17 +34,24 @@ const cancel=(kind,id)=>api('/'+kind+'-orders/'+id+'/cancellation','POST',{expec
  async function change(next){const id=sql(`select id from container_owner where container_id='${c}'`);const o=await api('/service-orders','POST',{clientId:next,service:'CHANGE_OWNER',containerOwnerIds:[id]},201);await api('/service-orders/'+o.order.id+'/accept','POST');return o.order.id;}
  async function report(){const rows=(await api('/container-storage-periods?size=100&query='+code)).items;
   const expected=json(`select coalesce(json_agg(t order by t."arrivalAt" desc,t.id),'[]') from (select id,container_id "containerId",container_name "containerName",owner_name "ownerName",receiving_at "arrivalAt",shipping_at "departureAt",status,start_order_id "startOrderId",start_order_type "startOrderType",start_order_number "startOrderNumber",end_order_id "endOrderId",end_order_type "endOrderType",end_order_number "endOrderNumber" from container_storage_period_view where container_id='${c}')t`);
-  const normalize=r=>({...r,arrivalAt:new Date(r.arrivalAt).toISOString(),departureAt:r.departureAt?new Date(r.departureAt).toISOString():null,endOrderId:r.endOrderId??null,endOrderType:r.endOrderType??null,endOrderNumber:r.endOrderNumber??null});
+  const normalize=r=>{const copy={...r};delete copy.storageDays;return {...copy,arrivalAt:new Date(r.arrivalAt).toISOString(),departureAt:r.departureAt?new Date(r.departureAt).toISOString():null,endOrderId:r.endOrderId??null,endOrderType:r.endOrderType??null,endOrderNumber:r.endOrderNumber??null};};
   assert.deepEqual(rows.map(normalize),expected.map(normalize));return rows;
  }
  const r=await manual('receiving');await confirm('receiving',r.id);assert.equal((await report()).length,0);
  await finish('receiving',r.id);let rows=await report();assert.equal(rows.length,1);assert.equal(rows[0].startOrderId,r.id);
- const first=rows[0].id;const ch1=await change(others[0].id),ch2=await change(others[1].id);
+ assert.equal(rows[0].storageDays,1);
+ const first=rows[0].id;await clock('2026-09-17');const ch1=await change(others[0].id),ch2=await change(others[1].id);
  rows=await report();assert.equal(rows.length,3);assert.equal(rows.find(p=>p.id===first).endOrderId,ch1);
  const open=rows.find(p=>p.status==='OPEN');assert.equal(open.startOrderId,ch2);assert.equal(open.ownerName,others[1].name);
+ assert.equal(rows.find(p=>p.id===first).storageDays,2);assert.equal(rows.find(p=>p.startOrderId===ch1).storageDays,0);assert.equal(open.storageDays,1);
+ await clock('2026-09-20');assert.equal((await report()).find(p=>p.id===open.id).storageDays,4);
  const shipping=await manual('shipping');await confirm('shipping',shipping.id);await finish('shipping',shipping.id);
  rows=await report();assert.equal(rows.find(p=>p.id===open.id).endOrderId,shipping.id);assert.ok(rows.every(p=>p.status==='CLOSED'));
+ assert.equal(rows.find(p=>p.id===open.id).storageDays,4);
+ await clock('2026-09-21');assert.equal((await report()).find(p=>p.id===open.id).storageDays,4);
  await cancel('shipping',shipping.id);rows=await report();assert.equal(rows.find(p=>p.id===open.id).status,'OPEN');assert.equal(rows.find(p=>p.id===open.id).endOrderId??null,null);
+ assert.equal(rows.find(p=>p.id===open.id).storageDays,5);
+ assert.equal((await api('/container-storage-periods?periodId='+open.id+'&asOf=2026-09-18')).items[0].storageDays,2);
  await cancel('receiving',r.id);assert.equal((await report()).length,0);
  assert.equal((await api('/container-storage-periods?status=ALL&periodId='+first)).totalElements,0);
  const rail=await manual('receiving',true);await confirm('receiving',rail.id,true);await finish('receiving',rail.id);
