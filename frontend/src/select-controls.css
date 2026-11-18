@@ -13,12 +13,10 @@
   line-height: var(--ui-line-height); text-align: left; cursor: pointer;
 }
 .app-shell select.ui-select::picker-icon { display: none; }
-.app-shell select.ui-select:open,
-.app-shell .ui-multi-trigger[aria-expanded="true"] {
+.app-shell select.ui-select:open {
   border-color: var(--ui-field-focus); box-shadow: 0 0 0 3px #397cff26;
 }
 .app-shell select.ui-select::picker(select),
-.app-shell .ui-multi-options,
 .app-shell .row-actions-menu {
   box-sizing: border-box; padding: 4px; border: 1px solid #f1f3f5;
   border-radius: var(--ui-picker-radius); background: #fff;
@@ -31,7 +29,6 @@
   max-width: calc(100vw - 16px); margin-block: 6px;
 }
 .app-shell select.ui-select option,
-.app-shell .ui-multi-option,
 .app-shell .row-actions-menu > :is(a, button) {
   min-height: var(--ui-control-height); padding: 10px 8px; border-radius: 5px;
   color: var(--ui-field-text); background: #fff; font-size: 14px;
@@ -40,12 +37,10 @@
 }
 .app-shell select.ui-select option::checkmark { display: none; }
 .app-shell select.ui-select option:not(:disabled):is(:checked, :hover, :focus),
-.app-shell .ui-multi-option:is(:hover, :focus-within, [data-selected="true"]),
 .app-shell .row-actions-menu > :is(a, button):is(:hover, :focus-visible) {
   background: var(--ui-option-active); color: var(--ui-field-text);
 }
 .app-shell select.ui-select option:disabled { color: var(--ui-field-blocked-text); cursor: not-allowed; }
-.app-shell .ui-multi-trigger { height: auto; min-height: var(--ui-control-height); padding-block: 10px; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 .app-shell :is(.ktk-table-row, .cargo-row, .quantity-table-row, .quantity-cargo-row, .shipping-railway-container-row, td) select.ui-select {
   min-height: var(--ui-table-control-height); height: auto; padding-block: 4px;
 }

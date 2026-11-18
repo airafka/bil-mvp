@@ -74,7 +74,6 @@
   .horizontal-field > span:first-child, .field:has(> span:first-child:not(.sr-only):not(.service-sr-only)) > span:first-child, .details-grid dt { padding-top: 0; }
   .form-fields-column, .form-fields-grid, .waybill-main-grid, .details-grid { gap: 16px; }
   .field > small { grid-column: 1; }
-  .waybill-picker-filters { grid-template-columns: 1fr; }
 }
 
 /* Form checkboxes use the same compact geometry as the KTK empty checkbox. */
@@ -112,14 +111,6 @@
   .app-shell input[type="checkbox"], .app-shell input.ui-choice[type="checkbox"] { appearance: auto; background-image: none; }
 }
 
-
-/* Multi-selection shares the single select shell and the standard blue checkboxes. */
-.ui-multi-select { position: relative; min-width: 0; }
-.app-shell .ui-multi-trigger { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-.ui-multi-options { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow-y: auto; padding: 4px; border: 1px solid var(--ui-field-border); border-radius: var(--ui-field-radius); background: #fff; box-shadow: 0 4px 12px #1018281a; }
-.app-shell .ui-multi-option { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px; margin: 0; font-size: var(--ui-font-size); font-weight: 400; cursor: pointer; }
-.ui-multi-option > span { min-width: 0; overflow-wrap: anywhere; }
-.ui-multi-option:hover { background: #f8f9fb; }
 
 /* Wider, aligned service/client/owner/contract fields in the service request. */
 .service-order-main-grid { max-width: none; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px 48px; }

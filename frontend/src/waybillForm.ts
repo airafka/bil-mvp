@@ -110,10 +110,3 @@ export function buildWaybillPayload(state: WaybillFormState): CreateWaybillPaylo
     })),
   }
 }
-
-export function hasLoadedContainers(state: WaybillFormState): boolean {
-  return state.railwayCarriages.some(carriage => carriage.containers.some(row => {
-    const net = netWeight(row)
-    return net !== null && net !== '0.000'
-  }))
-}

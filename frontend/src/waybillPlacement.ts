@@ -8,7 +8,6 @@ export type PlacementPosition = { wagonId: string; waybillId: string }
 export type PlacementMap = Record<string, PlacementPosition>
 export const positionOf = (c: PlacementContainer, positions: PlacementMap): PlacementPosition => positions[c.rowId] ?? { wagonId: c.wagonId, waybillId: c.waybillId }
 export const placementCandidates = (query: string, page: number) => request<PagedResponse<PlacementCandidate>>('/api/waybills/placement/candidates?query='+encodeURIComponent(query)+'&page='+page)
-export const placementWagons = (query: string) => request<PlacementWagon[]>('/api/waybills/placement/wagons?query='+encodeURIComponent(query))
 export const placementPreview = (waybillIds: string[], layout?: PlacementLayout, addWagonId?: string) => request<PlacementLayout>('/api/waybills/placement/preview', { method: 'POST', body: JSON.stringify({ waybillIds, ...(layout ? { wagonIds: layout.wagons.map(w => w.id), expectedVersion: layout.version, addWagonId } : {}) }) })
 export const savePlacement = (layout: PlacementLayout, positions: PlacementMap) => request<PlacementLayout>('/api/waybills/placement', { method: 'PUT', body: JSON.stringify({ waybillIds: layout.waybills.map(w => w.id), wagonIds: layout.wagons.map(w => w.id), version: layout.version, assignments: layout.containers.filter(c => c.selected).map(c => ({ rowId: c.rowId, ...positionOf(c, positions) })) }) })
 export const containerFeet = (type: string): number | null => type === 'STANDARD_20' ? 20 : type === 'STANDARD_40' ? 40 : null

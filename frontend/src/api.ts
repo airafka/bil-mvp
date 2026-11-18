@@ -106,10 +106,6 @@ export function createServiceShippingOrder(serviceId: string, containerIds: stri
   })
 }
 
-export function updateContainerTare(id: string, tareWeight: string) {
-  return request<ReferenceOption>('/api/references/containers/' + id + '/tare-weight', { method: 'PATCH', body: JSON.stringify({ tareWeight }) })
-}
-
 export function changeOrderStatus(apiPath: string, id: string, expectedStatus: string, status: string) {
   return request<CreatedOrder>(`${apiPath}/${id}/status`, { method: 'PATCH', body: JSON.stringify({ expectedStatus, status }) })
 }
@@ -249,10 +245,6 @@ export function completeServiceSection(id: string, section: 'INITIAL_RECEIVING' 
 export type ReturnTariffContract = { clientId: string; clientName: string; contractId: string; contractName: string }
 export type CreatedReturn = { receivingOrderId: string; receivingOrderCode: number; serviceOrderId: string; serviceOrderCode: number; createdService: boolean }
 export function getReturnContracts() { return request<ReturnTariffContract[]>('/api/shipping-orders/return-contracts') }
-export function createShippingReturn(id: string, payload: { containerIds: string[]; useCurrentClient: boolean; clientId?: string; contractId?: string; ownerClientId?: string }) {
-  return request<CreatedReturn>(`/api/shipping-orders/${id}/returns`, { method: 'POST', body: JSON.stringify(payload) })
-}
-
 export type ReturnCandidate = { containerId: string; containerName: string; shippingOrderId: string; shippingOrderCode: number }
 export type CreatedReturns = { serviceOrderId: string; serviceOrderCode: number; createdService: boolean; returns: CreatedReturn[] }
 export function getServiceReturnCandidates(id: string) { return request<ReturnCandidate[]>(`/api/comprehensive-service-orders/${id}/returns/available-containers`) }
