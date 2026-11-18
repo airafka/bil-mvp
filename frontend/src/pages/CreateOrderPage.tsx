@@ -1,3 +1,4 @@
+import { CreationSteps } from '../components/CreationSteps'
 import { businessDateLabel, useApplicationClock, useBusinessDateTime } from '../applicationClock'
 import { catalogDate } from '../transportCatalogs'
 import { WaybillFilterFields } from '../components/WaybillFilterFields'
@@ -317,23 +318,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
 
       <div className="form-workspace">
         <div className="order-tabs-toolbar">
-        <div className="stepper" aria-label="Этапы создания заявки">
-          {visibleSteps.map((label, index) => {
-            const number = index + 1
-            const stateClass = number === step ? 'current' : number < step ? 'complete' : ''
-            return (
-              <button
-                type="button"
-                className={`step ${stateClass}`}
-                key={label}
-                onClick={() => openStep(number)}
-                disabled={number > step}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
+        <CreationSteps labels={visibleSteps} current={step} onSelect={openStep} aria-label="Этапы создания заявки" />
 
         <div className="order-tabs-actions" ref={setOwnerActionTarget} />
         </div>

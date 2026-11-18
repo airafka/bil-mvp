@@ -46,7 +46,7 @@ export type CreatedWaybill = {
   number: string
 }
 
-export type WaybillProductSummary = {
+type WaybillProductFields = {
   dangerProductId?: string | null
   dangerProductIdentifier?: number | null
   dangerProductName?: string | null
@@ -57,9 +57,12 @@ export type WaybillProductSummary = {
   hazardClassName?: string | null
   id: string
   etsngCodeId: string
+  weight: number | null
+}
+
+export type WaybillProductSummary = WaybillProductFields & {
   code: string
   name: string
-  weight: number | null
 }
 
 export type WaybillContainerSummary = Omit<ReceivingContainerAttributes, 'hazardClassId' | 'hazardClassName'> & {
@@ -118,11 +121,8 @@ export type GroupedWaybillFilter = {
   payer?: string
 }
 
-export type OrderSummary = {
-  plannedAt?: string | null
+type OrderHeaderFields = {
   routeId?: string | null
-  routeNumber?: number | null
-  comprehensiveServiceOrderNumber?: number | null
   comment?: string | null
   contractId: string | null
   contractName: string | null
@@ -136,6 +136,12 @@ export type OrderSummary = {
   transportType: TransportType | null
   fillingType: FillingType
   status: string
+}
+
+export type OrderSummary = OrderHeaderFields & {
+  plannedAt?: string | null
+  routeNumber?: number | null
+  comprehensiveServiceOrderNumber?: number | null
 }
 
 export type PagedResponse<T> = {
@@ -190,19 +196,8 @@ export type OrderWaybillCarriageDetails = {
   containers: OrderWaybillContainerDetails[]
 }
 
-export type OrderWaybillProductDetails = {
-  dangerProductId?: string | null
-  dangerProductIdentifier?: number | null
-  dangerProductName?: string | null
-  dangerClassCode?: string | null
-  signDanger?: string | null
-  grossWeight?: number | null
-  hazardClassId?: string | null
-  hazardClassName?: string | null
-  id: string
-  etsngCodeId: string
+export type OrderWaybillProductDetails = WaybillProductFields & {
   etsngCode: string
-  weight: number | null
 }
 
 export type OrderWaybillDetails = {
@@ -242,13 +237,12 @@ export type ContainerQuantityDetails = {
   }>
 }
 
-export type OrderDetails = {
+export type OrderDetails = OrderHeaderFields & {
   createdAt?: string | null
   transportWaybillNumber?: string | null
   authorizedRepresentative?: string | null
   phone?: string | null
   email?: string | null
-  comment?: string | null
   contractType?: string | null
   defaultContainerOwnerId?: string | null
   defaultContainerOwnerName?: string | null
@@ -258,19 +252,6 @@ export type OrderDetails = {
   consignee: string | null
   sourceShippingOrderId?: string | null
   returnOrders?: ReturnReceivingOrder[]
-  routeId?: string | null
-  contractId: string | null
-  contractName: string | null
-  comprehensiveServiceOrderId: string | null
-  sourceReceivingOrderId?: string | null
-  id: string
-  code: number
-  clientId: string
-  clientName: string
-  terminalArea: TerminalAreaOption
-  transportType: TransportType | null
-  fillingType: FillingType
-  status: string
   containers: OrderContainerDetails[]
   waybills: OrderWaybillDetails[]
   railwayCarriages: ShippingOrderRailwayCarriageDetails[]

@@ -1,3 +1,4 @@
+import { CreationSteps } from '../components/CreationSteps'
 import { Notification } from '../components/Notification'
 import { WaybillDraftComposition } from '../components/WaybillDraftComposition'
 import type { RailwayCarriage } from '../railwayCarriages'
@@ -112,23 +113,7 @@ export function WaybillCreatePage() {
       </div>
 
       <div className="form-workspace waybill-form">
-        <div className="stepper" aria-label="Этапы создания накладной">
-          {steps.map((label, index) => {
-            const number = index + 1
-            const stateClass = number === step ? 'current' : number < step ? 'complete' : ''
-            return (
-              <button
-                type="button"
-                className={`step ${stateClass}`}
-                key={label}
-                onClick={() => openStep(number)}
-                disabled={number > step}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
+        <CreationSteps labels={steps} current={step} onSelect={openStep} aria-label="Этапы создания накладной" />
         {requestError && <Notification kind="error">{requestError}</Notification>}
         {errors.length > 0 && (
           <Notification kind="error" title="Проверьте данные" onDismiss={() => setErrors([])}>

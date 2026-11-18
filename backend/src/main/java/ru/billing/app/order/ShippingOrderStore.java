@@ -1,7 +1,9 @@
 package ru.billing.app.order;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import static ru.billing.app.order.OrderRowMapper.container;
+import static ru.billing.app.order.OrderRowMapper.summary;
+import static ru.billing.app.order.OrderRowMapper.terminalArea;
+import static ru.billing.app.order.OrderRowMapper.transportType;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -77,24 +79,7 @@ public class ShippingOrderStore {
                 order by o.number desc
                 limit ? offset ?
                 """,
-                (resultSet, rowNumber) -> new OrderSummary(
-                        resultSet.getObject("id", UUID.class),
-                        resultSet.getInt("code"),
-                        resultSet.getObject("client_id", UUID.class),
-                        resultSet.getString("client_name"),
-                        terminalArea(resultSet),
-                        transportType(resultSet.getString("transport_type")),
-                        fillingType(resultSet.getString("filling_type")),
-                        resultSet.getString("status"),
-                        resultSet.getObject("contract_id", UUID.class),
-                        resultSet.getString("contract_name"),
-                        resultSet.getObject("comprehensive_service_order_id", UUID.class),
-                        resultSet.getObject("planned_at", LocalDateTime.class),
-                        resultSet.getObject("route_id", UUID.class),
-                        resultSet.getObject("route_number", Integer.class),
-                        resultSet.getObject("service_number", Integer.class),
-                        resultSet.getString("comment")
-                ),
+                (resultSet, rowNumber) -> summary(resultSet, fillingType(resultSet.getString("filling_type"))),
                 query, query, status, status, size,
                 page * size
         );
@@ -197,10 +182,6 @@ public class ShippingOrderStore {
         }
     }
 
-
-
-
-
     private UUID registryOwner(UUID containerId) {
         return jdbcTemplate.queryForObject("select (select client_id from container_owner where container_id=?)", UUID.class, containerId);
     }
@@ -299,46 +280,6 @@ public class ShippingOrderStore {
         return grouped.values().stream().map(builder -> new ShippingOrderRailwayCarriageDetails(
                 builder.railwayCarriageId(), builder.railwayCarriageCode(), OrderContainerDetails.merge(builder.containers())
         )).toList();
-    }
-
-
-
-
-
-
-
-    private OrderContainerDetails container(ResultSet resultSet) throws SQLException {
-        UUID etsngCodeId = resultSet.getObject("etsng_code_id", UUID.class);
-        OrderCargoDetails cargo = etsngCodeId == null
-                ? null
-                : new OrderCargoDetails(
-                        etsngCodeId,
-                        resultSet.getString("etsng_code_name"),
-                        resultSet.getBigDecimal("wight_net")
-                );
-        return new OrderContainerDetails(
-                resultSet.getObject("container_id", UUID.class),
-                resultSet.getString("container_name"),
-                resultSet.getBoolean("empty"),
-                cargo,
-                resultSet.getObject("owner_container_id", UUID.class), resultSet.getString("owner_container_name"),
-                resultSet.getString("seal_numbers"),
-                resultSet.getObject("seal_type_id", UUID.class), resultSet.getString("seal_type_name"),
-                resultSet.getObject("danger_class_id", UUID.class), resultSet.getString("danger_class_name"),
-                cargo == null ? List.of() : List.of(cargo), resultSet.getString("container_status")
-        );
-    }
-
-    private TerminalAreaDetails terminalArea(ResultSet resultSet) throws SQLException {
-        return new TerminalAreaDetails(
-                resultSet.getObject("area_id", UUID.class),
-                resultSet.getString("area_code"),
-                resultSet.getString("area_name")
-        );
-    }
-
-    private TransportType transportType(String value) {
-        return value == null ? null : TransportType.valueOf(value);
     }
 
     private FillingType fillingType(String value) {

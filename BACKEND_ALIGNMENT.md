@@ -176,6 +176,8 @@ GET /api/comprehensive-service-orders/{id}/no-return/available-containers воз
 
 ## Карта API
 
+Поставки и вывозы используют общий [OrderRowMapper](backend/src/main/java/ru/billing/app/order/OrderRowMapper.java) для чтения реквизитов списка, КТК и площадки. SQL-запросы, состав документов и правила записи остаются в соответствующих ReceivingOrderStore и ShippingOrderStore; поставка возвращает fillingType=ALL, вывоз сохраняет прочитанное значение с прежним значением ALL при NULL.
+
 Базовый путь — /api. Точные DTO и методы определяются контроллерами и request-классами, а не историческими примерами запросов.
 
 | Ресурс | Назначение |
