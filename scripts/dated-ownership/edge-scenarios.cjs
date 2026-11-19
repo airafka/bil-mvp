@@ -1,0 +1,22 @@
+const {assert,sql,api,clock,init,fs}=require('./check-lib.cjs');
+const owner=k=>sql(`select client_id from container_owner_current where container_id='${k}'`);
+(async()=>{
+ const x=await init('billing-dated-check-new');await clock('2026-10-11');
+ const r=await x.arrival();const shipping=await x.ship(r.ktk);const future=await x.schedule([r.ktk],x.b,'2026-10-13');
+ await x.cancel('shipping',shipping);await clock('2026-10-13');assert.equal(owner(r.ktk),x.a);assert.equal((await api('/service-orders/'+future)).order.status,'CANCELLED');assert.equal((await x.report(r.ktk)).items.length,1);
+ console.log('PASS cancelled shipping withdraws future outside-storage transfer; owner and storage remain consistent');
+ const t=await x.schedule([r.ktk],x.b,'2026-10-13');await clock('2026-10-14');const t2=await x.schedule([r.ktk],x.c,'2026-10-15');
+ await clock('2026-10-12');await api('/service-orders/'+t+'/withdraw','POST',undefined,409);
+ await x.ship(r.ktk);assert.equal((await api('/service-orders/'+t)).order.status,'CANCELLED');assert.equal((await api('/service-orders/'+t2)).order.status,'CANCELLED');
+ console.log('PASS rollback before sequential transfers: earlier withdrawal blocked; early shipping revokes future chain in reverse order');
+ await clock('2026-10-16');const d=await x.arrival();const draft=await x.transport('shipping',d.ktk);const f=await x.schedule([d.ktk],x.b,'2026-10-17');
+ await clock('2026-10-17');assert.equal((await api('/shipping-orders/'+draft.id)).containers[0].ownerClientId,x.b);
+ await x.confirm('shipping',draft.id);await x.schedule([d.ktk],x.c,'2026-10-17');assert.equal((await api('/shipping-orders/'+draft.id)).containers[0].ownerClientId,x.b);assert.equal(owner(d.ktk),x.c);
+ await x.finish('shipping',draft.id);assert.deepEqual((await x.report(d.ktk)).items.map(r=>r.storageDays).sort(),[0,1,1]);
+ console.log('PASS draft shipping reads dated owner; confirmed shipping retains snapshot, report follows actual owners');
+ await clock('2026-10-16');await x.cancel('shipping',draft.id,409);
+ await clock('2026-10-18');const n=await x.arrival();const w=await x.schedule([n.ktk],x.b,'2026-10-19');await api('/service-orders/'+w+'/withdraw','POST');await api('/service-orders/'+w,'DELETE',undefined,409);
+ let rejected=false;try{sql(`begin;update container_ownership_period set effective_date=effective_date+1 where container_id='${n.ktk}';commit;`);}catch{rejected=true;}assert.ok(rejected);
+ sql('do $$ declare r record;begin for r in select id from container_visit loop perform check_container_visit(r.id);end loop;end $$;');
+ fs.writeFileSync('edge-result.json',JSON.stringify({ok:true}));console.log('PASS physical backdating and history deletion prohibited; ownership dates immutable');
+})().catch(e=>{console.error(e.stack);process.exitCode=1});

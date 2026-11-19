@@ -20,7 +20,6 @@ public class ContainerStockService {
     public record Lookup(UUID containerId, UUID ownerClientId, String ownerClientName, String status) {}
     @Transactional(readOnly=true)
     public List<Lookup> lookup(List<UUID> containerIds) {
-        OwnershipScheduleGuard.requireCurrent(jdbc);
         var ids = containerIds.stream().distinct().toList();
         String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
         var result = jdbc.query("select c.id, o.client_id, cl.name, coalesce(o.status,'DEPARTED') from container c "
@@ -38,19 +37,12 @@ public class ContainerStockService {
     record Reservation(UUID container, UUID previousOwner) {}
 
     public void lockContainers(Collection<UUID> ids) {
-        lockContainers(ids,null);
-    }
-    public void lockContainers(Collection<UUID> ids,UUID executingOwnershipOrder) {
         jdbc.queryForObject("select billing_today()",java.time.LocalDate.class);
-        for (UUID id : new TreeSet<>(ids)) {
+        for(UUID id:new TreeSet<>(ids)) {
             var found=jdbc.query("select id from container where id=? for update",(rs,n)->rs.getObject(1,UUID.class),id);
             if(found.isEmpty()) throw error("CONTAINER_NOT_FOUND","КТК не найден");
-            if(Boolean.TRUE.equals(jdbc.queryForObject("""
-                select exists(select 1 from service_order s join service_order_container c on c.service_order_id=s.id
-                  where c.container_id=? and s.status='SCHEDULED' and s.effective_date<=billing_today() and c.result_status in ('PLANNED','BLOCKED')
-                    and (?::uuid is null or s.id<>?))
-                """,Boolean.class,id,executingOwnershipOrder,executingOwnershipOrder)))
-                throw error("OWNERSHIP_SCHEDULE_PENDING","Для КТК наступила дата передачи. Дождитесь выполнения смены собственника или проверьте ожидающую заявку");
+            if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from container_owner_history where container_id=? and order_type<>'SERVICE_ORDER' and (occurred_at at time zone 'Europe/Moscow')::date>billing_today())",Boolean.class,id)))
+                throw error("STOCK_DATE_BEFORE_HISTORY","Рабочая дата раньше складских операций КТК. Проверьте календарь");
         }
     }
     State state(UUID id) {
@@ -193,7 +185,7 @@ public class ContainerStockService {
     }
     static final String OWNER_SELECT="""
         select o.*,c.code as container_name,c.container_type,cl.name as client_name
-        from container_owner_current o join container c on c.id=o.container_id join client cl on cl.id=o.client_id
+        from container_owner_current o join container c on c.id=o.container_id left join client cl on cl.id=o.client_id
         """;
     Owner owner(java.sql.ResultSet rs)throws java.sql.SQLException {
         return new Owner(rs.getObject("id",UUID.class),rs.getObject("container_id",UUID.class),rs.getString("container_name"),
@@ -202,10 +194,9 @@ public class ContainerStockService {
     }
     @Transactional(readOnly=true)
     public PagedResponse<Owner> page(String query, UUID client, String status, boolean remains, int page, int size) {
-        OwnershipScheduleGuard.requireCurrent(jdbc);
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
         if(status!=null&&!Set.of("EXPECTED","ON_TERMINAL","RESERVED_OUT","DEPARTED").contains(status))throw error("INVALID_CONTAINER_STATUS","Неизвестный статус КТК");
-        String filter=" where (?='' or position(lower(?) in lower(c.code||' '||cl.name))>0) and (?::uuid is null or o.client_id=?) and (?::text is null or o.status=?) and (not ? or o.status in ('ON_TERMINAL','RESERVED_OUT'))";
+        String filter=" where (?='' or position(lower(?) in lower(concat_ws(' ',c.code,cl.name)))>0) and (?::uuid is null or o.client_id=?) and (?::text is null or o.status=?) and (not ? or o.status in ('ON_TERMINAL','RESERVED_OUT'))";
         Object[] args={query,query,client,client,status,status,remains};
         long count=jdbc.queryForObject("select count(*) from ("+OWNER_SELECT+filter+") q",Long.class,args);
         var params=new ArrayList<>(Arrays.asList(args));params.add(size);params.add(page*size);
@@ -213,7 +204,6 @@ public class ContainerStockService {
     }
     @Transactional(readOnly=true)
     public List<History> history(UUID container, boolean all) {
-        OwnershipScheduleGuard.requireCurrent(jdbc);
         if(jdbc.queryForObject("select count(*) from container where id=?",Integer.class,container)==0)throw error("CONTAINER_NOT_FOUND","КТК не найден");
         return jdbc.query("""
             select h.*,old.name as old_name,new.name as new_name,
@@ -224,14 +214,15 @@ public class ContainerStockService {
             left join client new on new.id=h.new_client_id
             left join receiving_order r on h.order_type='RECEIVING_ORDER' and r.id=h.order_id
             left join shipping_order s on h.order_type='SHIPPING_ORDER' and s.id=h.order_id
-            left join service_order so on h.order_type='SERVICE_ORDER' and so.id=h.order_id
-            where h.container_id=? and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
+            left join service_order_current so on h.order_type='SERVICE_ORDER' and so.id=h.order_id
+            where h.container_id=? and (? or ((h.occurred_at at time zone 'Europe/Moscow')::date<=billing_today()
+              and not exists(select 1 from container_ownership_period op where op.start_container_owner_history_id=h.id and op.is_withdrawn))) and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
                 and (r.order_status in ('COMPLETED','CANCELLED') or s.order_status in ('COMPLETED','CANCELLED') or so.status in ('DONE','PARTIAL'))))
             order by h.created_at desc,h.id desc
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("old_client_id",UUID.class),rs.getString("old_name"),
                 rs.getObject("new_client_id",UUID.class),rs.getString("new_name"),rs.getString("old_status"),rs.getString("new_status"),
                 rs.getObject("order_id",UUID.class),rs.getString("order_type"),rs.getObject("order_number",Long.class),rs.getObject("created_at",LocalDateTime.class),rs.getBoolean("cancellation"),rs.getString("operation_type"),rs.getObject("occurred_at",java.time.OffsetDateTime.class),
-                rs.getObject("storage_period_id",UUID.class),rs.getObject("previous_storage_period_id",UUID.class)),container,all);
+                rs.getObject("storage_period_id",UUID.class),rs.getObject("previous_storage_period_id",UUID.class)),container,all,all);
     }
     ApiException error(String code,String message){return new ApiException(HttpStatus.CONFLICT,code,message);}
 }

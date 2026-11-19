@@ -25,7 +25,7 @@ public class ContainerStorageController {
         String receivingClientName,String receivingOwnerName,String arrivalTransport,String arrivalParty,String arrivalCargo,
         String shippingClientName,String shippingOwnerName,String departureTransport,String departureParty,String departureCargo) {}
     private static final String FROM="""
-        from container_storage_period p
+        from container_storage_period_at(?::date) p
         join container_owner_history h on h.id=p.start_history_id
         join container c on c.id=p.container_id
         """;
@@ -94,7 +94,7 @@ public class ContainerStorageController {
             throw bad("Неизвестное состояние хранения");
         if(from!=null && to!=null && from.isAfter(to)) throw bad("Начало периода фильтра позже окончания");
 
-        var args=new ArrayList<Object>();
+        var args=new ArrayList<Object>();args.add(asOf);
         String sql=" where p.status in ('OPEN','CLOSED') and (?='' or position(lower(?) in lower(c.code))>0)";
         args.add(query.trim());args.add(query.trim());
         // Retain the legacy client filter; only this optional filter needs the original arrival chain.
@@ -113,7 +113,6 @@ public class ContainerStorageController {
             @RequestParam(required=false)UUID clientId,@RequestParam(required=false)UUID periodId,@RequestParam(required=false)LocalDate arrivalFrom,
             @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf,
             @RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="20")int size) {
-        OwnershipScheduleGuard.requireCurrent(jdbc);
         var reportDate=date(asOf);
         var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,reportDate);
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
@@ -125,7 +124,6 @@ public class ContainerStorageController {
     public record ContainerOption(UUID id, String name) {}
     @GetMapping("/containers")
     public List<ContainerOption> containers() {
-        OwnershipScheduleGuard.requireCurrent(jdbc);
         return jdbc.query("""
             select c.id,c.code from container c
             where exists(select 1 from container_storage_period p where p.container_id=c.id and p.status in ('OPEN','CLOSED'))
@@ -136,7 +134,6 @@ public class ContainerStorageController {
     public ResponseEntity<byte[]> export(@RequestParam(defaultValue="")String query,@RequestParam(defaultValue="ACTIVE")String status,
             @RequestParam(required=false)UUID clientId,@RequestParam(required=false)UUID periodId,@RequestParam(required=false)LocalDate arrivalFrom,
             @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf) {
-        OwnershipScheduleGuard.requireCurrent(jdbc);
         var reportDate=date(asOf);
         var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,reportDate);
         var out=new StringBuilder("\uFEFF");
