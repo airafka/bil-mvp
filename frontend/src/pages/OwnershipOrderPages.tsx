@@ -13,10 +13,11 @@ import { containerTypeLabel, type PagedResponse, type ReferenceOption } from '..
 import { ContainerStatusBadge } from '../components/ContainerStatusBadge'
 import '../ownership-order.css'
 
+const resultLabels: Record<string, string> = { PLANNED: 'Ожидает передачи', APPLIED: 'Передача выполнена', SKIPPED: 'Передача не выполнена', CANCELLED: 'Передача отменена', BLOCKED: 'Требует проверки' }
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error)
 const completedAt = (value: string | null) => value ? new Date(value + 'Z').toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—'
 function OwnershipStatus({ status }: { status: string }) {
-  return <span className={'ownership-status ' + (status === 'DONE' ? 'ownership-status-done' : status === 'SCHEDULED' ? 'ownership-status-scheduled' : '')}>{status === 'DONE' ? 'Выполнено' : status === 'SCHEDULED' ? 'Ожидает выполнения' : 'Черновик'}</span>
+  return <span className={'ownership-status ' + (status === 'DONE' ? 'ownership-status-done' : status === 'SCHEDULED' ? 'ownership-status-scheduled' : '')}>{status === 'DONE' ? 'Выполнено' : status === 'SCHEDULED' ? 'Ожидает выполнения' : status === 'PARTIAL' ? 'Выполнено частично' : status === 'CANCELLED' ? 'Отменено' : 'Черновик'}</span>
 }
 function CloseLink() {
   return <Link className="close-button" to="/service-orders" aria-label="Закрыть" title="Закрыть"><ActionIcon name="close" /></Link>
@@ -172,7 +173,7 @@ function OwnershipContainerTable({ rows, loading, selected, busy, onToggle }: { 
   const selectable = Boolean(onToggle)
   return <><div className="table-wrap"><table className="ownership-container-table"><thead><tr><th className="registry-index">{selectable ? '' : '№'}</th><th>КТК</th><th>Текущий собственник</th><th className="registry-actions" aria-label="Действия" /></tr></thead><tbody>
         {selectable && loading && <tr><td colSpan={4}>Загружаем доступные КТК…</td></tr>}{rows.length === 0 && (!loading) && <tr><td colSpan={4}>{selectable ? 'Доступных КТК не найдено' : 'КТК не выбраны'}</td></tr>}
-        {rows.map((row, index) => <tr key={row.containerId}><td className="registry-index">{selectable ? <UiInput aria-label={'Выбрать КТК ' + row.containerName} type="checkbox" disabled={busy} checked={selected?.has(row.containerOwnerId)} onChange={e => onToggle?.(row.containerOwnerId, e.target.checked)} /> : index + 1}</td><td><button type="button" className="link-button" onClick={() => showPreview(row)}>{row.containerName}</button></td><td>{row.clientName || '—'}</td><td className="registry-actions"><RowActions label={'Действия с КТК ' + row.containerName} actions={[{ label: 'Предпросмотр', onClick: () => showPreview(row) }, { label: 'История собственников', to: '/container-owners/' + row.containerId + '/history' }]} /></td></tr>)}
+        {rows.map((row, index) => <tr key={row.containerId}><td className="registry-index">{selectable ? <UiInput aria-label={'Выбрать КТК ' + row.containerName} type="checkbox" disabled={busy} checked={selected?.has(row.containerOwnerId)} onChange={e => onToggle?.(row.containerOwnerId, e.target.checked)} /> : index + 1}</td><td><button type="button" className="link-button" onClick={() => showPreview(row)}>{row.containerName}</button></td><td>{row.clientName || '—'}{!selectable && row.resultStatus && row.resultStatus !== 'DRAFT' && <div>{resultLabels[row.resultStatus] ?? row.resultStatus}{row.resultReason && <p>{row.resultReason}</p>}</div>}</td><td className="registry-actions"><RowActions label={'Действия с КТК ' + row.containerName} actions={[{ label: 'Предпросмотр', onClick: () => showPreview(row) }, { label: 'История собственников', to: '/container-owners/' + row.containerId + '/history' }]} /></td></tr>)}
       </tbody></table></div>
     <dialog ref={previewDialog} className="ownership-preview" aria-labelledby="ownership-preview-title">
       <div className="page-header"><h2 id="ownership-preview-title">КТК {preview?.containerName}</h2><button type="button" className="close-button" aria-label="Закрыть предпросмотр" onClick={() => previewDialog.current?.close()}><ActionIcon name="close" /></button></div>

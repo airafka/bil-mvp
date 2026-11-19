@@ -191,7 +191,7 @@ public class ReceivingOrderStore {
                        item.etsng_code_id, e.code as etsng_code_name, item.wight_net, coalesce(stock.status,'DEPARTED') as container_status
                 from receiving_order_container oc
                 join container c on c.id = oc.container_id
-                left join container_owner stock on stock.container_id = oc.container_id
+                left join container_owner_current stock on stock.container_id = oc.container_id
                 left join client owner on owner.id = oc.owner_container_id
                 left join seal_type st on st.id = oc.seal_type_id
                 left join danger_class hc on hc.id = oc.danger_class_id
@@ -230,7 +230,7 @@ public class ReceivingOrderStore {
             join waybill_container_details wc on wc.waybill_railway_carriage_id=rc.id
             join container c on c.id=wc.container_id
             left join client owner on owner.id=wc.owner_container_id
-            left join container_owner stock on stock.container_id=wc.container_id
+            left join container_owner_current stock on stock.container_id=wc.container_id
             left join lateral (select case when count(distinct dp.danger_class_id)=1 then (array_agg(distinct dp.danger_class_id))[1] end as danger_class_id
               from waybill_product wp join danger_product dp on dp.id=wp.danger_product_id where wp.waybill_id=w.id) hazard on true
             left join danger_class hc on hc.id=hazard.danger_class_id

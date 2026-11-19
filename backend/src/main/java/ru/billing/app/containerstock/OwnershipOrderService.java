@@ -21,7 +21,7 @@ public class OwnershipOrderService {
     public record Update(@NotNull UUID id,@NotNull ServiceType service,@Size(max=1000)String comment,LocalDate effectiveDate) {}
     public record Selection(UUID id,UUID containerOwnerId) {}
     public record Link(UUID id,UUID containerOwnerId,UUID containerId,String containerName,String containerType,
-            UUID clientId,String clientName,String status) {}
+            UUID clientId,String clientName,String status,UUID containerVisitId,UUID expectedClientId,String resultStatus,String resultReason) {}
     public record Header(UUID id,long number,UUID clientId,String clientName,String service,String comment,
             String status,LocalDateTime completionAt,long containerQuantity,LocalDate effectiveDate) {}
     public record Details(Header order,List<Link> containers) {}
@@ -65,14 +65,15 @@ public class OwnershipOrderService {
     }
     private Link link(java.sql.ResultSet rs)throws java.sql.SQLException {
         return new Link(rs.getObject("link_id",UUID.class),rs.getObject("owner_id",UUID.class),rs.getObject("container_id",UUID.class),
-            rs.getString("container_name"),rs.getString("container_type"),rs.getObject("client_id",UUID.class),rs.getString("client_name"),rs.getString("status"));
+            rs.getString("container_name"),rs.getString("container_type"),rs.getObject("client_id",UUID.class),rs.getString("client_name"),rs.getString("status"),rs.getObject("container_visit_id",UUID.class),
+            rs.getObject("expected_client_id",UUID.class),rs.getString("result_status"),rs.getString("result_reason"));
     }
     private List<Link> links(UUID id){
         return jdbc.query("""
             select sc.id as link_id,o.id as owner_id,sc.container_id,c.code as container_name,c.container_type,
-                o.client_id,cl.name as client_name,o.status
+                o.client_id,cl.name as client_name,o.status,sc.container_visit_id,sc.expected_client_id,sc.result_status,sc.result_reason
             from service_order_container sc join container c on c.id=sc.container_id
-            left join container_owner o on o.container_id=sc.container_id left join client cl on cl.id=o.client_id
+            left join container_owner_current o on o.container_id=sc.container_id left join client cl on cl.id=o.client_id
             where sc.service_order_id=? order by c.code
             """,(rs,n)->link(rs),id);
     }
@@ -88,27 +89,27 @@ public class OwnershipOrderService {
     @Transactional(readOnly=true)public PagedResponse<Link> available(UUID id,String query,int page,int size){
         var h=details(id).order();draft(h);page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
         String from="""
-            from container_owner o join container c on c.id=o.container_id join client cl on cl.id=o.client_id
+            from container_owner_current o join container c on c.id=o.container_id join client cl on cl.id=o.client_id
             left join service_order_container sc on sc.container_id=o.container_id and sc.service_order_id=?
             where o.client_id<>? and (?='' or position(lower(?) in lower(c.code||' '||cl.name))>0)
             and not exists(select 1 from service_order_container other join service_order so on so.id=other.service_order_id
-                where other.container_id=o.container_id and other.service_order_id<>? and so.status in ('DRAFT','SCHEDULED'))
+                where other.container_id=o.container_id and other.service_order_id<>? and so.status in ('DRAFT','SCHEDULED') and other.result_status in ('DRAFT','PLANNED','BLOCKED'))
             """;
         long count=jdbc.queryForObject("select count(*) "+from,Long.class,id,h.clientId(),query,query,id);
-        var rows=jdbc.query("select sc.id as link_id,o.id as owner_id,o.container_id,c.code as container_name,c.container_type,o.client_id,cl.name as client_name,o.status "+from+" order by (sc.id is not null) desc,c.code limit ? offset ?",
+        var rows=jdbc.query("select sc.id as link_id,o.id as owner_id,o.container_id,c.code as container_name,c.container_type,o.client_id,cl.name as client_name,o.status,null::uuid as container_visit_id,null::uuid as expected_client_id,null::text as result_status,null::text as result_reason "+from+" order by (sc.id is not null) desc,c.code limit ? offset ?",
             (rs,n)->link(rs),id,h.clientId(),query,query,id,size,page*size);
         return PagedResponse.of(rows,page,size,count);
     }
     @Transactional(readOnly=true)public PagedResponse<Link> availableForCreate(UUID clientId,String query,int page,int size){
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
         String from="""
-            from container_owner o join container c on c.id=o.container_id join client cl on cl.id=o.client_id
+            from container_owner_current o join container c on c.id=o.container_id join client cl on cl.id=o.client_id
             where o.client_id<>? and (?='' or position(lower(?) in lower(c.code||' '||cl.name))>0)
             and not exists(select 1 from service_order_container other join service_order so on so.id=other.service_order_id
                 where other.container_id=o.container_id and so.status in ('DRAFT','SCHEDULED'))
             """;
         long count=jdbc.queryForObject("select count(*) "+from,Long.class,clientId,query,query);
-        var rows=jdbc.query("select null::uuid as link_id,o.id as owner_id,o.container_id,c.code as container_name,c.container_type,o.client_id,cl.name as client_name,o.status "+from+" order by c.code limit ? offset ?",
+        var rows=jdbc.query("select null::uuid as link_id,o.id as owner_id,o.container_id,c.code as container_name,c.container_type,o.client_id,cl.name as client_name,o.status,null::uuid as container_visit_id,null::uuid as expected_client_id,null::text as result_status,null::text as result_reason "+from+" order by c.code limit ? offset ?",
             (rs,n)->link(rs),clientId,query,query,size,page*size);
         return PagedResponse.of(rows,page,size,count);
     }
@@ -129,7 +130,7 @@ public class OwnershipOrderService {
         for(UUID container:containers){
             var state=stock.state(container);
             if(state==null||state.client().equals(h.clientId()))throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_UNAVAILABLE","Выберите КТК другого собственника");
-            Integer other=jdbc.queryForObject("select count(*) from service_order_container sc join service_order so on so.id=sc.service_order_id where sc.container_id=? and so.status in ('DRAFT','SCHEDULED') and so.id<>?",Integer.class,container,id);
+            Integer other=jdbc.queryForObject("select count(*) from service_order_container sc join service_order so on so.id=sc.service_order_id where sc.container_id=? and so.status in ('DRAFT','SCHEDULED') and sc.result_status in ('DRAFT','PLANNED','BLOCKED') and so.id<>?",Integer.class,container,id);
             if(other!=null&&other>0)throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_RESERVED","КТК выбран в другой заявке на смену собственника");
         }
         for(var l:existing)if(!containers.contains(l.containerId()))jdbc.update("delete from service_order_container where id=?",l.id());
@@ -149,6 +150,7 @@ public class OwnershipOrderService {
         for(var l:links){var state=stock.state(l.containerId());
             if(state==null)throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_NOT_FOUND","У КТК нет текущего собственника");
             if(state.client().equals(h.clientId()))throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_UNCHANGED","КТК уже принадлежит выбранному собственнику; обновите состав заявки");
+            jdbc.update("update service_order_container sc set container_visit_id=o.container_visit_id,expected_client_id=?,expected_status=o.status,result_status='PLANNED',result_reason=null from container_owner o where sc.service_order_id=? and sc.container_id=? and o.container_id=sc.container_id",state.client(),id,l.containerId());
             var latest=jdbc.queryForObject("select max(occurred_at) from container_owner_history where container_id=?",java.time.OffsetDateTime.class,l.containerId());
             if(latest!=null && effectiveAt.isBefore(latest)) throw error(HttpStatus.CONFLICT,"OWNERSHIP_DATE_BEFORE_HISTORY","Дата передачи раньше предыдущих операций КТК. Проверьте рабочий календарь и дату передачи");
         }
@@ -159,6 +161,7 @@ public class OwnershipOrderService {
         Header h=locked(id);
         if(!h.status().equals("SCHEDULED")) throw error(HttpStatus.CONFLICT,"SERVICE_ORDER_NOT_SCHEDULED","Вернуть в черновик можно только ожидающую заявку");
         stock.lockContainers(links(id).stream().map(Link::containerId).toList(),id);
+        jdbc.update("update service_order_container set container_visit_id=null,expected_client_id=null,expected_status=null,result_status='DRAFT',result_reason=null where service_order_id=?",id);
         jdbc.update("update service_order set status='DRAFT',updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",id);
         return details(id);
     }

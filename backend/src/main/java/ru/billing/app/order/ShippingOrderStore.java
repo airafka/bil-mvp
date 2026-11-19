@@ -183,7 +183,7 @@ public class ShippingOrderStore {
     }
 
     private UUID registryOwner(UUID containerId) {
-        return jdbcTemplate.queryForObject("select (select client_id from container_owner where container_id=?)", UUID.class, containerId);
+        return jdbcTemplate.queryForObject("select (select client_id from container_owner_current where container_id=?)", UUID.class, containerId);
     }
     UUID insertContainer(UUID orderId, UUID carriageRowId, OrderContainerRequest container) {
         UUID orderContainerId = UUID.randomUUID();
@@ -220,7 +220,7 @@ public class ShippingOrderStore {
                   from shipping_order_container oc
                   join container c on c.id = oc.container_id
                   left join shipping_order so on so.id = oc.shipping_order_id
-                  left join container_owner stock on stock.container_id = oc.container_id
+                  left join container_owner_current stock on stock.container_id = oc.container_id
                   left join client owner on owner.id = case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end
                   left join seal_type st on st.id = oc.seal_type_id
                   left join danger_class hc on hc.id = oc.danger_class_id
@@ -250,7 +250,7 @@ public class ShippingOrderStore {
                    and oc.shipping_order_id = sorc.shipping_order_id
                   left join container c on c.id = oc.container_id
                   join shipping_order so on so.id = oc.shipping_order_id
-                  left join container_owner stock on stock.container_id = oc.container_id
+                  left join container_owner_current stock on stock.container_id = oc.container_id
                   left join client owner on owner.id = case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end
                   left join seal_type st on st.id = oc.seal_type_id
                   left join danger_class hc on hc.id = oc.danger_class_id

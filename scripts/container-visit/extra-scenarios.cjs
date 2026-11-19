@@ -1,0 +1,31 @@
+const {assert,run,sql,json,api,clock,init}=require('./check-lib.cjs');
+(async()=>{
+ const x=await init('billing-visit-check-new');await clock('2026-10-05');
+ const service=(await api('/comprehensive-service-orders/available-services'))[0];
+ const tariff=json(`select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where complex_service_id='${service.id}' and active order by id limit 1)t`);
+ const bill=await api('/waybills/generate','POST',{standard20:0,standard40:1},201);
+ const request={complexServiceId:service.id,clientId:tariff.client_id,contractId:tariff.contract_id,defaultContainerOwnerId:tariff.client_id,waybillIds:[bill.id]};
+ let root=await api('/comprehensive-service-orders','POST',request,201);
+ async function section(root,action){return api(`/comprehensive-service-orders/${root}/${action==='PREPARE_TRANSPORT'?'prepare-transport':'complete-section'}`,'POST',{section:'INITIAL_RECEIVING',...(action==='PREPARE_TRANSPORT'?{}:{action})});}
+ await section(root.order.id,'PREPARE_TRANSPORT');await section(root.order.id,'CONFIRM_ROUTES');await section(root.order.id,'COMPLETE_ORDERS');
+ const k=root.receivingOrder.containers[0].containerId;
+ assert.equal(sql(`select count(*) from container_visit where container_id='${k}' and waybill_container_id is not null and receiving_order_container_id is null and receiving_date is not null`),'1');
+ for(const shipping of root.shippingOrders)await x.cancel('shipping',shipping.id);
+ await x.cancel('receiving',root.receivingOrder.id);
+ root=await api('/comprehensive-service-orders','POST',{...request,defaultContainerOwnerId:x.b},201);
+ await section(root.order.id,'PREPARE_TRANSPORT');await section(root.order.id,'CONFIRM_ROUTES');await section(root.order.id,'COMPLETE_ORDERS');
+ assert.equal(sql(`select count(*) from container_visit where container_id='${k}'`),'2');
+ assert.equal(sql(`select client_id from container_owner_current where container_id='${k}'`),x.b);
+ console.log('PASS railway receiving cancellation releases waybill; reuse creates new visit and preserves cancelled history');
+ const r=await x.arrival();const reserved=await x.ship(r.ktk,false);const transfer=await x.schedule([r.ktk],x.b,'2026-10-05');await x.waitStatus(transfer);
+ await x.cancel('shipping',reserved);assert.equal(sql(`select client_id from container_owner_current where container_id='${r.ktk}'`),x.b);
+ assert.equal(sql(`select shipping_order_id from container_owner where container_id='${r.ktk}'`),'');
+ console.log('PASS shipping reservation cancellation preserves transfer and clears shipping pointer');
+ const sh=await x.ship(r.ktk);const outside=await x.schedule([r.ktk],x.c,'2026-10-05');await x.waitStatus(outside);await x.cancel('shipping',sh,409);
+ const outsidePlan=await x.schedule([r.ktk],x.a,'2026-10-07');await x.arrival(r.ktk,x.b);await x.waitStatus(outsidePlan,'CANCELLED');await clock('2026-10-07');assert.equal(sql(`select client_id from container_owner_current where container_id='${r.ktk}'`),x.b);
+ console.log('PASS outside-storage ownership retained; shipping cancellation blocked after outside transfer; next receiving invalidates prior outside plan');
+ const duplicate=await x.generated();const a=await x.transport('receiving',duplicate),b=await x.transport('receiving',duplicate);
+ const result=await Promise.allSettled([x.confirm('receiving',a.id),x.confirm('receiving',b.id)]);assert.equal(result.filter(r=>r.status==='fulfilled').length,1);
+ assert.equal(sql(`select count(*) from container_visit where container_id='${duplicate}' and not is_cancelled`),'1');
+ console.log('PASS concurrent receiving confirmations reserve only one visit');
+})().catch(e=>{console.error(e.stack);process.exitCode=1});

@@ -4,7 +4,7 @@ const labels = {
   receiving_order: 'Заявки на поставку', shipping_order: 'Заявки на вывоз',
   comprehensive_service_order: 'Комплексные услуги', route: 'Рейсы',
   waybill: 'Накладные', waybill_container: 'КТК накладных', waybill_railway_carriage: 'Вагоны накладных',
-  container: 'Справочник КТК', container_owner: 'Остатки и собственники',
+  container: 'Справочник КТК', container_owner: 'Складское состояние КТК', container_visit: 'Визиты receiving → shipping', container_ownership_period: 'Периоды собственников',
   container_owner_history: 'История КТК', container_movement: 'Движения КТК',
   container_storage_period: 'Периоды хранения', container_stock_reservation: 'Резервы КТК',
   shipping_order_container: 'КТК вывоза', receiving_order_container: 'КТК автопоставки',

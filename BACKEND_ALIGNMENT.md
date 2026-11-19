@@ -27,7 +27,9 @@
 | Поставка | receiving_order; для авто — receiving_order_container и items; ЖД-состав — связанные накладные |
 | Вывоз | shipping_order, shipping_order_container, items и связи с исходными КТК/вагонами |
 | Рейс | route; объединяет транспортные заявки |
-| Периоды хранения КТК | container_storage_period; границы по ARRIVAL/OWNER_CHANGE/DEPARTURE в container_owner_history |
+| Receiving → shipping КТК | container_visit; отдельный физический визит |
+| Владение и хранение КТК | container_ownership_period; границы связаны с историей, совместимый VIEW container_storage_period |
+| Текущее складское состояние | container_owner без собственника, со ссылками container_visit_id и shipping_order_id |
 | Накладная | waybill, waybill_railway_carriage, waybill_container, waybill_product, waybill_zpu |
 | Услуга / тариф клиента | complex_service_catalog, complex_service_tariff |
 | Снимок тарифа заявки | comprehensive_service_order_tariff |

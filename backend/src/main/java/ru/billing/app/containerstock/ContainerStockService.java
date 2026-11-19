@@ -24,7 +24,7 @@ public class ContainerStockService {
         var ids = containerIds.stream().distinct().toList();
         String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
         var result = jdbc.query("select c.id, o.client_id, cl.name, coalesce(o.status,'DEPARTED') from container c "
-            + "left join container_owner o on o.container_id=c.id left join client cl on cl.id=o.client_id "
+            + "left join container_owner_current o on o.container_id=c.id left join client cl on cl.id=o.client_id "
             + "where c.id in (" + placeholders + ") order by c.code",
             (rs,n) -> new Lookup(rs.getObject(1,UUID.class), rs.getObject(2,UUID.class), rs.getString(3), rs.getString(4)), ids.toArray());
         if (result.size()!=ids.size()) throw new ApiException(HttpStatus.NOT_FOUND,"CONTAINER_NOT_FOUND","КТК не найден");
@@ -47,14 +47,14 @@ public class ContainerStockService {
             if(found.isEmpty()) throw error("CONTAINER_NOT_FOUND","КТК не найден");
             if(Boolean.TRUE.equals(jdbc.queryForObject("""
                 select exists(select 1 from service_order s join service_order_container c on c.service_order_id=s.id
-                  where c.container_id=? and s.status='SCHEDULED' and s.effective_date<=billing_today()
+                  where c.container_id=? and s.status='SCHEDULED' and s.effective_date<=billing_today() and c.result_status in ('PLANNED','BLOCKED')
                     and (?::uuid is null or s.id<>?))
                 """,Boolean.class,id,executingOwnershipOrder,executingOwnershipOrder)))
                 throw error("OWNERSHIP_SCHEDULE_PENDING","Для КТК наступила дата передачи. Дождитесь выполнения смены собственника или проверьте ожидающую заявку");
         }
     }
     State state(UUID id) {
-        var rows=jdbc.query("select * from container_owner where container_id=?",(rs,n)->new State(
+        var rows=jdbc.query("select * from container_owner_current where container_id=?",(rs,n)->new State(
             rs.getObject("id",UUID.class),rs.getObject("client_id",UUID.class),rs.getString("status"),
             rs.getObject("receiving_order_id",UUID.class),rs.getObject("shipping_order_id",UUID.class)),id);
         return rows.isEmpty()?null:rows.getFirst();
@@ -64,10 +64,11 @@ public class ContainerStockService {
     }
     UUID transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type,java.time.OffsetDateTime effectiveAt) {
         State old=state(container);
-        if(old==null) jdbc.update("insert into container_owner(id,container_id,client_id,status,receiving_order_id,shipping_order_id) values(?,?,?,?,?,?)",
-            UUID.randomUUID(),container,client,status,receiving,shipping);
-        else jdbc.update("update container_owner set client_id=?,status=?,receiving_order_id=?,shipping_order_id=?,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
-            client,status,receiving,shipping,old.id());
+        UUID currentShipping=Set.of("EXPECTED","ON_TERMINAL").contains(status)?null:shipping;
+        if(old==null) jdbc.update("insert into container_owner(id,container_id,status,shipping_order_id) values(?,?,?,?)",
+            UUID.randomUUID(),container,status,currentShipping);
+        else jdbc.update("update container_owner set status=?,shipping_order_id=?,version=version+1,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
+            status,currentShipping,old.id());
         // Only drafts follow the register. Confirmation freezes the shipment owner.
         jdbc.update("""
             update shipping_order_container sc set owner_container_id=?
@@ -192,7 +193,7 @@ public class ContainerStockService {
     }
     static final String OWNER_SELECT="""
         select o.*,c.code as container_name,c.container_type,cl.name as client_name
-        from container_owner o join container c on c.id=o.container_id join client cl on cl.id=o.client_id
+        from container_owner_current o join container c on c.id=o.container_id join client cl on cl.id=o.client_id
         """;
     Owner owner(java.sql.ResultSet rs)throws java.sql.SQLException {
         return new Owner(rs.getObject("id",UUID.class),rs.getObject("container_id",UUID.class),rs.getString("container_name"),
@@ -225,7 +226,7 @@ public class ContainerStockService {
             left join shipping_order s on h.order_type='SHIPPING_ORDER' and s.id=h.order_id
             left join service_order so on h.order_type='SERVICE_ORDER' and so.id=h.order_id
             where h.container_id=? and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
-                and (r.order_status in ('COMPLETED','CANCELLED') or s.order_status in ('COMPLETED','CANCELLED') or so.status='DONE')))
+                and (r.order_status in ('COMPLETED','CANCELLED') or s.order_status in ('COMPLETED','CANCELLED') or so.status in ('DONE','PARTIAL'))))
             order by h.created_at desc,h.id desc
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("old_client_id",UUID.class),rs.getString("old_name"),
                 rs.getObject("new_client_id",UUID.class),rs.getString("new_name"),rs.getString("old_status"),rs.getString("new_status"),

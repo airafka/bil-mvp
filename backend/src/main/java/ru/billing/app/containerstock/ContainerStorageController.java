@@ -46,7 +46,7 @@ public class ContainerStorageController {
         join container_owner_history h on h.id=p.start_history_id
         join container c on c.id=p.container_id
         left join container_owner_history e on e.id=p.end_history_id
-        left join client ow on ow.id=h.new_client_id
+        left join client ow on ow.id=(select client_id from container_ownership_period where id=p.id)
         join container_owner_history origin on origin.id=storage_arrival_history(p.id)
         join receiving_order r on r.id=origin.order_id
         left join service_order so on so.id=h.order_id and h.order_type='SERVICE_ORDER'

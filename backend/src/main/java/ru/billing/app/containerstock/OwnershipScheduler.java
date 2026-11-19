@@ -20,11 +20,11 @@ public class OwnershipScheduler {
     public void tick() { processDue(); }
 
     public void processDue() {
-        var ids=jdbc.query("select id from service_order where status='SCHEDULED' and effective_date<=billing_today() order by effective_date,id",
+        var ids=jdbc.query("select id from service_order where status='SCHEDULED' and (effective_date<=billing_today() or not exists(select 1 from service_order_container sc where sc.service_order_id=service_order.id and sc.result_status in ('PLANNED','BLOCKED'))) order by effective_date,id",
             (rs,n)->rs.getObject(1,UUID.class));
         for(UUID id:ids) {
             try { service.execute(id); }
-            catch(Exception error) { log.warn("Ownership transfer {} remains scheduled: {}",id,error.getMessage()); }
+            catch(Exception error) { service.recordFailure(id,error instanceof ru.billing.app.error.ApiException ? error.getMessage() : "Не удалось выполнить передачу. Проверьте историю КТК и ожидаемую заявку"); log.warn("Ownership transfer {} remains scheduled: {}",id,error.getMessage()); }
         }
     }
 
