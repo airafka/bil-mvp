@@ -1,6 +1,12 @@
 # Запуск, обновление и перенос БД
 
-Рабочая БД — billing_next, PostgreSQL 16; активный каталог миграций backend содержит V1–V57. Версию конкретной работающей БД проверять отдельно по flyway_schema_history. Манифест переносимого снимка остаётся на V28.
+Рабочая БД — billing_next, PostgreSQL 16; активный каталог миграций backend содержит V1–V58. Версию конкретной работающей БД проверять отдельно по flyway_schema_history. Манифест переносимого снимка остаётся на V28.
+
+## Удаление служебных журналов (V58)
+
+[V58](../backend/src/main/resources/db/baseline/V58__remove_unused_operational_ledgers.sql) удаляет container_movement, order_cancellation и outbound_data без CASCADE. Причины отмен, архив состава отменённых документов и снимки снятых начислений больше не ведутся. Архив в других таблицах не создаётся. Перед применением нужна свежая резервная копия, проверенная восстановлением; backend и frontend обновляются согласованно. Старые миграции V5/V29/V33/V37 сохраняются для последовательного обновления старых БД, опубликованный снимок V28 не изменяется. Остатки, визиты, назначения собственников, история и расчёт отчёта/CSV сохраняются.
+
+Регрессия [operational-ledger-removal-check.cjs](../scripts/operational-ledger-removal-check.cjs) допускает только billing_remove_ledgers_test в отдельном временном контейнере billing-remove-ledgers-db и backend на 8285. Проверяет отмену без причины, повторную/параллельную обработку, весь рейс, освобождение накладной, повторную поставку, снятие начислений и защиту счетов. Старые сценарии, проверяющие удалённые журналы или архив, относятся к прежней схеме и не используются для приёмки V58.
 
 ## Передачи задним числом (V57)
 
@@ -179,7 +185,7 @@ V38 удаляет из container_storage_period needs_review, review_reason и 
 
 ## Упрощение истории КТК (V39)
 
-[V39](../backend/src/main/resources/db/baseline/V39__simplify_container_owner_history.sql) удаляет из container_owner_history только target_history_id, source_system, source_operation_key, reason, needs_review и review_reason. Зависимые внешний ключ target_history_id и индекс history_source_operation_uq удаляются вместе с колонками. Остальные события, даты, статусы, собственники и связи с периодами сохраняются. Причина отмены остаётся в order_cancellation. Backend использует ID созданной истории для времени складского события; API истории и UI больше не возвращают/показывают удалённые поля. Endpoint /api/container-storage-periods/issues и его клиент удалены.
+[V39](../backend/src/main/resources/db/baseline/V39__simplify_container_owner_history.sql) удаляет из container_owner_history только target_history_id, source_system, source_operation_key, reason, needs_review и review_reason. Зависимые внешний ключ target_history_id и индекс history_source_operation_uq удаляются вместе с колонками. Остальные события, даты, статусы, собственники и связи с периодами сохраняются. На этапе V39 причина отмены оставалась в order_cancellation; в V58 эта таблица удалена. Backend использует ID созданной истории для времени складского события; API истории и UI больше не возвращают/показывают удалённые поля. Endpoint /api/container-storage-periods/issues и его клиент удалены.
 
 Перед применением нужна свежая резервная копия и совместное обновление backend/frontend. Если история содержит needs_review=true, миграция отклоняется до удаления полей: сначала требуется сверка проблемных записей. Старые миграции не переписываются, снимок V28 остаётся прежним.
 

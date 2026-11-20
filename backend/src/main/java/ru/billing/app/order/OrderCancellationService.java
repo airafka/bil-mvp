@@ -1,9 +1,7 @@
 package ru.billing.app.order;
 
-import java.time.OffsetDateTime;
 import java.util.UUID;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -15,22 +13,12 @@ import ru.billing.app.comprehensiveserviceorder.ServiceOrderLock;
 
 @Service
 public class OrderCancellationService {
-    public record Request(@NotBlank String expectedStatus,@NotBlank @Size(max=1000) String reason) {}
-    public record Cancellation(String previousStatus,String reason,OffsetDateTime cancelledAt) {}
+    public record Request(@NotBlank String expectedStatus) {}
     private final JdbcTemplate jdbc;
     private final ContainerStockService stock;
     private final BillingCancellationService billing;
-    private final ReceivingOrderStore receiving;
-    private final ShippingOrderStore shipping;
-    public OrderCancellationService(JdbcTemplate jdbc,ContainerStockService stock,BillingCancellationService billing,
-            ReceivingOrderStore receiving,ShippingOrderStore shipping) {
-        this.jdbc=jdbc;this.stock=stock;this.billing=billing;this.receiving=receiving;this.shipping=shipping;
-    }
-    @Transactional(readOnly=true)
-    public Cancellation details(String resource,UUID id) {
-        var rows=jdbc.query("select previous_status,reason,cancelled_at from order_cancellation where resource=? and order_id=?",
-            (rs,n)->new Cancellation(rs.getString(1),rs.getString(2),rs.getObject(3,OffsetDateTime.class)),resource,id);
-        return rows.isEmpty()?null:rows.getFirst();
+    public OrderCancellationService(JdbcTemplate jdbc,ContainerStockService stock,BillingCancellationService billing) {
+        this.jdbc=jdbc;this.stock=stock;this.billing=billing;
     }
     @Transactional
     public CreatedOrderResponse cancel(String resource,UUID id,Request request) {
@@ -56,9 +44,7 @@ public class OrderCancellationService {
             "select number from receiving_order where source_shipping_order_id=? and order_status<>'CANCELLED' order by number",
             (rs,n)->rs.getString(1),id);
         if(!dependent.isEmpty())throw conflict("CANCELLATION_DEPENDENT_ORDERS","Сначала отмените связанные "+(incoming?"вывозы":"возвраты")+" №"+String.join(", ",dependent));
-        var document=incoming?receiving.findById(id):shipping.findById(id);
         stock.cancel(resource,id,current.status());
-        OrderCancellationArchive.save(jdbc,resource,id,request.reason().trim(),document);
         billing.cancel(resource,id);
         jdbc.update("update "+table+" set order_status='CANCELLED' where id=?",id);
         if(incoming) {
@@ -66,10 +52,6 @@ public class OrderCancellationService {
             jdbc.update("update receiving_order_container set source_shipping_order_id=null where receiving_order_id=?",id);
             jdbc.update("update waybill set receiving_order_id=null where receiving_order_id=?",id);
         } else jdbc.update("delete from shipping_order_source_container where shipping_order_id=?",id);
-        if(current.status().equals("CONFIRMED")) jdbc.update("""
-            insert into outbound_data(id,message_type,entity_type,root_object_id) values(?,?,?,?)
-            on conflict(message_type,root_object_id) do nothing
-            """,UUID.randomUUID(),incoming?"RECEIVING_ORDER_CANCEL":"SHIPPING_ORDER_CANCEL",incoming?"RECEIVING_ORDER":"SHIPPING_ORDER",id);
         refreshRoute(table,id);
         refreshServices(table,id);
         return new CreatedOrderResponse(id,current.code(),"CANCELLED");

@@ -105,33 +105,25 @@ public class ContainerStockService {
         for(var row:rows) {
             tasks.change(row,completed?"UPLOADED":null,completed?"FINISHED":"UPLOADED");
             State old=state(row.container());
-            UUID history;
             if(receiving) {
                 if(!completed) {
                     if(row.owner()==null) throw error("RECEIVING_OWNER_REQUIRED","Укажите собственника каждого КТК в заявке на поставку");
                     if(old!=null&&!old.status().equals("DEPARTED")) throw error("CONTAINER_ALREADY_IN_STOCK","КТК уже ожидается, находится на терминале или зарезервирован для вывоза");
-                    history=transition(row.container(),row.owner(),"EXPECTED",order,old==null?null:old.shipping(),order,"RECEIVING_ORDER");
+                    transition(row.container(),row.owner(),"EXPECTED",order,old==null?null:old.shipping(),order,"RECEIVING_ORDER");
                 } else {
                     if(old==null||!old.status().equals("EXPECTED")||!order.equals(old.receiving())) throw error("RECEIVING_RESERVATION_REQUIRED","КТК не зарезервирован этой поставкой");
-                    history=transition(row.container(),old.client(),"ON_TERMINAL",order,old.shipping(),order,"RECEIVING_ORDER");
+                    transition(row.container(),old.client(),"ON_TERMINAL",order,old.shipping(),order,"RECEIVING_ORDER");
                 }
             } else {
                 if(!completed) {
                     if(old==null||!old.status().equals("ON_TERMINAL")) throw error("SHIPPING_MISSING_IN_REMAINS","Для вывоза КТК должен быть принят и свободен в остатках");
                     jdbc.update("update shipping_order_container set owner_container_id=? where shipping_order_id=? and container_id=?",old.client(),order,row.container());
-                    history=transition(row.container(),old.client(),"RESERVED_OUT",old.receiving(),order,order,"SHIPPING_ORDER");
+                    transition(row.container(),old.client(),"RESERVED_OUT",old.receiving(),order,order,"SHIPPING_ORDER");
                 } else {
                     if(old==null||!old.status().equals("RESERVED_OUT")||!order.equals(old.shipping())) throw error("SHIPPING_RESERVATION_REQUIRED","КТК не зарезервирован этим вывозом");
-                    history=transition(row.container(),old.client(),"DEPARTED",old.receiving(),order,order,"SHIPPING_ORDER");
+                    transition(row.container(),old.client(),"DEPARTED",old.receiving(),order,order,"SHIPPING_ORDER");
                 }
             }
-            if(completed) jdbc.update("""
-                insert into container_movement(id,order_id,container_id,event_code,transport_type,event_date_time)
-                select ?,?,?,?,transport_type,(select occurred_at at time zone 'UTC' from container_owner_history_view
-                    where id=?) from %s where id=?
-                on conflict(order_id,container_id,event_code) do nothing
-                """.formatted(receiving?"receiving_order":"shipping_order"),UUID.randomUUID(),order,row.container(),receiving?"UNLOAD_FINISH":"LOAD_FINISH",
-                    history,order);
         }
     }
     private String containerName(UUID id) {
@@ -181,7 +173,6 @@ public class ContainerStockService {
                 receiving?previousOrder:old.receiving(),receiving?old.shipping():previousOrder,order,type);
         }
         tasks.cancel(order,receiving,previousStatus);
-        jdbc.update("update container_movement set active=false,updated_at=billing_now() at time zone 'UTC' where order_id=?",order);
     }
     static final String OWNER_SELECT="""
         select o.*,c.code as container_name,c.container_type,cl.name as client_name

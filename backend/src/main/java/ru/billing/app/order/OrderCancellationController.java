@@ -13,6 +13,4 @@ public class OrderCancellationController {
     public CreatedOrderResponse cancel(@PathVariable String resource,@PathVariable UUID id,@Valid @RequestBody OrderCancellationService.Request request) {
         return service.cancel(resource,id,request);
     }
-    @GetMapping
-    public OrderCancellationService.Cancellation details(@PathVariable String resource,@PathVariable UUID id){return service.details(resource,id);}
 }

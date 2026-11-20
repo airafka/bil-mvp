@@ -38,12 +38,8 @@ public class RouteCancellationService {
         if(!route.status().equals(request.expectedStatus()))throw conflict("STATUS_CHANGED","Статус рейса изменился. Обновите страницу");
         var current=members(id);
         if(!new HashSet<>(initial).equals(new HashSet<>(current)))throw conflict("ROUTE_CHANGED","Состав или статусы заявок рейса изменились. Повторите отмену");
-        jdbc.update("""
-            insert into order_cancellation(order_id,resource,previous_status,reason,details)
-            select id,'routes',status,?,to_jsonb(r) from route r where id=?
-            """,request.reason().trim(),id);
         for(var member:current)if(!member.status().equals("CANCELLED"))orders.cancel(member.resource(),member.id(),
-            new OrderCancellationService.Request(member.status(),request.reason()));
+            new OrderCancellationService.Request(member.status()));
         jdbc.update("update route set status='CANCELLED' where id=?",id);
         return new CreatedOrderResponse(id,route.code(),"CANCELLED");
     }

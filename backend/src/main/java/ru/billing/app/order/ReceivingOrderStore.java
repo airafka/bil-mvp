@@ -144,8 +144,6 @@ public class ReceivingOrderStore {
     }
 
     public OrderDetails findById(UUID id) {
-        var archived = OrderCancellationArchive.find(jdbcTemplate, "receiving-orders", id);
-        if (archived != null) return archived;
         List<OrderHeader> headers = jdbcTemplate.query(
                 """
                 select o.id, o.number as code, o.client_id, c.name as client_name,

@@ -5,13 +5,13 @@ const labels = {
   comprehensive_service_order: 'Комплексные услуги', route: 'Рейсы',
   waybill: 'Накладные', waybill_container: 'КТК накладных', waybill_railway_carriage: 'Вагоны накладных',
   container: 'Справочник КТК', container_owner: 'Складское состояние КТК', container_visit: 'Визиты receiving → shipping', container_ownership_period: 'Периоды собственников',
-  container_owner_history: 'История КТК', container_movement: 'Движения КТК',
+  container_owner_history: 'История КТК',
   container_storage_period: 'Периоды хранения', container_stock_reservation: 'Резервы КТК',
   shipping_order_container: 'КТК вывоза', receiving_order_container: 'КТК автопоставки',
   billing_charge: 'Начисления', service_execution: 'Оказанные услуги',
   payment_invoice: 'Счета на оплату', payment_invoice_line: 'Строки счетов',
   client: 'Клиенты', contract: 'Договоры', complex_service_catalog: 'Каталог услуг',
-  complex_service_tariff: 'Тарифы', order_cancellation: 'Отмены заявок',
+  complex_service_tariff: 'Тарифы',
   service_order: 'Смена собственника', railway_carriage: 'Вагоны',
 };
 

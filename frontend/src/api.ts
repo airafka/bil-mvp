@@ -253,12 +253,8 @@ export function createServiceReturns(id: string, payload: { containerIds: string
   return request<CreatedReturns>(`/api/comprehensive-service-orders/${id}/returns`, { method: 'POST', body: JSON.stringify(payload) })
 }
 
-export type OrderCancellation = { previousStatus: string; reason: string; cancelledAt: string }
-export function cancelOrder(apiPath: string, id: string, expectedStatus: string, reason: string) {
-  return request<CreatedOrder>(apiPath + '/' + id + '/cancellation', { method: 'POST', body: JSON.stringify({ expectedStatus, reason }) })
-}
-export function getOrderCancellation(apiPath: string, id: string) {
-  return request<OrderCancellation>(apiPath + '/' + id + '/cancellation')
+export function cancelOrder(apiPath: string, id: string, expectedStatus: string) {
+  return request<CreatedOrder>(apiPath + '/' + id + '/cancellation', { method: 'POST', body: JSON.stringify({ expectedStatus }) })
 }
 
 export type NoReturnCandidate = ReturnCandidate & { shippingStatus: string; returnRequired: boolean }

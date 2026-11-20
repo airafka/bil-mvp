@@ -1,6 +1,6 @@
 import { Notification } from './Notification'
-import { useEffect, useRef, useState } from 'react'
-import { changeOrderStatus, finishContainerOrder, getOrderCancellation } from '../api'
+import { useRef, useState } from 'react'
+import { changeOrderStatus, finishContainerOrder } from '../api'
 import { statusLabel } from '../domain'
 
 import { OrderCancellationDialog } from './OrderCancellationDialog'
@@ -11,13 +11,6 @@ export function OrderStatusAction({ apiPath, id, status, onChanged }: {
 }) {
   const lock = useRef(false)
   const [cancelling, setCancelling] = useState(false)
-  const [cancelReason, setCancelReason] = useState('')
-  useEffect(() => {
-    if (status !== 'CANCELLED') return
-    let active = true
-    getOrderCancellation(apiPath, id).then(value => { if (active) setCancelReason(value.reason) }).catch(() => {})
-    return () => { active = false }
-  }, [apiPath, id, status])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -45,7 +38,6 @@ export function OrderStatusAction({ apiPath, id, status, onChanged }: {
   return <div className="order-status-control">
     {transport && status !== 'CANCELLED' && <button type="button" className="secondary-button" disabled={busy || cancelling} onClick={() => setCancelling(true)}>Отменить заявку</button>}
     {cancelling && <OrderCancellationDialog apiPath={apiPath} id={id} status={status} onChanged={onChanged} onClose={() => setCancelling(false)} />}
-    {status === 'CANCELLED' && cancelReason && <span className="order-cancellation-reason" title={cancelReason}>Причина отмены: {cancelReason}</span>}
     {next && <button type="button" className="primary-button" disabled={busy} onClick={advance}>{busy ? 'Сохраняем…' : next === 'CONFIRMED' ? 'Подтвердить' : 'Выполнить'}</button>}
     {error && <Notification kind="error">{error}</Notification>}
     {message && <Notification kind="success">{message}</Notification>}

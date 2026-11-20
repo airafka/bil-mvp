@@ -31,13 +31,6 @@ public class BillingCancellationService {
             """.formatted(predicate),(rs,n)->rs.getString(1),orderId);
         if(!invoices.isEmpty())throw new ApiException(HttpStatus.CONFLICT,"CANCELLATION_INVOICED",
             "Начисления включены в счета №"+String.join(", ",invoices)+". Исключите их из чернового счёта перед отменой. Оплаченные счета изменять нельзя");
-        // Preserve the exact execution and tariff/charge amounts in the cancellation audit.
-        jdbc.update("""
-            update order_cancellation set billing_snapshot=(select coalesce(jsonb_agg(jsonb_build_object(
-                'execution',to_jsonb(e),'charge',to_jsonb(b))),'[]'::jsonb)
-                from service_execution e left join billing_charge b on b.service_execution_id=e.id where %s)
-            where resource=? and order_id=?
-            """.formatted(predicate),orderId,resource,orderId);
         jdbc.update("delete from billing_charge where service_execution_id in (select id from service_execution where "+predicate+")",orderId);
         jdbc.update("delete from service_execution where "+predicate,orderId);
     }
