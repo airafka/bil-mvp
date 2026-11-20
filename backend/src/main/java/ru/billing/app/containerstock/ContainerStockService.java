@@ -41,7 +41,7 @@ public class ContainerStockService {
         for(UUID id:new TreeSet<>(ids)) {
             var found=jdbc.query("select id from container where id=? for update",(rs,n)->rs.getObject(1,UUID.class),id);
             if(found.isEmpty()) throw error("CONTAINER_NOT_FOUND","КТК не найден");
-            if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from container_owner_history where container_id=? and order_type<>'SERVICE_ORDER' and (occurred_at at time zone 'Europe/Moscow')::date>billing_today())",Boolean.class,id)))
+            if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from container_owner where container_id=? and (last_stock_at at time zone 'Europe/Moscow')::date>billing_today())",Boolean.class,id)))
                 throw error("STOCK_DATE_BEFORE_HISTORY","Рабочая дата раньше складских операций КТК. Проверьте календарь");
         }
     }
@@ -68,13 +68,12 @@ public class ContainerStockService {
                 and sc.container_id=?
             """,client,container);
         if(old==null || !Objects.equals(old.client(),client) || !Objects.equals(old.status(),status)) {
-            UUID history=UUID.randomUUID();
-            jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,occurred_at) values(?,?,?,?,?,?,?,?,coalesce(?::timestamptz,billing_now()))",
-                history,container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type,effectiveAt);
-            storage.onHistory(history,container,order,type,status);
-            return history;
+            return storage.apply(container,old==null?null:old.client(),client,old==null?null:old.status(),status,order,type,effectiveAt);
         }
         return null;
+    }
+    UUID assignOwner(UUID container, UUID previousClient, UUID nextClient, String status, UUID order, java.time.OffsetDateTime effectiveAt) {
+        return storage.apply(container,previousClient,nextClient,status,status,order,"SERVICE_ORDER",effectiveAt);
     }
     public void onOrderTransition(String resource, UUID order, boolean completed) {
         if(resource.equals("comprehensive-service-orders")) return;
@@ -141,18 +140,14 @@ public class ContainerStockService {
         String type=receiving?"RECEIVING_ORDER":"SHIPPING_ORDER";
         var ids=tasks.rows(order,receiving).stream().map(ContainerTaskRows.Row::container).toList();
         lockContainers(ids);
-        var reservations=jdbc.query("""
-            select container_id,old_client_id from container_owner_history_view
-            where order_id=? and order_type=? and operation_type=? and not cancellation and new_status=?
-            """,(rs,n)->new Reservation(rs.getObject("container_id",UUID.class),rs.getObject("old_client_id",UUID.class)),
-            order,type,receiving?"RESERVE_RECEIVING":"RESERVE_SHIPPING",receiving?"EXPECTED":"RESERVED_OUT");
         var previousOwners=new HashMap<UUID,UUID>();
-        for(var reservation:reservations) {
-            if(previousOwners.containsKey(reservation.container())) throw error("STOCK_HISTORY_REQUIRED","Неоднозначная история резервирования КТК");
-            previousOwners.put(reservation.container(),reservation.previousOwner());
+        if(receiving) {
+            var reservations=jdbc.query("select container_id,previous_client_id from container_visit where receiving_order_id=? and not is_cancelled",
+                (rs,n)->new Reservation(rs.getObject("container_id",UUID.class),rs.getObject("previous_client_id",UUID.class)),order);
+            for(var reservation:reservations)previousOwners.put(reservation.container(),reservation.previousOwner());
+            if(!previousOwners.keySet().equals(new HashSet<>(ids)))
+                throw error("STOCK_VISIT_REQUIRED","Состав заявки не совпадает с визитом. Требуется сверка остатков");
         }
-        if(!previousOwners.keySet().equals(new HashSet<>(ids)))
-            throw error("STOCK_HISTORY_REQUIRED","Состав заявки не совпадает с историей резервирования. Требуется сверка остатков");
         var conflicts=new ArrayList<String>();
         for(UUID id:ids) {
             State old=state(id);
@@ -160,13 +155,15 @@ public class ContainerStockService {
                 conflicts.add(describe(id,old,"отмена невозможна: КТК уже участвует в другой операции; сначала отмените последующие заявки"));
         }
         if(!conflicts.isEmpty())throw error("CANCELLATION_STOCK_CONFLICT",String.join("; ",conflicts));
+        if(!receiving) {
+            var reserved=jdbc.query("select container_id from container_owner where shipping_order_id=? and status in ('RESERVED_OUT','DEPARTED')",
+                (rs,n)->rs.getObject(1,UUID.class),order);
+            if(!new HashSet<>(reserved).equals(new HashSet<>(ids)))
+                throw error("STOCK_VISIT_REQUIRED","Состав вывоза не совпадает с остатками. Требуется сверка КТК");
+        }
         for(UUID id:ids) {
             State old=state(id);
-            UUID previousOrder;
-            try { previousOrder=jdbc.queryForObject("select previous_stock_order(?,?,?)",UUID.class,id,order,type); }
-            catch(org.springframework.dao.DataIntegrityViolationException exception) {
-                throw error("STOCK_HISTORY_REQUIRED","Неоднозначный порядок истории резервирования. Требуется сверка остатков");
-            }
+            UUID previousOrder=receiving?jdbc.queryForObject("select (select receiving_order_id from container_visit where id=previous_container_visit(?,?))",UUID.class,id,order):null;
             // Receiving restores the owner before acceptance. Shipping preserves any later owner change.
             UUID previousOwner=previousOwners.get(id);
             transition(id,receiving&&previousOwner!=null?previousOwner:old.client(),receiving?"DEPARTED":"ON_TERMINAL",
