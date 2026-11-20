@@ -10,6 +10,7 @@ import { OrderContainerTable } from '../components/OrderContainerTable'
 import { ActionIcon } from '../components/ActionIcon'
 import { RouteInformation } from '../components/RouteInformation'
 import { WaybillCompositionTable } from '../components/WaybillCompositionTable'
+import { useApplicationClock } from '../applicationClock'
 import { StatusBadge } from '../components/StatusBadge'
 import { OrderStatusAction } from '../components/OrderStatusAction'
 import { useEffect, useMemo, useState } from 'react'
@@ -36,6 +37,7 @@ export function OrderViewPage({ config, providedOrderId, embedded = false }: { c
 }
 
 function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId: string; embedded: boolean }) {
+  const { clock } = useApplicationClock()
   const [ownerActionTarget, setOwnerActionTarget] = useState<HTMLDivElement | null>(null)
   const [activeTab, setActiveTab] = useState(1)
   const [order, setOrder] = useState<OrderDetails | null>(null)
@@ -139,7 +141,7 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
     const keys=pending.map(row=>row.key)
     const allRows=[...rows.map(row=>({...(editing&&canEditContainers?containerDraft.find(c=>c.containerId===row.containerId)??row:row),key:row.containerId,name:row.containerName})),
       ...pending.map(row=>({...row.container,key:row.key,containerId:row.container.id}))]
-    return <><OrderContainerTable defaultOwnerId={config.kind==='receiving'?defaultOwnerDraft||order?.defaultContainerOwnerId||undefined:undefined} ownerReadOnly={config.kind==='shipping'} key={editing?'edit':'view'}
+    return <><OrderContainerTable defaultOwnerId={config.kind==='receiving'?defaultOwnerDraft||order?.defaultContainerOwnerId||undefined:undefined} ownerReadOnly={config.kind==='shipping'} ownerRefreshKey={config.kind==='shipping'&&order?.status==='DRAFT'?clock.date+':'+clock.version:undefined} key={editing?'edit':'view'}
       rows={allRows} options={containerOptions} selectableKeys={keys} removableKeys={keys} allowEmptyEdit={!!adding} addDisabled={additionReferencesLoading}
       selectedIds={[...numberedContainers.map(c=>c.containerId),...containerAdditions.map(row=>row.container.id)]}
       onAdd={adding?()=>setContainerAdditions(current=>[...current,{key:'new:'+crypto.randomUUID(),railwayCarriageId,container:{id:'',name:'',empty:false,etsngCodeId:'',weight:''}}]):undefined}

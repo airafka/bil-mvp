@@ -142,6 +142,9 @@ public class OrderStatusService {
             if(!fields.isEmpty()) errors.add("Заявка №"+order.number()+": "+String.join(", ",fields));
         }
         if(!errors.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST,"ORDER_CONFIRMATION_FIELDS_REQUIRED","Заполните обязательные поля. "+String.join("; ",errors));
+        ru.billing.app.containerstock.ContainerLocks.lockOrders(jdbc,
+                orders.stream().filter(o->o.resource().equals("receiving-orders")).map(Order::id).toList(),
+                orders.stream().filter(o->o.resource().equals("shipping-orders")).map(Order::id).toList());
         for(var order:orders) changeInternal(order.resource(),order.id(),new ChangeStatusRequest(Status.DRAFT,Status.CONFIRMED));
         jdbc.update("update route set status='CONFIRMED' where id=?",routeId);
     }

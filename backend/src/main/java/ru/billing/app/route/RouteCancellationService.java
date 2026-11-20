@@ -38,6 +38,12 @@ public class RouteCancellationService {
         if(!route.status().equals(request.expectedStatus()))throw conflict("STATUS_CHANGED","Статус рейса изменился. Обновите страницу");
         var current=members(id);
         if(!new HashSet<>(initial).equals(new HashSet<>(current)))throw conflict("ROUTE_CHANGED","Состав или статусы заявок рейса изменились. Повторите отмену");
+        // Lock all document headers before the union of KTK; individual cancellation
+        // must not acquire a new header while holding a container from another order.
+        for(var member:current) jdbc.queryForList("select id from "+(member.resource().equals("receiving-orders")?"receiving_order":"shipping_order")+" where id=? for update",member.id());
+        ru.billing.app.containerstock.ContainerLocks.lockOrders(jdbc,
+                current.stream().filter(m->!m.status().equals("CANCELLED")&&m.resource().equals("receiving-orders")).map(Member::id).toList(),
+                current.stream().filter(m->!m.status().equals("CANCELLED")&&m.resource().equals("shipping-orders")).map(Member::id).toList());
         for(var member:current)if(!member.status().equals("CANCELLED"))orders.cancel(member.resource(),member.id(),
             new OrderCancellationService.Request(member.status()));
         jdbc.update("update route set status='CANCELLED' where id=?",id);

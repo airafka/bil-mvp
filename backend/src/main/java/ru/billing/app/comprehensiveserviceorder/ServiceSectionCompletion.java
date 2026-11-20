@@ -49,6 +49,9 @@ public class ServiceSectionCompletion {
         if(action==Action.COMPLETE_ORDERS && orders.stream().anyMatch(o->"DRAFT".equals(o.status())))
             throw error("SECTION_CONFIRM_FIRST","Сначала подтвердите все рейсы раздела");
         Set<UUID> selected=new HashSet<>(orders.stream().map(Order::id).toList());
+        ru.billing.app.containerstock.ContainerLocks.lockOrders(jdbc,
+                shipping?List.of():orders.stream().map(Order::id).toList(),
+                shipping?orders.stream().map(Order::id).toList():List.of());
         if(action==Action.CONFIRM_ROUTES) for(var route:routeIds) {
             var status=jdbc.queryForObject("select status from route where id=?",String.class,route);
             if(!"DRAFT".equals(status))continue;

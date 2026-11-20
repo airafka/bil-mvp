@@ -37,14 +37,12 @@ public class ContainerStockService {
     record Reservation(UUID container, UUID previousOwner) {}
 
     public void lockContainers(Collection<UUID> ids) {
-        jdbc.queryForObject("select billing_today()",java.time.LocalDate.class);
-        for(UUID id:new TreeSet<>(ids)) {
-            var found=jdbc.query("select id from container where id=? for update",(rs,n)->rs.getObject(1,UUID.class),id);
-            if(found.isEmpty()) throw error("CONTAINER_NOT_FOUND","КТК не найден");
+        var locked=ContainerLocks.lock(jdbc,ids);
+        for(UUID id:locked) {
             if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from container_owner_history where container_id=? and order_type<>'SERVICE_ORDER' and (occurred_at at time zone 'Europe/Moscow')::date>billing_today())",Boolean.class,id)))
                 throw error("STOCK_DATE_BEFORE_HISTORY","Рабочая дата раньше складских операций КТК. Проверьте календарь");
         }
-        for(UUID id:new TreeSet<>(ids)) jdbc.queryForObject("select refresh_container_owner_clients(array[?]::uuid[])",Integer.class,id);
+        ContainerLocks.refreshLockedOwners(jdbc,locked);
     }
     State state(UUID id) {
         var rows=jdbc.query("select * from container_owner_current where container_id=?",(rs,n)->new State(

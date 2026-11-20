@@ -14,3 +14,15 @@ it('keeps the shipping owner read-only while seal and danger fields are editable
   expect(html).not.toContain('aria-label="Собственник КТК —')
   expect(html).toContain('aria-label="Тип ЗПУ — ABCD"')
 })
+it('does not show the previous date owner while loading draft owners, and retains unsaved cells', () => {
+  const html=renderToStaticMarkup(<OrderContainerTable ownerReadOnly ownerRefreshKey="2026-09-17:2" rows={[
+    {key:'saved',containerId:'saved',name:'SAVED',empty:false,ownerClientName:'Прежний собственник',sealNumbers:'Несохранённая пломба'},
+    {key:'new:added',containerId:'added',name:'ADDED',empty:true,ownerClientName:'Другой прежний собственник',sealNumbers:'Добавленная пломба'},
+  ]} onChange={()=>{}} />)
+  expect(html).not.toContain('Прежний собственник')
+  expect(html).not.toContain('Другой прежний собственник')
+  expect(html.match(/Загрузка…/g)).toHaveLength(2)
+  expect(html).toContain('Несохранённая пломба')
+  expect(html).toContain('Добавленная пломба')
+  expect(html).toContain('ADDED')
+})

@@ -179,8 +179,16 @@ export function acceptOwnershipOrder(id: string) { return request<import('./cont
 export function withdrawOwnershipOrder(id: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id + '/withdraw', { method: 'POST' }) }
 export function deleteOwnershipOrder(id: string) { return request<void>('/api/service-orders/' + id, { method: 'DELETE' }) }
 
-export function lookupContainerStock(containerIds: string[]) {
-  return request<import('./containerStock').ContainerStockLookup[]>('/api/container-owners/lookup', { method: 'POST', body: JSON.stringify({ containerIds }) })
+export async function lookupContainerStock(containerIds: string[]) {
+  const ids = [...new Set(containerIds)]
+  const byId = new Map<string, import('./containerStock').ContainerStockLookup>()
+  for (let offset = 0; offset < ids.length; offset += 1000) {
+    const rows = await request<import('./containerStock').ContainerStockLookup[]>('/api/container-owners/lookup', {
+      method: 'POST', body: JSON.stringify({ containerIds: ids.slice(offset, offset + 1000) }),
+    })
+    for (const row of rows) byId.set(row.containerId, row)
+  }
+  return ids.flatMap(id => { const row = byId.get(id); return row ? [row] : [] })
 }
 
 export type AvailableWaybillRow = Pick<import('./domain').GroupedWaybill, 'groupKey' | 'departureStation' | 'destinationStation' | 'payer'> & { waybill: import('./domain').WaybillLink }

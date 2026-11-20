@@ -170,13 +170,16 @@ public class ComprehensiveServiceOrderService {
     }
 
     private List<SourceRow> loadSources(UUID deliveryId) {
+        jdbc.queryForObject("select billing_today()",java.time.LocalDate.class);
+        // The complete service may create several shipping drafts. Lock their union
+        // once, before individual stores read owners; never upgrade per-row SHARE locks.
         jdbc.query("""
                 select c.id from container c where c.id in (
                     select wc.container_id from waybill_details w
                     join waybill_railway_carriage rc on rc.waybill_id = w.id
                     join waybill_container_details wc on wc.waybill_railway_carriage_id = rc.id
                     where w.receiving_order_id = ?
-                ) order by c.id for share
+                ) order by c.id for update
                 """, (rs, row) -> rs.getObject("id", UUID.class), deliveryId);
         return jdbc.query("""
                 select wc.container_id, wc.weight as gross_weight, wc.net_weight, c.container_type as type, p.etsng_code_id, hazard.danger_class_id as danger_class_id, null::uuid as owner_container_id, wc.seal_numbers as seal_numbers, wc.seal_type_id as seal_type_id

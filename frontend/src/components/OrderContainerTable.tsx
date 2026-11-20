@@ -36,6 +36,8 @@ type Props = {
   columnWidths?: number[]
   attributesReadOnly?: boolean
   ownerReadOnly?: boolean
+  // Draft shipping follows this calendar key; omitted means the saved owner snapshot.
+  ownerRefreshKey?: string
   defaultOwnerId?: string
   options?: ReferenceOption[]
   selectedIds?: string[]
@@ -48,7 +50,7 @@ type Props = {
   addDisabled?: boolean
   allowEmptyEdit?: boolean
 }
-export function OrderContainerTable({ rows, bulkOwnerActionTarget, ownerOptions, onBulkOwnerChange, bulkOwnerDisabled = false, attributesReadOnly = false, ownerReadOnly = false, defaultOwnerId, options = [], selectedIds, onSelect, onChange, onRemove, onAdd, allowEmptyEdit = false, selectableKeys, removableKeys, addDisabled = false, groups, showPhysicalAttributes = false, columnWidths }: Props) {
+export function OrderContainerTable({ rows, bulkOwnerActionTarget, ownerOptions, onBulkOwnerChange, bulkOwnerDisabled = false, attributesReadOnly = false, ownerReadOnly = false, ownerRefreshKey, defaultOwnerId, options = [], selectedIds, onSelect, onChange, onRemove, onAdd, allowEmptyEdit = false, selectableKeys, removableKeys, addDisabled = false, groups, showPhysicalAttributes = false, columnWidths }: Props) {
   const [collapsed,setCollapsed]=useState<Set<string>>(new Set())
   const groupPrefix=useId()
   const [ownerSelection, setOwnerSelection] = useState<Set<string>>(new Set())
@@ -74,13 +76,18 @@ export function OrderContainerTable({ rows, bulkOwnerActionTarget, ownerOptions,
     }} />
   }
   const [references, setReferences] = useState<ReferenceOption[][]>([[], [], []])
-  const [stock, setStock] = useState<Record<string, ContainerStockLookup>>({})
+  const [stockResult, setStockResult] = useState<{ key: string; items?: Record<string, ContainerStockLookup>; error?: string } | null>(null)
+  const [stockAttempt, setStockAttempt] = useState(0)
   const [referenceError, setReferenceError] = useState('')
-  const [stockError, setStockError] = useState('')
-  const [loading, setLoading] = useState(false)
   const editing = !!onChange
   const selecting = !!onSelect
   const idsKey = [...new Set(rows.map(row => row.containerId).filter(Boolean))].sort().join(',')
+  const lookupEnabled = selecting || (ownerReadOnly && ownerRefreshKey !== undefined)
+  const stockRequestKey = JSON.stringify([idsKey, ownerRefreshKey, stockAttempt])
+  const currentStockResult = stockResult?.key === stockRequestKey ? stockResult : null
+  const stock = currentStockResult?.items ?? {}
+  const stockError = currentStockResult?.error ?? ''
+  const loading = lookupEnabled && !!idsKey && !currentStockResult
   useEffect(() => {
     if (!editing && !bulkAvailable) return
     let active = true
@@ -92,14 +99,13 @@ export function OrderContainerTable({ rows, bulkOwnerActionTarget, ownerOptions,
     return () => { active = false }
   }, [editing, ownerReadOnly, bulkAvailable, ownerOptions, attributesReadOnly, referenceAttempt])
   useEffect(() => {
-    if (!selecting || !idsKey) return
+    if (!lookupEnabled || !idsKey) return
     let active = true
     lookupContainerStock(idsKey.split(','))
-      .then(value => { if (active) { setStock(Object.fromEntries(value.map(item => [item.containerId, item]))); setStockError('') } })
-      .catch(error => { if (active) setStockError(error instanceof Error ? error.message : 'Не удалось загрузить данные КТК') })
-      .finally(() => { if (active) setLoading(false) })
+      .then(value => { if (active) setStockResult({ key: stockRequestKey, items: Object.fromEntries(value.map(item => [item.containerId, item])) }) })
+      .catch(error => { if (active) setStockResult({ key: stockRequestKey, error: error instanceof Error ? error.message : 'Не удалось загрузить данные КТК' }) })
     return () => { active = false }
-  }, [selecting, idsKey])
+  }, [lookupEnabled, idsKey, stockRequestKey])
   const select = (row: ContainerTableRow, key: 'ownerClientId' | 'sealTypeId' | 'hazardClassId', label: string, items: ReferenceOption[], name?: string | null) => {
     const value = row[key] ?? (key === 'ownerClientId' ? defaultOwnerId : '') ?? ''
     return <UiSelect aria-label={`${label} — ${row.name || 'строка ' + (rows.findIndex(item => item.key === row.key) + 1)}`} value={value} disabled={blocked || !row.containerId || !!referenceError}
@@ -117,14 +123,15 @@ export function OrderContainerTable({ rows, bulkOwnerActionTarget, ownerOptions,
     const rowSelecting=selecting&&!row.readOnly&&(!selectableKeys||selectableKeys.includes(row.key))
     const rowEditing=editing&&!row.readOnly
     const currentStock=stock[row.containerId]
-    const ownerName=rowSelecting&&ownerReadOnly?currentStock?.ownerClientName:row.ownerClientName
+    const liveOwner=ownerReadOnly&&(ownerRefreshKey!==undefined||rowSelecting)
+    const ownerName=liveOwner?currentStock?.ownerClientName:row.ownerClientName
     const dangerCell=<td>{rowEditing&&!attributesReadOnly?select(row,'hazardClassId','Класс опасности груза',references[2],row.hazardClassName):row.hazardClassName||'—'}</td>
     return <tr key={row.key} data-owner-selected={bulk && ownerSelection.has(row.containerId) || undefined} className={grouped?'container-child-row':undefined}>
       {bulk && <td className="container-owner-choice">{choice(eligible([row]), 'Выбрать КТК ' + row.name)}</td>}
       {!grouped&&<td>{index+1}</td>}
-      <td className="container-number-cell">{onSelect&&rowSelecting?<UiSelect aria-label={'Номер КТК — строка '+(index+1)} value={row.containerId} onChange={event=>{setLoading(true);onSelect(row.key,event.target.value)}}><option value="" hidden disabled />{options.map(option=><option key={option.id} value={option.id} disabled={row.containerId!==option.id&&(selectedIds??rows.map(item=>item.containerId)).includes(option.id)}>{option.name}</option>)}</UiSelect>:<span>{row.name}</span>}</td>
+      <td className="container-number-cell">{onSelect&&rowSelecting?<UiSelect aria-label={'Номер КТК — строка '+(index+1)} value={row.containerId} onChange={event=>onSelect(row.key,event.target.value)}><option value="" hidden disabled />{options.map(option=><option key={option.id} value={option.id} disabled={row.containerId!==option.id&&(selectedIds??rows.map(item=>item.containerId)).includes(option.id)}>{option.name}</option>)}</UiSelect>:<span>{row.name}</span>}</td>
       {showPhysicalAttributes&&<><td>{row.containerType?containerTypeLabel(row.containerType):'—'}</td><td>{mass(row.tareWeight)}</td><td>{mass(row.grossWeight)}</td><td>{mass(row.loadCapacity)}</td></>}
-      <td>{rowEditing&&!ownerReadOnly?select(row,'ownerClientId','Собственник КТК',references[0],row.ownerClientName):<span className="container-readonly" title={ownerName||undefined}>{ownerName||(loading&&row.containerId?'Загрузка…':'—')}</span>}</td>
+      <td>{rowEditing&&!ownerReadOnly?select(row,'ownerClientId','Собственник КТК',references[0],row.ownerClientName):<span className="container-readonly" title={ownerName||undefined}>{ownerName||(liveOwner&&row.containerId?(loading?'Загрузка…':stockError?'Не удалось обновить':'—'):'—')}</span>}</td>
       <td>{rowEditing&&!attributesReadOnly?<UiInput aria-label={'Номера ЗПУ — '+row.name} disabled={!row.containerId} value={row.sealNumbers??''} maxLength={1000} placeholder="Введите номера" onChange={event=>onChange?.(row.key,{sealNumbers:event.target.value})}/>:row.sealNumbers||'—'}</td>
       <td>{rowEditing&&!attributesReadOnly?select(row,'sealTypeId','Тип ЗПУ',references[1],row.sealTypeName):row.sealTypeName||'—'}</td>
 
@@ -147,7 +154,8 @@ export function OrderContainerTable({ rows, bulkOwnerActionTarget, ownerOptions,
     }
   }}>
     {bulkOwnerActionTarget ? createPortal(ownerAction, bulkOwnerActionTarget) : ownerAction}
-    {(referenceError||stockError)&&<Notification kind="error">{referenceError||stockError}</Notification>}
+    {referenceError&&<Notification kind="error">{referenceError}</Notification>}
+    {stockError&&<div role="alert">{stockError} <button type="button" className="secondary-button" onClick={()=>setStockAttempt(value=>value+1)}>Повторить</button></div>}
     <div className="order-container-scroll"><table className={'order-container-table'+(bulk?' has-owner-selection':'')+(groups?' order-container-table--grouped composition-table composition-outline composition-containers':'')+(showPhysicalAttributes?' order-container-table--physical':'')} aria-label="КТК заявки">
       {columnWidths ? <colgroup>{bulk && <col style={{ width: 44 }} />}{columnWidths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup> : <colgroup>{bulk && <col style={{ width: 44 }} />}<col className="container-col-index"/><col className="container-col-number"/>{showPhysicalAttributes&&<><col className="container-col-type"/><col className="container-col-mass"/><col className="container-col-mass"/><col className="container-col-mass"/></>}<col className="container-col-owner"/><col/><col/>{showPhysicalAttributes?<><col className="container-col-empty"/><col className="container-col-danger"/></>:<><col className="container-col-danger"/><col className="container-col-empty"/></>}<col className="container-col-status"/>{showActions&&<col className="container-col-action"/>}</colgroup>}
       <thead><tr>{bulk && <th className="container-owner-choice">{choice(eligible(rows), 'Выбрать все КТК')}</th>}<th className="composition-index">№</th><th className="container-col-number">Номер КТК{selecting&&<b> *</b>}</th>{showPhysicalAttributes&&<><th>Тип КТК</th><th>Масса тары, кг</th><th>Масса брутто, кг</th><th>Грузоподъёмность, кг</th></>}<th>Собственник КТК</th><th>Номера ЗПУ</th><th>Тип ЗПУ</th>{showPhysicalAttributes?<><th className="container-col-empty">Порожний</th><th>Класс опасности груза</th></>:<><th>Класс опасности груза</th><th className="container-col-empty">Порожний</th></>}<th className="container-col-status">Статус КТК</th>{showActions&&<th className="registry-actions" aria-label="Действия"/>}</tr></thead>

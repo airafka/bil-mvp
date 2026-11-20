@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import ru.billing.app.error.ApiException;
+import ru.billing.app.containerstock.ContainerLocks;
 
 @Repository
 public class ShippingOrderStore {
@@ -31,6 +32,15 @@ public class ShippingOrderStore {
                 || request.railwayCarriageQuantities()!=null && !request.railwayCarriageQuantities().isEmpty()
                 || request.containerQuantities()!=null && !request.containerQuantities().isEmpty())
             throw new ApiException(HttpStatus.BAD_REQUEST,"NUMBERED_COMPOSITION_REQUIRED","Требуется номерной состав");
+        // Assignment later in this transaction must not acquire a route after KTK locks.
+        if (request.routeId()!=null) jdbcTemplate.query("select id from route where id=? for update",
+                (rs,n)->rs.getObject(1,UUID.class),request.routeId());
+        var ownerContainers = new ArrayList<UUID>();
+        if(request.containers()!=null) request.containers().forEach(c -> ownerContainers.add(c.containerId()));
+        if(request.railwayCarriages()!=null) request.railwayCarriages().forEach(w -> {
+            if(w.containers()!=null) w.containers().forEach(c -> ownerContainers.add(c.containerId()));
+        });
+        ContainerLocks.lockCurrentOwners(jdbcTemplate, ownerContainers);
         UUID orderId = UUID.randomUUID();
         FillingType fillingType = request.fillingType() == null ? FillingType.ALL : request.fillingType();
         Integer code = jdbcTemplate.queryForObject(
@@ -148,6 +158,12 @@ public class ShippingOrderStore {
         if (!"DRAFT".equals(headers.getFirst().getFirst())) {
             throw new ApiException(HttpStatus.CONFLICT, "CONTAINER_ATTRIBUTES_NOT_EDITABLE", "Реквизиты КТК можно менять только в черновике вывоза");
         }
+        // Lock the whole PATCH, including additions, before updating any existing row.
+        // A later additions-only lock would invert batches with opposite input orders.
+        var ownerContainers = new ArrayList<UUID>();
+        request.containers().forEach(c -> ownerContainers.add(c.containerId()));
+        request.additions().forEach(a -> ownerContainers.add(a.container().containerId()));
+        ContainerLocks.lockCurrentOwners(jdbcTemplate, ownerContainers);
         if(request.metadata()!=null) {
             jdbcTemplate.update("update shipping_order set planned_shipping_date_time=?, consignee_id=? where id=?", request.metadata().plannedAt(), ru.billing.app.reference.PartyReferences.clientParty(jdbcTemplate, request.metadata().consignee()), id);
         }

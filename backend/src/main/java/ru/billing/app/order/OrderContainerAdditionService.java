@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.billing.app.error.ApiException;
 import ru.billing.app.reference.ReferenceDataService;
+import ru.billing.app.containerstock.ContainerLocks;
 
 @Service
 public class OrderContainerAdditionService {
@@ -56,6 +57,8 @@ public class OrderContainerAdditionService {
             var c=addition.container(); references.validateContainerAttributes(incoming?c.ownerClientId():null,c.sealTypeId(),c.hazardClassId());
         }
         // All validation completes before insertion; the caller's metadata PATCH shares this transaction.
+        if(!incoming) ContainerLocks.lockCurrentOwners(jdbc,
+                additions.stream().map(a -> a.container().containerId()).toList());
         for(var addition:additions) {
             if(incoming) receiving.insertContainer(id,addition.container(),order.defaultContainerOwnerId());
             else {

@@ -1,6 +1,6 @@
 # Собственники и учёт КТК
 
-Текущая модель V60 разделяет физические визиты, датированные назначения собственника и текущий регистр КТК; допускает вставку передачи задним числом в текущий визит. Основные реализации: ContainerStockService, OwnershipOrderService, ContainerOwnerRefreshService и миграции V56–V60. Шедулера нет; перед первым API-запросом нового рабочего дня актуализируется только снимок текущего собственника.
+Текущая модель V61 разделяет физические визиты, датированные назначения собственника и текущий регистр КТК; допускает вставку передачи задним числом в текущий визит. Основные реализации: ContainerStockService, OwnershipOrderService, ContainerOwnerRefreshService и миграции V56–V61. Шедулера нет; перед первым API-запросом нового рабочего дня обновляются текущий собственник и строки черновых вывозов.
 
 ## Роли и источники
 
@@ -36,7 +36,7 @@ UNLOAD_FINISH и LOAD_FINISH фиксируются ручным выполне�
 
 container_owner содержит текущую запись физического КТК, а не отдельную запись на каждую перевозку. В остатки входят ON_TERMINAL и RESERVED_OUT. EXPECTED и DEPARTED сохраняются в общем регистре и истории, но не означают свободный КТК для вывоза.
 
-Операции блокируют строки КТК; изменение статуса заявки, регистра и события выполняется транзакционно. Повторное выполнение защищено состоянием заявки и складскими проверками; отдельного журнала container_movement нет.
+Складская операция и запись собственника в черновик вывоза блокируют затронутые строки КТК в порядке UUID PostgreSQL. Блокировка действует до завершения транзакции. Изменение статуса заявки, регистра и события выполняется транзакционно. Повторное выполнение защищено состоянием заявки и складскими проверками; отдельного журнала container_movement нет.
 
 ## Отмена заявок и рейсов
 
@@ -84,7 +84,7 @@ container_owner содержит текущую запись физическо�
 
 Ручной выбор КТК в вывозе автоматически подставляет собственника из регистра. ЗПУ, класс опасности и порожность ручного вывоза задаются отдельно. Автоматически созданный вывоз комплексной услуги переносит доступные данные исходной поставки/накладной.
 
-Только DRAFT актуализируется при смене собственника в регистре. При подтверждении собственник записывается в вывоз и фиксируется: последующие CHANGE_OWNER и LOAD_FINISH не переписывают его в CONFIRMED/COMPLETED. Текущий собственник регистра поэтому может отличаться от исторического собственника подтверждённого вывоза.
+В DRAFT сохранённый собственник строки следует за регистром. Создание и редактирование строки читают собственника под блокировкой КТК, поэтому параллельная передача учитывается и при сохранении черновика. В открытой карточке черновика рабочая дата определяет отображаемого собственника. При подтверждении собственник записывается в вывоз и фиксируется: последующие CHANGE_OWNER и LOAD_FINISH не переписывают его в CONFIRMED/COMPLETED. Текущий собственник регистра поэтому может отличаться от исторического собственника подтверждённого вывоза.
 
 ## Собственник возврата
 
@@ -189,7 +189,7 @@ ContainerTaskRows проверяет исходный статус и одноз
 | --- | --- |
 | container_visit | id, container_id; receiving_order_id, receiving_order_container_id **либо** waybill_container_id; receiving_date, receiving_container_owner_history_id; shipping_order_container_id, shipping_date, shipping_container_owner_history_id; is_cancelled, cancellation_container_owner_history_id; created_at, updated_at |
 | container_ownership_period | id, container_id, container_visit_id, client_id; record_type EXPECTED/STORAGE/OUTSIDE_STORAGE; effective_date, start_date (только STORAGE); start_container_owner_history_id; is_cancelled, cancellation_container_owner_history_id; is_withdrawn, withdrawn_at, withdrawal_reason; created_at, updated_at |
-| container_owner | прежние id/container_id и аудит; container_visit_id, shipping_order_id, status EXPECTED/ON_TERMINAL/RESERVED_OUT/DEPARTED, version. receiving_order_id — только ожидаемая поставка; поля client_id нет |
+| container_owner | прежние id/container_id и аудит; container_visit_id, shipping_order_id, status EXPECTED/ON_TERMINAL/RESERVED_OUT/DEPARTED, version. receiving_order_id — только ожидаемая поставка. Обязательное поле client_id ссылается на client.id и хранит текущего собственника |
 
 Подтверждение поставки создаёт только состояние EXPECTED и receiving_order_id в container_owner, а также событие RESERVE_RECEIVING в истории. container_visit_id в этот момент NULL. Собственник ожидаемой поставки хранится в container_owner.client_id; событие резервирования сохраняет его для аудита и отмены. Это ещё не хранение. Только фактическое выполнение (UNLOAD_FINISH / ARRIVAL) создаёт container_visit с обязательными receiving_date и receiving_container_owner_history_id, а также первое назначение STORAGE с датой поставки. В регистре receiving_order_id очищается и появляется container_visit_id. API container_owner_current сохраняет прежнее поле receiving_order_id: для ожидания это резерв, для фактического визита — поставка из визита.
 
