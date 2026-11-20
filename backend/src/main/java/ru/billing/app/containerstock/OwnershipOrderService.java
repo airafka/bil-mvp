@@ -151,6 +151,7 @@ public class OwnershipOrderService {
             jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,occurred_at) values(?,?,?,?,?,?,?,'SERVICE_ORDER',?)",
                 history,l.containerId(),candidate.previousClient(),h.clientId(),state.status(),state.status(),id,effectiveAt);
             jdbc.queryForObject("select apply_container_history(?)",Object.class,history);
+            jdbc.queryForObject("select refresh_container_owner_clients(array[?]::uuid[])",Integer.class,l.containerId());
             jdbc.update("update service_order_container sc set container_visit_id=o.container_visit_id,expected_client_id=?,expected_status=o.status,result_status='CONFIRMED',result_reason=null,container_ownership_period_id=(select id from container_ownership_period where start_container_owner_history_id=?) from container_owner o where sc.service_order_id=? and sc.container_id=? and o.container_id=sc.container_id",candidate.previousClient(),history,id,l.containerId());
         }
         jdbc.update("update service_order set status='CONFIRMED',effective_date=?,completion_at=?::timestamptz at time zone 'UTC',updated_at=?::timestamptz at time zone 'UTC',updated_by='local' where id=?",effective,confirmedAt,confirmedAt,id);

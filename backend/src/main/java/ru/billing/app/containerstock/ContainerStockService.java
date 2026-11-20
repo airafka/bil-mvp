@@ -44,6 +44,7 @@ public class ContainerStockService {
             if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from container_owner_history where container_id=? and order_type<>'SERVICE_ORDER' and (occurred_at at time zone 'Europe/Moscow')::date>billing_today())",Boolean.class,id)))
                 throw error("STOCK_DATE_BEFORE_HISTORY","Рабочая дата раньше складских операций КТК. Проверьте календарь");
         }
+        for(UUID id:new TreeSet<>(ids)) jdbc.queryForObject("select refresh_container_owner_clients(array[?]::uuid[])",Integer.class,id);
     }
     State state(UUID id) {
         var rows=jdbc.query("select * from container_owner_current where container_id=?",(rs,n)->new State(
@@ -57,10 +58,10 @@ public class ContainerStockService {
     UUID transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type,java.time.OffsetDateTime effectiveAt) {
         State old=state(container);
         UUID currentShipping=Set.of("EXPECTED","ON_TERMINAL").contains(status)?null:shipping;
-        if(old==null) jdbc.update("insert into container_owner(id,container_id,status,shipping_order_id) values(?,?,?,?)",
-            UUID.randomUUID(),container,status,currentShipping);
-        else jdbc.update("update container_owner set status=?,shipping_order_id=?,version=version+1,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
-            status,currentShipping,old.id());
+        if(old==null) jdbc.update("insert into container_owner(id,container_id,client_id,status,shipping_order_id) values(?,?,?,?,?)",
+            UUID.randomUUID(),container,client,status,currentShipping);
+        else jdbc.update("update container_owner set client_id=?,status=?,shipping_order_id=?,version=version+1,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
+            client,status,currentShipping,old.id());
         // Only drafts follow the register. Confirmation freezes the shipment owner.
         jdbc.update("""
             update shipping_order_container sc set owner_container_id=?
