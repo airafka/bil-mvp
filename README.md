@@ -6,6 +6,8 @@
 
 С V56 подтверждение передачи сразу записывает собственника и effective_date в container_ownership_period. Шедулера нет: текущий собственник и отчёт определяются по рабочей дате при чтении. С V57 разрешена передача задним числом внутри текущего визита: дата не раньше фактического receiving, КТК сейчас находится в остатках. Новая запись может вставляться между существующими передачами; следующие назначения сохраняются, исторические дни и CSV пересчитываются. До будущей даты новая запись и будущая граница не показываются в отчёте. Shipping до передачи или отмена receiving прекращают будущую передачу; повторный receiving не наследует её. Правила — в [CONTAINER_STOCK.md](CONTAINER_STOCK.md). Опубликованный снимок V28 не обновлён.
 
+С V59 визит и первое назначение собственника создаются только при фактической поставке. Ожидаемая поставка хранится в container_owner.receiving_order_id; при выполнении эта ссылка заменяется на container_visit_id. Вывоз обновляет существующий визит, дата вывоза в назначениях собственников не дублируется.
+
 С V58 удалены служебные таблицы container_movement, order_cancellation и outbound_data. Отмена выполняется без причины и архивного снимка состава; складская история, отчёт хранения и CSV сохраняются.
 
 ## Документация
@@ -87,7 +89,7 @@
 
 - Frontend: React, TypeScript, React Router, Vite; зависимости фиксирует [package-lock.json](frontend/package-lock.json).
 - Backend: Java 21, Spring Boot 4.1.0, Spring JDBC, Bean Validation.
-- БД: PostgreSQL 16, Flyway; активный каталог миграций — [db/baseline](backend/src/main/resources/db/baseline), V1–V58.
+- БД: PostgreSQL 16, Flyway; активный каталог миграций — [db/baseline](backend/src/main/resources/db/baseline), V1–V59.
 - Сборка и запуск: Docker Compose; frontend раздаёт Nginx.
 
 [Backend Dockerfile](backend/Dockerfile) выполняет Maven package с тестами; [frontend Dockerfile](frontend/Dockerfile) — ESLint, Vitest и TypeScript/Vite build. Локально: mvn test из backend; npm ci, npm run lint, npm run test, npm run build из frontend. Для frontend dev доступен npm run dev.

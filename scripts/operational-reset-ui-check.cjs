@@ -25,7 +25,7 @@ async function main() {
   assert.ok(info.NetworkSettings.Ports['8080/tcp'].some(p => p.HostPort === '8325'));
   assert.deepEqual(Object.keys(info.NetworkSettings.Networks), ['billing-reset-ui-test']);
   assert.equal(sql('select current_database()'), db);
-  assert.equal(sql('select max(version::int) from flyway_schema_history where success'), '58');
+  assert.equal(sql('select max(version::int) from flyway_schema_history where success'), '59');
   const before = snapshot(), numbers = sequences(), preview = await api(endpoint);
   assert.ok(preview.totalRows > 0, 'Restore populated source first');
   await api(endpoint, 'POST', { confirmation: 'delete', token: preview.token }, 400);
