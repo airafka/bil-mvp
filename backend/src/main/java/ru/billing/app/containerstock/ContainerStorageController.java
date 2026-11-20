@@ -122,6 +122,40 @@ public class ContainerStorageController {
             (rs,n)->row(rs,reportDate),args.toArray()),page,size,count);
     }
     public record ContainerOption(UUID id, String name) {}
+    public record Visit(UUID id,UUID containerId,String containerName,OffsetDateTime receivingAt,OffsetDateTime shippingAt,
+        UUID receivingOrderId,Long receivingOrderNumber,UUID shippingOrderId,Long shippingOrderNumber,
+        long storageDays,List<Row> periods) {}
+    @GetMapping("/visits")
+    @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public PagedResponse<Visit> visits(@RequestParam(defaultValue="")String query,@RequestParam(required=false)UUID periodId,
+            @RequestParam(required=false)LocalDate asOf,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="20")int size) {
+        var reportDate=date(asOf);
+        var f=filter(query,"ACTIVE",null,periodId,null,null,reportDate);
+        page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
+        String visitsFrom=FROM+" join container_ownership_period op on op.id=p.id join container_visit v on v.id=op.container_visit_id ";
+        long count=jdbc.queryForObject("select count(distinct v.id) "+visitsFrom+f.sql(),Long.class,f.args().toArray());
+        var args=new ArrayList<>(f.args());args.add(size);args.add((long)page*size);
+        var ids=jdbc.query("select v.id "+visitsFrom+f.sql()+" group by v.id order by v.receiving_date desc,v.id limit ? offset ?",
+            (rs,n)->rs.getObject(1,UUID.class),args.toArray());
+        if(ids.isEmpty())return PagedResponse.of(List.of(),page,size,count);
+        // Page complete visits first, then load every visible ownership period for those visits.
+        // A period deep link selects its visit without truncating that visit's ownership chain.
+        var periodsByVisit=new LinkedHashMap<UUID,List<Row>>();ids.forEach(id->periodsByVisit.put(id,new ArrayList<>()));
+        var periodsArgs=new ArrayList<Object>();periodsArgs.add(reportDate);periodsArgs.addAll(ids);
+        String sql="with report_periods as materialized (select p.*,op.container_visit_id from container_storage_period_at(?::date) p "
+            +"join container_ownership_period op on op.id=p.id where p.status in ('OPEN','CLOSED') and op.container_visit_id in ("
+            +String.join(",",Collections.nCopies(ids.size(),"?"))+")) "
+            +SELECT.replace("select p.id,","select p.container_visit_id,p.id,")+" order by h.occurred_at,h.created_at,h.id";
+        jdbc.query(sql,(org.springframework.jdbc.core.RowCallbackHandler)rs->periodsByVisit.get(rs.getObject("container_visit_id",UUID.class)).add(row(rs,reportDate)),periodsArgs.toArray());
+        var visits=new ArrayList<Visit>();
+        periodsByVisit.forEach((id,periods)->{
+            Row first=periods.getFirst(),last=periods.getLast();boolean shipped="SHIPPING_ORDER".equals(last.endOrderType());
+            visits.add(new Visit(id,first.containerId(),first.containerName(),first.arrivalAt(),shipped?last.departureAt():null,
+                first.startOrderId(),first.startOrderNumber(),shipped?last.endOrderId():null,shipped?last.endOrderNumber():null,
+                periods.stream().mapToLong(Row::storageDays).sum(),List.copyOf(periods)));
+        });
+        return PagedResponse.of(visits,page,size,count);
+    }
     @GetMapping("/containers")
     public List<ContainerOption> containers() {
         return jdbc.query("""

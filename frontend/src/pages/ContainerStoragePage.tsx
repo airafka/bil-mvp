@@ -1,33 +1,52 @@
 import { historyOrderPath } from '../containerStock'
 import { useApplicationClock } from '../applicationClock'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { request } from '../http'
 import type { PagedResponse, ReferenceOption } from '../domain'
 import { UiSelect } from '../components/FormControls'
 import { TableReveal } from '../components/TableReveal'
-import { storageBoundaryLabel, storageDate, storageClientOwner, storageTransport, type StoragePeriod } from '../containerStorage'
+import { storageBoundaryLabel, storageDate, storageClientOwner, storageTransport, type StorageVisit } from '../containerStorage'
 import './ContainerStoragePage.css'
 
-const columns = [140, 180, 90, 145, 145, 105, 145, 145, 105, 240, 110, 240, 220, 240, 110, 240, 220]
+const columns = [44, 140, 90, 145, 105, 145, 105, 240, 110, 240, 220, 240, 110, 240, 220]
+const periodColumns = [220, 90, 145, 160, 105, 145, 160, 105]
 
-export function StorageTable({ rows, emptyText }: { rows: StoragePeriod[]; emptyText: string }) {
+export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows: StorageVisit[]; emptyText: string; selectedPeriodId?: string }) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   return <table className="storage-table"><colgroup>{columns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
-    <thead><tr><th>Номер КТК</th><th>Собственник КТК</th><th>Дней хранения</th><th>Начало периода</th>
-      <th>Событие</th><th>Заявка</th><th>Конец периода</th><th>Событие</th><th>Заявка</th>
-      <th>Клиент/Собственник поставки</th><th>Транспорт поставки</th><th>Грузоперевозчик/грузоотправитель поставки</th><th>Груз поставки</th>
-      <th>Клиент/Собственник вывоза</th><th>Транспорт вывоза</th><th>Грузоперевозчик/грузополучатель вывоза</th><th>Груз вывоза</th></tr></thead>
-    <tbody>{rows.length ? rows.map(row => <tr key={row.id} data-period-id={row.id}>
-      <td><Link to={'/container-owners/' + row.containerId + '/history'}>{row.containerName}</Link></td>
-      <td>{row.ownerName || '—'}</td><td>{row.storageDays}</td><td>{storageDate(row.arrivalAt)}</td><td>{storageBoundaryLabel(row.startOrderType)}</td>
-      <td>{row.startOrderId && row.startOrderType ? <Link to={historyOrderPath({ orderId: row.startOrderId, orderType: row.startOrderType })}>{row.startOrderNumber}</Link> : null}</td>
-      <td>{row.departureAt ? storageDate(row.departureAt) : ''}</td><td>{storageBoundaryLabel(row.endOrderType)}</td>
-      <td>{row.endOrderId && row.endOrderType ? <Link to={historyOrderPath({ orderId: row.endOrderId, orderType: row.endOrderType })}>{row.endOrderNumber}</Link> : null}</td>
-      <td>{storageClientOwner(row.receivingClientName, row.receivingOwnerName)}</td><td>{storageTransport(row.arrivalTransport)}</td>
-      <td>{row.arrivalParty}</td><td>{row.arrivalCargo}</td>
-      <td>{storageClientOwner(row.shippingClientName, row.shippingOwnerName)}</td><td>{storageTransport(row.departureTransport)}</td>
-      <td>{row.departureParty}</td><td>{row.departureCargo}</td>
-    </tr>) : <tr><td colSpan={columns.length} className="table-message">{emptyText}</td></tr>}</tbody>
+    <thead><tr><th aria-label="Раскрытие визита" /><th>Номер КТК</th><th>Дней хранения</th><th>Дата receiving</th><th>Заявка receiving</th><th>Дата shipping</th><th>Заявка shipping</th>
+      <th>Клиент/Собственник receiving</th><th>Транспорт receiving</th><th>Грузоперевозчик/грузоотправитель receiving</th><th>Груз receiving</th>
+      <th>Клиент/Собственник shipping</th><th>Транспорт shipping</th><th>Грузоперевозчик/грузополучатель shipping</th><th>Груз shipping</th></tr></thead>
+    <tbody>{rows.length ? rows.map(visit => {
+      const first = visit.periods[0], last = visit.periods[visit.periods.length - 1]
+      const open = expanded[visit.id] ?? visit.periods.some(period => period.id === selectedPeriodId)
+      const detailsId = 'storage-visit-' + visit.id
+      return <Fragment key={visit.id}>
+        <tr data-visit-id={visit.id} className={open ? 'storage-visit-open' : ''}>
+          <td className="registry-index"><button type="button" className="storage-expand" aria-expanded={open} aria-controls={detailsId} aria-label={(open ? 'Свернуть' : 'Раскрыть') + ' визит ' + visit.containerName + ' от ' + storageDate(visit.receivingAt)} onClick={() => setExpanded(value => ({ ...value, [visit.id]: !open }))}><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg></button></td>
+          <td><Link to={'/container-owners/' + visit.containerId + '/history'}>{visit.containerName}</Link></td>
+          <td>{visit.storageDays}</td><td>{storageDate(visit.receivingAt)}</td>
+          <td><Link to={historyOrderPath({ orderId: visit.receivingOrderId, orderType: 'RECEIVING_ORDER' })}>{visit.receivingOrderNumber}</Link></td>
+          <td>{visit.shippingAt ? storageDate(visit.shippingAt) : ''}</td>
+          <td>{visit.shippingOrderId && <Link to={historyOrderPath({ orderId: visit.shippingOrderId, orderType: 'SHIPPING_ORDER' })}>{visit.shippingOrderNumber}</Link>}</td>
+          <td>{storageClientOwner(first.receivingClientName, first.receivingOwnerName)}</td><td>{storageTransport(first.arrivalTransport)}</td><td>{first.arrivalParty}</td><td>{first.arrivalCargo}</td>
+          <td>{storageClientOwner(last.shippingClientName, last.shippingOwnerName)}</td><td>{storageTransport(last.departureTransport)}</td><td>{last.departureParty}</td><td>{last.departureCargo}</td>
+        </tr>
+        {open && <tr className="storage-visit-details" id={detailsId}><td colSpan={columns.length}>
+          <div className="storage-period-frame"><table className="storage-period-table" aria-label={'Собственники визита ' + visit.containerName + ' от ' + storageDate(visit.receivingAt)}>
+            <caption>Собственники и передачи</caption><colgroup>{periodColumns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
+            <thead><tr><th>Собственник КТК</th><th>Дней хранения</th><th>Начало периода</th><th>Событие</th><th>Заявка</th><th>Конец периода</th><th>Событие</th><th>Заявка</th></tr></thead>
+            <tbody>{visit.periods.map(row => <tr key={row.id} data-period-id={row.id} className={row.id === selectedPeriodId ? 'storage-period-selected' : ''}>
+              <td>{row.ownerName || '—'}</td><td>{row.storageDays}</td><td>{storageDate(row.arrivalAt)}</td><td>{storageBoundaryLabel(row.startOrderType)}</td>
+              <td>{row.startOrderId && row.startOrderType && <Link to={historyOrderPath({ orderId: row.startOrderId, orderType: row.startOrderType })}>{row.startOrderNumber}</Link>}</td>
+              <td>{row.departureAt ? storageDate(row.departureAt) : ''}</td><td>{storageBoundaryLabel(row.endOrderType)}</td>
+              <td>{row.endOrderId && row.endOrderType && <Link to={historyOrderPath({ orderId: row.endOrderId, orderType: row.endOrderType })}>{row.endOrderNumber}</Link>}</td>
+            </tr>)}</tbody>
+          </table></div>
+        </td></tr>}
+      </Fragment>
+    }) : <tr><td colSpan={columns.length} className="table-message">{emptyText}</td></tr>}</tbody>
   </table>
 }
 
@@ -39,52 +58,23 @@ export default function ContainerStoragePage() {
   const [draftSearch, setDraftSearch] = useState({ query, value: query })
   const search = draftSearch.query === query ? draftSearch.value : query
   const [attempt, setAttempt] = useState(0)
-  const [pageSize, setPageSize] = useState(1)
-  const tableWrap = useRef<HTMLDivElement>(null)
-  // Retain the tallest measured row so short/last pages cannot oscillate the request size.
-  const measuredRowHeight = useRef(36)
+  const pageSize = 20
   const filter = new URLSearchParams({ query, status: params.has('periodId') ? 'ALL' : 'ACTIVE' })
   if(params.get('periodId')) filter.set('periodId',params.get('periodId')!)
-  const url = '/api/container-storage-periods?' + filter + '&page=' + page + '&size=' + pageSize
+  const url = '/api/container-storage-periods/visits?' + filter + '&page=' + page + '&size=' + pageSize
   const requestKey = url + ':' + attempt + ':' + clock.date + ':' + clock.version
-  const [result, setResult] = useState<{ key: string; data: PagedResponse<StoragePeriod>; containers: ReferenceOption[] } | null>(null)
+  const [result, setResult] = useState<{ key: string; data: PagedResponse<StorageVisit>; containers: ReferenceOption[] } | null>(null)
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null)
   const error = failure?.key === requestKey ? failure.message : ''
   const loading = result?.key !== requestKey && !error
   const data = result?.key === requestKey ? result.data : null
   useEffect(() => {
     let active = true
-    Promise.all([request<PagedResponse<StoragePeriod>>(url), request<ReferenceOption[]>('/api/container-storage-periods/containers')])
+    Promise.all([request<PagedResponse<StorageVisit>>(url), request<ReferenceOption[]>('/api/container-storage-periods/containers')])
       .then(([data, containers]) => { if (active) { setResult({ key: requestKey, data, containers }); setFailure(null) } })
       .catch((cause: unknown) => { if (active) setFailure({ key: requestKey, message: cause instanceof Error ? cause.message : 'Не удалось загрузить хранение' }) })
     return () => { active = false }
   }, [url, requestKey])
-  useLayoutEffect(() => {
-    const frame = tableWrap.current
-    const table = frame?.querySelector('table')
-    if (!frame || !table) return
-    let scheduled = 0
-    const measure = () => {
-      if (!loading && data?.items.length) {
-        for (const row of table.tBodies[0].rows) measuredRowHeight.current = Math.max(measuredRowHeight.current, row.offsetHeight + 1)
-      }
-      const available = frame.clientHeight - (table.tHead?.offsetHeight ?? 0) - 2
-      const nextSize = Math.max(1, Math.min(100, Math.floor(available / measuredRowHeight.current)))
-      if (nextSize === pageSize) return
-      setPageSize(nextSize)
-      // Keep the current first record in view when the window or row height changes.
-      const nextPage = Math.floor(page * pageSize / nextSize)
-      if (nextPage !== page) setParams(current => {
-        const next = new URLSearchParams(current)
-        if (nextPage) next.set('page', String(nextPage)); else next.delete('page')
-        return next
-      }, { replace: true })
-    }
-    const schedule = () => { cancelAnimationFrame(scheduled); scheduled = requestAnimationFrame(measure) }
-    const observer = new ResizeObserver(schedule)
-    observer.observe(frame); observer.observe(table); schedule()
-    return () => { observer.disconnect(); cancelAnimationFrame(scheduled) }
-  }, [data, loading, page, pageSize, setParams])
   useEffect(() => {
     if (!data || page < Math.max(1, data.totalPages)) return
     setParams(current => {
@@ -110,11 +100,11 @@ export default function ContainerStoragePage() {
       <button className="secondary-button" type="submit" disabled={loading || !!error}>Найти</button>
       {params.size > 0 && <button type="button" className="secondary-button" onClick={() => { setParams({}); setDraftSearch({ query: '', value: '' }) }}>Сбросить</button>}
     </form>
-    {params.has('periodId') && <p>Показан выбранный период хранения.</p>}
+    {params.has('periodId') && <p>Показан визит с выбранным периодом хранения.</p>}
     {error && <div role="alert" className="storage-review">{error} <button onClick={() => setAttempt(a => a + 1)}>Повторить</button></div>}
 
-    <TableReveal loading={loading}><div className="table-wrap" ref={tableWrap} data-page-size={pageSize}><StorageTable rows={data?.items || []} emptyText={error ? 'Данные не загружены' : 'Периоды хранения не найдены'} /></div></TableReveal>
-    <div className="pagination"><span>Всего: {data?.totalElements ?? result?.data.totalElements ?? '—'}</span>
+    <TableReveal loading={loading}><div className="table-wrap" data-page-size={pageSize}><StorageVisitsTable key={query + (params.get('periodId') || '')} rows={data?.items || []} selectedPeriodId={params.get('periodId') || undefined} emptyText={error ? 'Данные не загружены' : 'Визиты хранения не найдены'} /></div></TableReveal>
+    <div className="pagination"><span>Всего визитов: {data?.totalElements ?? result?.data.totalElements ?? '—'}</span>
       <button disabled={loading || page === 0} onClick={() => change('page', String(page - 1))}>Назад</button><span>{page + 1} / {Math.max(1, data?.totalPages ?? result?.data.totalPages ?? 1)}</span>
       <button disabled={loading || !data || page + 1 >= data.totalPages} onClick={() => change('page', String(page + 1))}>Далее</button></div>
   </section>

@@ -6,6 +6,11 @@ export type StoragePeriod = {
   receivingClientName?: string; receivingOwnerName?: string; arrivalTransport?: string; arrivalParty?: string; arrivalCargo?: string;
   shippingClientName?: string; shippingOwnerName?: string; departureTransport?: string; departureParty?: string; departureCargo?: string;
 }
+export type StorageVisit = {
+  id: string; containerId: string; containerName: string; receivingAt: string; shippingAt?: string;
+  receivingOrderId: string; receivingOrderNumber: number; shippingOrderId?: string; shippingOrderNumber?: number;
+  storageDays: number; periods: StoragePeriod[];
+}
 export const storageDate = (value?: string) => value ? new Date(value).toLocaleString('ru-RU', {
   timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
 }) : '—'

@@ -5,11 +5,21 @@
 .content > .storage-page { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .storage-page > :not(.table-card) { flex-shrink: 0; }
 .storage-page > .table-card { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.storage-page > .table-card > .table-wrap { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; }
-.app-shell .storage-table thead th { position: sticky; top: 0; z-index: 1; }
+.storage-page > .table-card > .table-wrap { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.app-shell .storage-table > thead > tr > th { position: sticky; top: 0; z-index: 1; }
 .storage-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: start; margin-bottom: 16px; }
 .storage-filters .field { width: 536px; max-width: 100%; margin: 0; }
 .storage-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .storage-review { color: #9a3412; }
 .storage-table td:first-child { white-space: nowrap; font-weight: normal; }
 @media (max-width: 640px) { .storage-filters .field { width: 100%; } .storage-page .page-header { flex-wrap: wrap; gap: 12px; } }
+
+.app-shell .storage-expand { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #334155; cursor: pointer; }
+.storage-expand svg { transition: transform 120ms ease; }
+.storage-expand[aria-expanded="true"] svg { transform: rotate(90deg); }
+.storage-expand:focus-visible { outline: 2px solid var(--ui-field-focus); outline-offset: 2px; }
+.app-shell .storage-table > tbody > .storage-visit-open { background: #f0f5ff; }
+.app-shell .storage-table > tbody > .storage-visit-details > td { padding: 12px 16px 16px 44px; height: auto; background: #f8fafc; white-space: normal; }
+.storage-period-frame { width: 1130px; max-width: 100%; }
+.storage-period-table caption { text-align: left; padding: 0 0 8px; font-weight: 500; }
+.app-shell .storage-period-table .storage-period-selected { background: #dbeafe; }
