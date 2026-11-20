@@ -9,7 +9,7 @@ import { TableReveal } from '../components/TableReveal'
 import { storageBoundaryLabel, storageDate, storageClientOwner, storageTransport, type StorageVisit } from '../containerStorage'
 import './ContainerStoragePage.css'
 
-const columns = [44, 140, 200, 90, 145, 150, 105, 145, 150, 105, 240, 110, 240, 220, 240, 110, 240, 220]
+const columns = [44, 160, 200, 90, 145, 150, 105, 145, 150, 105, 240, 110, 240, 220, 240, 110, 240, 220]
 
 export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows: StorageVisit[]; emptyText: string; selectedPeriodId?: string }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -20,12 +20,19 @@ export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows
       <th>Клиент/Собственник вывоза</th><th>Транспорт вывоза</th><th>Грузоперевозчик/грузополучатель вывоза</th><th>Груз вывоза</th></tr></thead>
     <tbody>{rows.length ? rows.map(visit => {
       const first = visit.periods[0], last = visit.periods[visit.periods.length - 1]
-      const open = expanded[visit.id] ?? visit.periods.some(period => period.id === selectedPeriodId)
+      const hasChanges = visit.periods.length > 1
+      const changes = visit.periods.filter(period => period.startOrderType === 'SERVICE_ORDER').length
+      const changesLabel = changes === 0 ? 'Без смен' : changes + ' ' + (changes % 10 === 1 && changes % 100 !== 11 ? 'смена' : changes % 10 >= 2 && changes % 10 <= 4 && (changes % 100 < 12 || changes % 100 > 14) ? 'смены' : 'смен')
+      const selected = visit.periods.some(period => period.id === selectedPeriodId)
+      const open = hasChanges && (expanded[visit.id] ?? selected)
       const detailsId = 'storage-visit-' + visit.id
       return <Fragment key={visit.id}>
-        <tr data-visit-id={visit.id} className={'storage-visit-row' + (open ? ' storage-visit-open' : '')}>
-          <td className="registry-index"><button type="button" className="storage-expand" aria-expanded={open} aria-controls={open ? visit.periods.map(period => detailsId + '-' + period.id).join(' ') : undefined} aria-label={(open ? 'Свернуть' : 'Раскрыть') + ' визит ' + visit.containerName + ' от ' + storageDate(visit.receivingAt)} onClick={() => setExpanded(value => ({ ...value, [visit.id]: !open }))}><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg></button></td>
-          <td><Link to={'/container-owners/' + visit.containerId + '/history'}>{visit.containerName}</Link></td>
+        <tr data-visit-id={visit.id} className={'storage-visit-row' + (open ? ' storage-visit-open' : '') + (!hasChanges && selected ? ' storage-visit-selected' : '')}>
+          <td className="registry-index">{hasChanges && <button type="button" className="storage-expand" aria-expanded={open} aria-controls={open ? visit.periods.map(period => detailsId + '-' + period.id).join(' ') : undefined} aria-label={(open ? 'Свернуть' : 'Раскрыть') + ' визит ' + visit.containerName + ' от ' + storageDate(visit.receivingAt)} onClick={() => setExpanded(value => ({ ...value, [visit.id]: !open }))}><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg></button>}</td>
+          <td className="storage-container"><Link to={'/container-owners/' + visit.containerId + '/history'}>{visit.containerName}</Link>
+            <span className={'storage-visit-status ' + (visit.shippingAt ? 'storage-visit-shipped' : 'storage-visit-stored')}>{visit.shippingAt ? 'Вывезен' : 'На хранении'}</span>
+            <span className="storage-change-count">{changesLabel}</span>
+          </td>
           <td>{last.ownerName || '—'}</td><td className="storage-visit-total">{visit.storageDays}</td><td>{storageDate(visit.receivingAt)}</td><td>Поставка</td>
           <td><Link to={historyOrderPath({ orderId: visit.receivingOrderId, orderType: 'RECEIVING_ORDER' })}>{visit.receivingOrderNumber}</Link></td>
           <td>{visit.shippingAt ? storageDate(visit.shippingAt) : ''}</td><td>{visit.shippingAt ? 'Вывоз' : ''}</td>

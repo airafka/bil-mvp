@@ -6,7 +6,7 @@
 .storage-page > :not(.table-card) { flex-shrink: 0; }
 .storage-page > .table-card { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .storage-page > .table-card > .table-wrap { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
-.app-shell .storage-table > thead > tr > th { position: sticky; top: 0; z-index: 1; }
+.app-shell .storage-page .storage-table > thead > tr > th { position: sticky; top: 0; z-index: 1; }
 .storage-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: start; margin-bottom: 16px; }
 .storage-filters .field { width: 536px; max-width: 100%; margin: 0; }
 .storage-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -18,16 +18,29 @@
 .storage-expand svg { transition: transform 120ms ease; }
 .storage-expand[aria-expanded="true"] svg { transform: rotate(90deg); }
 .storage-expand:focus-visible { outline: 2px solid var(--ui-field-focus); outline-offset: 2px; }
-.app-shell .storage-table > tbody > .storage-visit-row { background: #f5f7fb; }
-.app-shell .storage-table > tbody > .storage-visit-open { background: #edf3fc; }
-.app-shell .storage-table .storage-visit-total { font-weight: 500; }
-.app-shell .storage-table > tbody > .storage-period-row { background: #fff; }
-.app-shell .storage-table > tbody > .storage-period-row:hover { background: #f5f9ff; }
-.app-shell .storage-table > tbody > .storage-period-selected { background: #e4efff; }
-.app-shell .storage-table > tbody > .storage-period-row > td { border-top-color: #edf1f7; }
+.app-shell .storage-page .storage-table > tbody > .storage-visit-row { background: #f1f5fb; }
+.app-shell .storage-page .storage-table > tbody > .storage-visit-open { background: #edf3fc; }
+.app-shell .storage-page .storage-table .storage-visit-total, .storage-container > a { font-weight: 600; }
+.app-shell .storage-page .storage-table > tbody > .storage-period-row { background: #fff; }
+.app-shell .storage-page .storage-table > tbody > .storage-period-row:hover { background: #f5f9ff; }
+.app-shell .storage-page .storage-table > tbody > :is(.storage-period-selected, .storage-visit-selected) { background: #e4efff; }
+.app-shell .storage-page .storage-table > tbody > .storage-period-row > td { border-top-color: #edf1f7; }
 .storage-period-guide { position: relative; }
 .storage-period-guide::before { content: ''; position: absolute; left: 21px; top: 0; bottom: 0; width: 1px; background: #c8d6e9; }
 .storage-period-guide::after { content: ''; position: absolute; left: 21px; top: 50%; width: 10px; height: 1px; background: #c8d6e9; }
 .storage-period-last .storage-period-guide::before { bottom: 50%; }
 .storage-expand:hover { background: #dfe9f7; }
 @media (prefers-reduced-motion: reduce) { .storage-expand svg { transition: none; } }
+
+/* Opaque cells keep the visit identity visible above horizontally scrolling data. */
+.app-shell .storage-page .storage-table { border-collapse: separate; border-spacing: 0; }
+.app-shell .storage-page .storage-table > tbody > tr > td { background: inherit; }
+.app-shell .storage-page .storage-table > tbody > .storage-visit-row:hover { background: #e8f0fb; }
+.app-shell .storage-page .storage-table > :is(thead, tbody) > tr > :is(th, td):nth-child(-n+2):not([colspan]) { position: sticky; left: 0; z-index: 2; }
+.app-shell .storage-page .storage-table > :is(thead, tbody) > tr > :is(th, td):nth-child(2):not([colspan]) { left: 44px; box-shadow: 1px 0 0 #d9e2ef; }
+.app-shell .storage-page .storage-table > thead > tr > th:nth-child(-n+2):not([colspan]) { z-index: 3; }
+.storage-container > a { display: block; white-space: nowrap; }
+.storage-visit-status { display: block; width: fit-content; margin-top: 3px; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 18px; }
+.storage-visit-stored { color: #166534; background: #dcfce7; }
+.storage-visit-shipped { color: #475569; background: #e2e8f0; }
+.storage-change-count { display: block; margin-top: 2px; color: #64748b; font-size: 11px; line-height: 16px; }
