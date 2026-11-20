@@ -13,12 +13,22 @@ public class OwnershipOrderController {
     public OwnershipOrderController(OwnershipOrderService service){this.service=service;}
     @GetMapping public PagedResponse<OwnershipOrderService.Header> page(@RequestParam(defaultValue="")String query,@RequestParam(defaultValue="")String status,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="20")int size){return service.page(query.trim(),status,page,size);}
     @PostMapping @ResponseStatus(HttpStatus.CREATED) public OwnershipOrderService.Details create(@Valid @RequestBody OwnershipOrderService.Create request){return service.create(request);}
-    @GetMapping("/containers/available") public PagedResponse<OwnershipOrderService.Link> availableForCreate(@RequestParam UUID clientId,@RequestParam(required=false)java.time.LocalDate effectiveDate,@RequestParam(defaultValue="")String query,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="20")int size){return service.availableForCreate(clientId,effectiveDate,query.trim(),page,size);}
+    @GetMapping("/containers/available") public PagedResponse<OwnershipOrderService.Link> availableForCreate(
+            @RequestParam UUID clientId,@RequestParam(required=false) UUID sourceClientId,
+            @RequestParam(required=false) java.time.LocalDate effectiveDate,@RequestParam(defaultValue="") String query,
+            @RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size){
+        return service.availableForCreate(clientId,sourceClientId,effectiveDate,query.trim(),page,size);
+    }
     @GetMapping("/{id}") public OwnershipOrderService.Details details(@PathVariable UUID id){return service.details(id);}
     @PutMapping("/{id}") public OwnershipOrderService.Details update(@PathVariable UUID id,@Valid @RequestBody OwnershipOrderService.Update request){return service.update(id,request);}
     @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void delete(@PathVariable UUID id){service.delete(id);}
     @PostMapping("/{id}/accept") public OwnershipOrderService.Details accept(@PathVariable UUID id){return service.accept(id);}
     @PostMapping("/{id}/withdraw") public OwnershipOrderService.Details withdraw(@PathVariable UUID id){return service.withdraw(id);}
-    @GetMapping("/{id}/containers/available") public PagedResponse<OwnershipOrderService.Link> available(@PathVariable UUID id,@RequestParam(required=false)java.time.LocalDate effectiveDate,@RequestParam(defaultValue="")String query,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="20")int size){return service.available(id,effectiveDate,query.trim(),page,size);}
+    @GetMapping("/{id}/containers/available") public PagedResponse<OwnershipOrderService.Link> available(
+            @PathVariable UUID id,@RequestParam(required=false) UUID clientId,
+            @RequestParam(required=false) java.time.LocalDate effectiveDate,@RequestParam(defaultValue="") String query,
+            @RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size){
+        return service.available(id,clientId,effectiveDate,query.trim(),page,size);
+    }
     @PutMapping("/{id}/containers") public OwnershipOrderService.Details select(@PathVariable UUID id,@Valid @RequestBody @NotNull List<@NotNull @Valid Selection> selected){return service.select(id,selected);}
 }

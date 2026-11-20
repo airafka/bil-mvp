@@ -6,7 +6,7 @@ import { Notification } from '../components/Notification'
 import { ActionIcon } from '../components/ActionIcon'
 import { RowActions } from '../components/RowActions'
 import { UiInput, UiSelect, UiTextarea } from '../components/FormControls'
-import { getReferenceOptions, getOwnershipOrders, getOwnershipOrder, createOwnershipOrder, updateOwnershipOrder, getOwnershipAvailable, getOwnershipAvailableForCreate, saveOwnershipSelection, acceptOwnershipOrder, withdrawOwnershipOrder, deleteOwnershipOrder } from '../api'
+import { getReferenceOptions, getOwnershipOrders, getOwnershipOrder, createOwnershipOrder, updateOwnershipOrder, getOwnershipAvailable, getOwnershipAvailableForCreate, acceptOwnershipOrder, withdrawOwnershipOrder, deleteOwnershipOrder } from '../api'
 import { businessDateLabel, useApplicationClock } from '../applicationClock'
 import type { OwnershipContainer, OwnershipDetails, OwnershipHeader } from '../containerStock'
 import { containerTypeLabel, type PagedResponse, type ReferenceOption } from '../domain'
@@ -68,22 +68,47 @@ export function OwnershipOrderCreatePage() {
   const { clock } = useApplicationClock()
   const [enteredDate, setEnteredDate] = useState<string>()
   const effectiveDate = enteredDate ?? clock.date
+  const [sourceClient, setSourceClient] = useState('')
   const [clients, setClients] = useState<ReferenceOption[]>([]), [client, setClient] = useState(''), [comment, setComment] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false)
   const [tab, setTab] = useState<'main' | 'containers'>('main')
   const [page, setPage] = useState(0)
   const [available, setAvailable] = useState<PagedResponse<OwnershipContainer> | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  useEffect(() => { if (!client || !effectiveDate) return; let active = true; getOwnershipAvailableForCreate(client, '', page, effectiveDate).then(value => { if (active) setAvailable(value) }).catch(e => { if (active) setError(errorText(e)) }); return () => { active = false } }, [client, page, clock.date, effectiveDate])
-  function changeTab(value: 'main' | 'containers') { if (value === 'containers' && !effectiveDate) { setError('Укажите дату передачи'); return }; if (value === 'containers' && !client) { setError('Выберите нового собственника КТК'); return }; setTab(value) }
+  const [selectionDate, setSelectionDate] = useState(effectiveDate)
+  function clearSelection() { setSelected(new Set()); setAvailable(null); setPage(0) }
+  if (selectionDate !== effectiveDate) {
+    setSelectionDate(effectiveDate)
+    clearSelection()
+  }
+  useEffect(() => {
+    if (tab !== 'containers' || !sourceClient || !client || !effectiveDate) return
+    let active = true
+    getOwnershipAvailableForCreate(client, '', page, effectiveDate, sourceClient)
+      .then(value => { if (active) setAvailable(value) })
+      .catch(e => { if (active) setError(errorText(e)) })
+    return () => { active = false }
+  }, [tab, sourceClient, client, page, clock.date, effectiveDate])
+  function checkFields() {
+    if (!sourceClient) setError('Выберите прежнего собственника КТК')
+    else if (!client) setError('Выберите нового собственника КТК')
+    else if (client === sourceClient) setError('Прежний и новый собственники должны различаться')
+    else if (!effectiveDate) setError('Укажите дату передачи')
+    else return true
+    setTab('main')
+    return false
+  }
+  function changeTab(value: 'main' | 'containers') {
+    if (value === 'containers' && !checkFields()) return
+    setError(''); setTab(value)
+  }
   const lock = useRef(false), navigate = useNavigate()
   useEffect(() => { let active = true; getReferenceOptions('clients').then(v => { if (active) setClients(v) }).catch(e => { if (active) setError(errorText(e)) }); return () => { active = false } }, [])
   async function create() {
     if (lock.current) return
-    if (!client) { setError('Выберите нового собственника КТК'); return }
-    if (!effectiveDate) { setError('Укажите дату передачи'); setTab('main'); return }
+    if (!checkFields()) return
     if (!selected.size) { setError('Выберите хотя бы один КТК'); setTab('containers'); return }
     lock.current = true; setBusy(true); setError('')
-    try { const result = await createOwnershipOrder(client, comment, [...selected], effectiveDate); navigate('/service-orders/' + result.order.id) }
+    try { const result = await createOwnershipOrder(client, comment, [...selected], effectiveDate, sourceClient); navigate('/service-orders/' + result.order.id) }
     catch (e) { setError(errorText(e)) } finally { lock.current = false; setBusy(false) }
   }
   return <section className="form-page ownership-page"><div className="page-header"><h1>Новая смена собственника КТК</h1><div className="header-actions"><CloseLink /><button className={tab === 'main' ? 'primary-button' : 'secondary-button'} disabled={busy} onClick={() => changeTab(tab === 'main' ? 'containers' : 'main')}>{tab === 'main' ? 'Далее →' : '← Назад'}</button>{tab === 'containers' && <button className="primary-button" disabled={busy} onClick={create}>{busy ? 'Сохраняем…' : 'Создать'}</button>}</div></div>
@@ -94,9 +119,15 @@ export function OwnershipOrderCreatePage() {
         <div className="form-fields-grid"><div className="form-fields-column">
           <label className="field horizontal-field"><span>Номер заявки</span><UiInput value="" readOnly /></label>
           <label className="field horizontal-field"><span>Количество КТК</span><UiInput value={selected.size} readOnly /></label>
-          <label className="field horizontal-field"><span>Новый собственник <b>*</b></span><UiSelect disabled={busy} value={client} onChange={e => { setClient(e.target.value); setSelected(new Set()); setAvailable(null); setPage(0); setError('') }}><option value="" hidden disabled />{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</UiSelect></label>
+          <label className="field horizontal-field"><span>Прежний собственник <b>*</b></span><UiSelect required disabled={busy} value={sourceClient} onChange={e => {
+            const id = e.target.value
+            setSourceClient(id)
+            if (client === id) setClient('')
+            clearSelection(); setError('')
+          }}><option value="" hidden disabled />{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</UiSelect></label>
+          <label className="field horizontal-field"><span>Новый собственник <b>*</b></span><UiSelect required disabled={busy} value={client} onChange={e => { setClient(e.target.value); clearSelection(); setError('') }}><option value="" hidden disabled />{clients.filter(c => c.id !== sourceClient).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</UiSelect></label>
           <label className="field horizontal-field"><span>Услуга</span><UiInput value="Смена собственника КТК" readOnly /></label>
-          <label className="field horizontal-field"><span>Дата передачи <b>*</b></span><UiInput type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEnteredDate(e.target.value); setSelected(new Set()); setAvailable(null); setPage(0) }} /></label>
+          <label className="field horizontal-field"><span>Дата передачи <b>*</b></span><UiInput type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEnteredDate(e.target.value); setError('') }} /></label>
         </div><div className="form-fields-column"><div className="field horizontal-field"><span>Статус</span><div className="ownership-status-field"><OwnershipStatus status="DRAFT" /></div></div></div></div>
       </section>
       <section className="form-section ui-form-section"><div className="form-section-heading"><h2>Дополнительная информация</h2></div><label className="field horizontal-field ownership-comment"><span>Комментарий</span><UiTextarea disabled={busy} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} placeholder="Введите комментарий" /></label></section>
@@ -110,6 +141,7 @@ export function OwnershipOrderViewPage() {
   const { clock } = useApplicationClock()
   const [effectiveDate, setEffectiveDate] = useState('')
   const { ownershipOrderId = '' } = useParams()
+  const [client, setClient] = useState(''), [clients, setClients] = useState<ReferenceOption[]>([])
   const [params, setParams] = useSearchParams()
   const editingRequested = params.get('edit') === '1'
   const tab = params.get('tab') === 'containers' ? 'containers' : 'main'
@@ -118,7 +150,7 @@ export function OwnershipOrderViewPage() {
   const [error, setError] = useState(''), [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [revision, setRevision] = useState(0)
   const lock = useRef(false)
   const loadedOrderId = useRef('')
-  function apply(value: OwnershipDetails) { loadedOrderId.current = value.order.id; setData(value); setEffectiveDate(value.order.effectiveDate || ''); setComment(value.order.comment || ''); setSelected(new Set(value.containers.map(c => c.containerOwnerId))) }
+  function apply(value: OwnershipDetails) { loadedOrderId.current = value.order.id; setData(value); setClient(value.order.clientId); setEffectiveDate(value.order.effectiveDate || ''); setComment(value.order.comment || ''); setSelected(new Set(value.containers.map(c => c.containerOwnerId))) }
   useEffect(() => {
     if (busy || (editingRequested && loadedOrderId.current === ownershipOrderId)) return
     let active = true
@@ -127,23 +159,32 @@ export function OwnershipOrderViewPage() {
   }, [ownershipOrderId, clock.date, editingRequested, busy])
   const draft = data?.order.status === 'DRAFT', editing = draft && editingRequested
   useEffect(() => {
+    if (!editing) return
+    let active = true
+    getReferenceOptions('clients').then(value => { if (active) setClients(value) }).catch(e => { if (active) setError(errorText(e)) })
+    return () => { active = false }
+  }, [editing])
+  useEffect(() => {
     if (data?.order.status !== 'SCHEDULED' || busy) return
     let active = true
     const refresh = () => { if (!document.hidden) getOwnershipOrder(ownershipOrderId).then(value => { if (active) { apply(value); if (value.order.status === 'DONE') setMessage('Дата передачи наступила.') } }).catch(e => { if (active) setError(errorText(e)) }) }
     const timer = window.setInterval(refresh, 5000)
     return () => { active = false; window.clearInterval(timer) }
   }, [ownershipOrderId, data?.order.status, busy])
-  useEffect(() => { if (!editing || !effectiveDate) return; let active = true; getOwnershipAvailable(ownershipOrderId, '', page, effectiveDate).then(v => { if (active) setAvailable(v) }).catch(e => { if (active) setError(errorText(e)) }); return () => { active = false } }, [ownershipOrderId, editing, page, revision, clock.date, effectiveDate])
+  useEffect(() => { if (!editing || !effectiveDate || !client) return; let active = true; getOwnershipAvailable(ownershipOrderId, '', page, effectiveDate, client).then(v => { if (active) setAvailable(v) }).catch(e => { if (active) setError(errorText(e)) }); return () => { active = false } }, [ownershipOrderId, editing, page, revision, clock.date, effectiveDate, client])
+  function clearSelection() { setSelected(new Set()); setAvailable(null); setPage(0); setError('') }
   function changeTab(value: 'main' | 'containers') { if (editing && value === 'containers' && !effectiveDate) { setError('Укажите дату передачи'); return }; setParams({ ...(editing ? { edit: '1' } : {}), ...(value === 'containers' ? { tab: value } : {}) }, { replace: true }) }
   function finishEditing() { setParams(tab === 'containers' ? { tab } : {}, { replace: true }); setAvailable(null); setPage(0) }
   async function save(accept: boolean) {
     if (lock.current) return
     if (editing && !effectiveDate) { setError('Укажите дату передачи'); return }
+    if (editing && (!client || client === data?.order.sourceClientId)) { setError('Выберите нового собственника, отличного от прежнего'); return }
     if (editing && !selected.size) { setError('Выберите хотя бы один КТК'); return }
     lock.current = true; setBusy(true); setError(''); setMessage('')
     try {
-      if (editing) { await updateOwnershipOrder(ownershipOrderId, comment, effectiveDate); await saveOwnershipSelection(ownershipOrderId, [...selected]) }
-      const result = accept ? await acceptOwnershipOrder(ownershipOrderId) : await getOwnershipOrder(ownershipOrderId)
+      const result = accept
+        ? await acceptOwnershipOrder(ownershipOrderId)
+        : await updateOwnershipOrder(ownershipOrderId, comment, effectiveDate, { clientId: client, containerOwnerIds: [...selected] })
       apply(result); finishEditing(); setRevision(v => v + 1); setMessage(accept ? 'Дата передачи сохранена. Собственник определяется по рабочей дате.' : 'Заявка сохранена')
     } catch (e) { setError(errorText(e)) } finally { lock.current = false; setBusy(false) }
   }
@@ -161,12 +202,16 @@ export function OwnershipOrderViewPage() {
     {data.order.status === 'SCHEDULED' && <button className="secondary-button" disabled={busy} onClick={withdraw}>{busy ? 'Обрабатываем…' : 'Вернуть в черновик'}</button>}<CloseLink />
   </div></div>
     {error && <Notification kind="error">{error}</Notification>}{message && <Notification kind="success">{message}</Notification>}
-    <div className="form-workspace"><div className="ownership-tabs-toolbar"><OwnershipTabs tab={tab} change={changeTab} disabled={busy} /></div>
+    <div className="form-workspace"><div className="ownership-tabs-toolbar"><OwnershipTabs tab={tab} change={changeTab} disabled={busy} />{editing && tab === 'containers' && selected.size > 0 && <button type="button" className="secondary-button" disabled={busy} onClick={() => setSelected(new Set())}>Снять выбор КТК</button>}</div>
       {tab === 'main' && <><section className="form-section ui-form-section"><div className="form-section-heading"><h2>Основная информация</h2></div><dl className="details-grid">
         <div><dt>Номер заявки</dt><dd>{data.order.number}</dd></div><div><dt>Статус</dt><dd><OwnershipStatus status={data.order.status} /></dd></div>
         <div><dt>Количество КТК</dt><dd>{editing ? selected.size : data.order.containerQuantity}</dd></div><div><dt>Подтверждено</dt><dd>{completedAt(data.order.completionAt)}</dd></div>
-        <div><dt><label htmlFor="ownership-effective-date">Дата передачи</label></dt><dd>{editing ? <UiInput id="ownership-effective-date" type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEffectiveDate(e.target.value); setSelected(new Set()); setAvailable(null); setPage(0) }} /> : data.order.effectiveDate ? businessDateLabel(data.order.effectiveDate) : '—'}</dd></div>
-        <div><dt>Новый собственник</dt><dd>{data.order.clientName}</dd></div><div className="ownership-service-field"><dt>Услуга</dt><dd>Смена собственника КТК</dd></div>
+        <div><dt><label htmlFor="ownership-effective-date">Дата передачи</label></dt><dd>{editing ? <UiInput id="ownership-effective-date" type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEffectiveDate(e.target.value); clearSelection() }} /> : data.order.effectiveDate ? businessDateLabel(data.order.effectiveDate) : '—'}</dd></div>
+        <div><dt>Прежний собственник</dt><dd>{data.order.sourceClientName || '—'}</dd></div>
+        <div><dt><label htmlFor="ownership-new-client">Новый собственник</label></dt><dd>{editing ? <UiSelect id="ownership-new-client" required disabled={busy} value={client} onChange={e => { setClient(e.target.value); clearSelection() }}>
+          {client === data.order.clientId && !clients.some(c => c.id === client) && <option value={client}>{data.order.clientName}</option>}
+          {clients.filter(c => c.id !== data.order.sourceClientId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </UiSelect> : data.order.clientName}</dd></div><div className="ownership-service-field"><dt>Услуга</dt><dd>Смена собственника КТК</dd></div>
       </dl></section><section className="form-section ui-form-section"><div className="form-section-heading"><h2>Дополнительная информация</h2></div>{editing ? <label className="field horizontal-field ownership-comment"><span>Комментарий</span><UiTextarea disabled={busy} value={comment} maxLength={1000} onChange={e => setComment(e.target.value)} placeholder="Введите комментарий" /></label> : <dl className="details-grid"><div className="details-wide"><dt>Комментарий</dt><dd className="ownership-comment-text">{data.order.comment || '—'}</dd></div></dl>}</section></>}
       {tab === 'containers' && <><OwnershipContainerTable rows={rows} loading={Boolean(editing && !available)} selected={editing ? selected : undefined} busy={busy} onToggle={editing ? toggle : undefined} />{editing && available && <Pagination data={available} change={value => { setPage(value); setAvailable(null) }} />}</>}
     </div>

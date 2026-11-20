@@ -76,7 +76,18 @@ function compareMigration(before,after){
  const order=rows=>rows.map(r=>JSON.stringify(Object.fromEntries(Object.entries(r).sort(([a],[b])=>a.localeCompare(b))))).sort();
  for(const [table,rows] of Object.entries(before.tables)){
   if(table==='flyway_schema_history')continue;
-  const actual=after.tables[table].map(row=>{if(table!=='container_owner')return row;const copy={...row};delete copy.client_id;return copy;});
+  const actual=after.tables[table].map(row=>{
+   if(table==='container_owner'){const {client_id,...original}=row;return original;}
+   if(table==='service_order'){
+    const {source_client_id,...original}=row;
+    const owners=new Set(before.tables.service_order_container.filter(link=>link.service_order_id===row.id).map(link=>link.expected_client_id));
+    const [source]=owners;
+    const expected=row.status!=='DRAFT'&&owners.size===1&&source&&source!==row.client_id?source:null;
+    assert.equal(source_client_id,expected,'V62 only infers an unambiguous transferor');
+    return original;
+   }
+   return row;
+  });
   assert.deepEqual(order(actual),order(rows),'Unchanged contents and identifiers: '+table);
  }
  assert.deepEqual(after.sequences,before.sequences,'All sequence values and is_called unchanged');
