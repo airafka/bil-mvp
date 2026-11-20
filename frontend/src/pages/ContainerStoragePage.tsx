@@ -26,7 +26,7 @@ export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows
         <tr data-visit-id={visit.id} className={'storage-visit-row' + (open ? ' storage-visit-open' : '')}>
           <td className="registry-index"><button type="button" className="storage-expand" aria-expanded={open} aria-controls={open ? visit.periods.map(period => detailsId + '-' + period.id).join(' ') : undefined} aria-label={(open ? 'Свернуть' : 'Раскрыть') + ' визит ' + visit.containerName + ' от ' + storageDate(visit.receivingAt)} onClick={() => setExpanded(value => ({ ...value, [visit.id]: !open }))}><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg></button></td>
           <td><Link to={'/container-owners/' + visit.containerId + '/history'}>{visit.containerName}</Link></td>
-          <td /><td className="storage-visit-total">{visit.storageDays}</td><td>{storageDate(visit.receivingAt)}</td><td>Поставка</td>
+          <td>{last.ownerName || '—'}</td><td className="storage-visit-total">{visit.storageDays}</td><td>{storageDate(visit.receivingAt)}</td><td>Поставка</td>
           <td><Link to={historyOrderPath({ orderId: visit.receivingOrderId, orderType: 'RECEIVING_ORDER' })}>{visit.receivingOrderNumber}</Link></td>
           <td>{visit.shippingAt ? storageDate(visit.shippingAt) : ''}</td><td>{visit.shippingAt ? 'Вывоз' : ''}</td>
           <td>{visit.shippingOrderId && <Link to={historyOrderPath({ orderId: visit.shippingOrderId, orderType: 'SHIPPING_ORDER' })}>{visit.shippingOrderNumber}</Link>}</td>
