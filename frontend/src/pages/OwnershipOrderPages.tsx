@@ -73,8 +73,8 @@ export function OwnershipOrderCreatePage() {
   const [page, setPage] = useState(0)
   const [available, setAvailable] = useState<PagedResponse<OwnershipContainer> | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  useEffect(() => { if (!client) return; let active = true; getOwnershipAvailableForCreate(client, '', page).then(value => { if (active) setAvailable(value) }).catch(e => { if (active) setError(errorText(e)) }); return () => { active = false } }, [client, page, clock.date])
-  function changeTab(value: 'main' | 'containers') { if (value === 'containers' && !client) { setError('Выберите нового собственника КТК'); return }; setTab(value) }
+  useEffect(() => { if (!client || !effectiveDate) return; let active = true; getOwnershipAvailableForCreate(client, '', page, effectiveDate).then(value => { if (active) setAvailable(value) }).catch(e => { if (active) setError(errorText(e)) }); return () => { active = false } }, [client, page, clock.date, effectiveDate])
+  function changeTab(value: 'main' | 'containers') { if (value === 'containers' && !effectiveDate) { setError('Укажите дату передачи'); return }; if (value === 'containers' && !client) { setError('Выберите нового собственника КТК'); return }; setTab(value) }
   const lock = useRef(false), navigate = useNavigate()
   useEffect(() => { let active = true; getReferenceOptions('clients').then(v => { if (active) setClients(v) }).catch(e => { if (active) setError(errorText(e)) }); return () => { active = false } }, [])
   async function create() {
@@ -96,7 +96,7 @@ export function OwnershipOrderCreatePage() {
           <label className="field horizontal-field"><span>Количество КТК</span><UiInput value={selected.size} readOnly /></label>
           <label className="field horizontal-field"><span>Новый собственник <b>*</b></span><UiSelect disabled={busy} value={client} onChange={e => { setClient(e.target.value); setSelected(new Set()); setAvailable(null); setPage(0); setError('') }}><option value="" hidden disabled />{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</UiSelect></label>
           <label className="field horizontal-field"><span>Услуга</span><UiInput value="Смена собственника КТК" readOnly /></label>
-          <label className="field horizontal-field"><span>Дата передачи <b>*</b></span><UiInput type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => setEnteredDate(e.target.value)} /></label>
+          <label className="field horizontal-field"><span>Дата передачи <b>*</b></span><UiInput type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEnteredDate(e.target.value); setSelected(new Set()); setAvailable(null); setPage(0) }} /></label>
         </div><div className="form-fields-column"><div className="field horizontal-field"><span>Статус</span><div className="ownership-status-field"><OwnershipStatus status="DRAFT" /></div></div></div></div>
       </section>
       <section className="form-section ui-form-section"><div className="form-section-heading"><h2>Дополнительная информация</h2></div><label className="field horizontal-field ownership-comment"><span>Комментарий</span><UiTextarea disabled={busy} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} placeholder="Введите комментарий" /></label></section>
@@ -133,8 +133,8 @@ export function OwnershipOrderViewPage() {
     const timer = window.setInterval(refresh, 5000)
     return () => { active = false; window.clearInterval(timer) }
   }, [ownershipOrderId, data?.order.status, busy])
-  useEffect(() => { if (!editing) return; let active = true; getOwnershipAvailable(ownershipOrderId, '', page).then(v => { if (active) setAvailable(v) }).catch(e => { if (active) setError(errorText(e)) }); return () => { active = false } }, [ownershipOrderId, editing, page, revision, clock.date])
-  function changeTab(value: 'main' | 'containers') { setParams({ ...(editing ? { edit: '1' } : {}), ...(value === 'containers' ? { tab: value } : {}) }, { replace: true }) }
+  useEffect(() => { if (!editing || !effectiveDate) return; let active = true; getOwnershipAvailable(ownershipOrderId, '', page, effectiveDate).then(v => { if (active) setAvailable(v) }).catch(e => { if (active) setError(errorText(e)) }); return () => { active = false } }, [ownershipOrderId, editing, page, revision, clock.date, effectiveDate])
+  function changeTab(value: 'main' | 'containers') { if (editing && value === 'containers' && !effectiveDate) { setError('Укажите дату передачи'); return }; setParams({ ...(editing ? { edit: '1' } : {}), ...(value === 'containers' ? { tab: value } : {}) }, { replace: true }) }
   function finishEditing() { setParams(tab === 'containers' ? { tab } : {}, { replace: true }); setAvailable(null); setPage(0) }
   async function save(accept: boolean) {
     if (lock.current) return
@@ -165,7 +165,7 @@ export function OwnershipOrderViewPage() {
       {tab === 'main' && <><section className="form-section ui-form-section"><div className="form-section-heading"><h2>Основная информация</h2></div><dl className="details-grid">
         <div><dt>Номер заявки</dt><dd>{data.order.number}</dd></div><div><dt>Статус</dt><dd><OwnershipStatus status={data.order.status} /></dd></div>
         <div><dt>Количество КТК</dt><dd>{editing ? selected.size : data.order.containerQuantity}</dd></div><div><dt>Подтверждено</dt><dd>{completedAt(data.order.completionAt)}</dd></div>
-        <div><dt><label htmlFor="ownership-effective-date">Дата передачи</label></dt><dd>{editing ? <UiInput id="ownership-effective-date" type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => setEffectiveDate(e.target.value)} /> : data.order.effectiveDate ? businessDateLabel(data.order.effectiveDate) : '—'}</dd></div>
+        <div><dt><label htmlFor="ownership-effective-date">Дата передачи</label></dt><dd>{editing ? <UiInput id="ownership-effective-date" type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEffectiveDate(e.target.value); setSelected(new Set()); setAvailable(null); setPage(0) }} /> : data.order.effectiveDate ? businessDateLabel(data.order.effectiveDate) : '—'}</dd></div>
         <div><dt>Новый собственник</dt><dd>{data.order.clientName}</dd></div><div className="ownership-service-field"><dt>Услуга</dt><dd>Смена собственника КТК</dd></div>
       </dl></section><section className="form-section ui-form-section"><div className="form-section-heading"><h2>Дополнительная информация</h2></div>{editing ? <label className="field horizontal-field ownership-comment"><span>Комментарий</span><UiTextarea disabled={busy} value={comment} maxLength={1000} onChange={e => setComment(e.target.value)} placeholder="Введите комментарий" /></label> : <dl className="details-grid"><div className="details-wide"><dt>Комментарий</dt><dd className="ownership-comment-text">{data.order.comment || '—'}</dd></div></dl>}</section></>}
       {tab === 'containers' && <><OwnershipContainerTable rows={rows} loading={Boolean(editing && !available)} selected={editing ? selected : undefined} busy={busy} onToggle={editing ? toggle : undefined} />{editing && available && <Pagination data={available} change={value => { setPage(value); setAvailable(null) }} />}</>}
@@ -179,12 +179,12 @@ function OwnershipContainerTable({ rows, loading, selected, busy, onToggle }: { 
   const [preview, setPreview] = useState<OwnershipContainer | null>(null)
   function showPreview(row: OwnershipContainer) { setPreview(row); previewDialog.current?.showModal() }
   const selectable = Boolean(onToggle)
-  return <><div className="table-wrap"><table className="ownership-container-table"><thead><tr><th className="registry-index">{selectable ? '' : '№'}</th><th>КТК</th><th>Текущий собственник</th><th className="registry-actions" aria-label="Действия" /></tr></thead><tbody>
+  return <><div className="table-wrap"><table className="ownership-container-table"><thead><tr><th className="registry-index">{selectable ? '' : '№'}</th><th>КТК</th><th>{onToggle ? 'Собственник на дату передачи' : 'Текущий собственник'}</th><th className="registry-actions" aria-label="Действия" /></tr></thead><tbody>
         {selectable && loading && <tr><td colSpan={4}>Загружаем доступные КТК…</td></tr>}{rows.length === 0 && (!loading) && <tr><td colSpan={4}>{selectable ? 'Доступных КТК не найдено' : 'КТК не выбраны'}</td></tr>}
         {rows.map((row, index) => <tr key={row.containerId}><td className="registry-index">{selectable ? <UiInput aria-label={'Выбрать КТК ' + row.containerName} type="checkbox" disabled={busy} checked={selected?.has(row.containerOwnerId)} onChange={e => onToggle?.(row.containerOwnerId, e.target.checked)} /> : index + 1}</td><td><button type="button" className="link-button" onClick={() => showPreview(row)}>{row.containerName}</button></td><td>{row.clientName || '—'}{!selectable && row.resultStatus && row.resultStatus !== 'DRAFT' && <div>{resultLabels[row.resultStatus] ?? row.resultStatus}{row.resultReason && <p>{row.resultReason}</p>}</div>}</td><td className="registry-actions"><RowActions label={'Действия с КТК ' + row.containerName} actions={[{ label: 'Предпросмотр', onClick: () => showPreview(row) }, { label: 'История собственников', to: '/container-owners/' + row.containerId + '/history' }]} /></td></tr>)}
       </tbody></table></div>
     <dialog ref={previewDialog} className="ownership-preview" aria-labelledby="ownership-preview-title">
       <div className="page-header"><h2 id="ownership-preview-title">КТК {preview?.containerName}</h2><button type="button" className="close-button" aria-label="Закрыть предпросмотр" onClick={() => previewDialog.current?.close()}><ActionIcon name="close" /></button></div>
-      {preview && <dl className="details-grid"><div><dt>Номер КТК</dt><dd>{preview.containerName}</dd></div><div><dt>Тип</dt><dd>{containerTypeLabel(preview.containerType as Parameters<typeof containerTypeLabel>[0])}</dd></div><div><dt>Текущий собственник</dt><dd>{preview.clientName || '—'}</dd></div><div><dt>Состояние</dt><dd><ContainerStatusBadge status={preview.status} /></dd></div></dl>}
+      {preview && <dl className="details-grid"><div><dt>Номер КТК</dt><dd>{preview.containerName}</dd></div><div><dt>Тип</dt><dd>{containerTypeLabel(preview.containerType as Parameters<typeof containerTypeLabel>[0])}</dd></div><div><dt>{selectable ? 'Собственник на дату передачи' : 'Текущий собственник'}</dt><dd>{preview.clientName || '—'}</dd></div><div><dt>Состояние</dt><dd><ContainerStatusBadge status={preview.status} /></dd></div></dl>}
     </dialog></>
 }

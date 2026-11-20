@@ -89,32 +89,33 @@ public class OwnershipOrderService {
             throw error(HttpStatus.CONFLICT,"SERVICE_ORDER_HAS_HISTORY","Ранее подтверждённая заявка сохраняется для истории; её можно изменить и подтвердить повторно");
         jdbc.update("delete from service_order_container where service_order_id=?",id);jdbc.update("delete from service_order where id=?",id);
     }
-    @Transactional(readOnly=true)public PagedResponse<Link> available(UUID id,String query,int page,int size){
-        var h=details(id).order();draft(h);page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
-        String from="""
-            from container_owner_current o join container c on c.id=o.container_id join client cl on cl.id=o.client_id
-            left join service_order_container sc on sc.container_id=o.container_id and sc.service_order_id=?
-            where o.client_id<>? and (?='' or position(lower(?) in lower(c.code||' '||cl.name))>0)
-            and not exists(select 1 from service_order_container_current other join service_order_current so on so.id=other.service_order_id
-                where other.container_id=o.container_id and other.service_order_id<>? and so.status in ('DRAFT','SCHEDULED') and other.result_status in ('DRAFT','PLANNED','BLOCKED'))
-            """;
-        long count=jdbc.queryForObject("select count(*) "+from,Long.class,id,h.clientId(),query,query,id);
-        var rows=jdbc.query("select sc.id as link_id,o.id as owner_id,o.container_id,c.code as container_name,c.container_type,o.client_id,cl.name as client_name,o.status,null::uuid as container_visit_id,null::uuid as expected_client_id,null::text as result_status,null::text as result_reason "+from+" order by (sc.id is not null) desc,c.code limit ? offset ?",
-            (rs,n)->link(rs),id,h.clientId(),query,query,id,size,page*size);
-        return PagedResponse.of(rows,page,size,count);
+    @Transactional(readOnly=true)public PagedResponse<Link> available(UUID id,LocalDate effectiveDate,String query,int page,int size){
+        var h=details(id).order();draft(h);
+        return candidates(id,h.clientId(),date(effectiveDate==null?h.effectiveDate():effectiveDate),query,page,size);
     }
-    @Transactional(readOnly=true)public PagedResponse<Link> availableForCreate(UUID clientId,String query,int page,int size){
+    @Transactional(readOnly=true)public PagedResponse<Link> availableForCreate(UUID clientId,LocalDate effectiveDate,String query,int page,int size){
+        return candidates(null,clientId,date(effectiveDate),query,page,size);
+    }
+    private PagedResponse<Link> candidates(UUID id,UUID clientId,LocalDate effectiveDate,String query,int page,int size){
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
         String from="""
-            from container_owner_current o join container c on c.id=o.container_id join client cl on cl.id=o.client_id
-            where o.client_id<>? and (?='' or position(lower(?) in lower(c.code||' '||cl.name))>0)
-            and not exists(select 1 from service_order_container_current other join service_order_current so on so.id=other.service_order_id
-                where other.container_id=o.container_id and so.status in ('DRAFT','SCHEDULED'))
+            from ownership_transfer_candidates(?::date,?::uuid,?::uuid) candidate
+            join container_owner o on o.id=candidate.owner_id join container c on c.id=o.container_id
+            join client cl on cl.id=candidate.previous_client_id
+            left join service_order_container sc on sc.container_id=o.container_id and sc.service_order_id=?
+            where (?='' or position(lower(?) in lower(c.code||' '||cl.name))>0)
             """;
-        long count=jdbc.queryForObject("select count(*) "+from,Long.class,clientId,query,query);
-        var rows=jdbc.query("select null::uuid as link_id,o.id as owner_id,o.container_id,c.code as container_name,c.container_type,o.client_id,cl.name as client_name,o.status,null::uuid as container_visit_id,null::uuid as expected_client_id,null::text as result_status,null::text as result_reason "+from+" order by c.code limit ? offset ?",
-            (rs,n)->link(rs),clientId,query,query,size,page*size);
+        var args=new ArrayList<Object>(Arrays.asList(effectiveDate,clientId,id,id,query,query));
+        long count=jdbc.queryForObject("select count(*) "+from,Long.class,args.toArray());
+        args.add(size);args.add(page*size);
+        var rows=jdbc.query("select sc.id as link_id,o.id as owner_id,o.container_id,c.code as container_name,c.container_type,candidate.previous_client_id as client_id,cl.name as client_name,o.status,candidate.container_visit_id,null::uuid as expected_client_id,null::text as result_status,null::text as result_reason "+from+" order by (sc.id is not null) desc,c.code limit ? offset ?",(rs,n)->link(rs),args.toArray());
         return PagedResponse.of(rows,page,size,count);
+    }
+    record Candidate(UUID visit,UUID previousClient,java.time.OffsetDateTime instant) {}
+    private Candidate candidate(UUID container,Header h){
+        var rows=jdbc.query("select * from ownership_transfer_candidates(?::date,?::uuid,?::uuid) where container_id=?",(rs,n)->new Candidate(rs.getObject("container_visit_id",UUID.class),rs.getObject("previous_client_id",UUID.class),rs.getObject("transfer_at",java.time.OffsetDateTime.class)),date(h.effectiveDate()),h.clientId(),h.id(),container);
+        if(rows.isEmpty())throw error(HttpStatus.CONFLICT,"OWNERSHIP_DATE_UNAVAILABLE","КТК недоступен на выбранную дату: проверьте фактический receiving, остатки, собственника на дату передачи и другие черновики");
+        return rows.getFirst();
     }
     @Transactional public Details select(UUID id,List<Selection> selected){
         Header h=locked(id);draft(h);
@@ -130,36 +131,27 @@ public class OwnershipOrderService {
             }
         }
         Set<UUID> lockedIds=new TreeSet<>(containers);existing.forEach(l->lockedIds.add(l.containerId()));stock.lockContainers(lockedIds);
-        for(UUID container:containers){
-            var state=stock.state(container);
-            if(state==null||state.client()==null||state.client().equals(h.clientId()))throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_UNAVAILABLE","Выберите КТК другого собственника");
-            Integer other=jdbc.queryForObject("select count(*) from service_order_container_current sc join service_order_current so on so.id=sc.service_order_id where sc.container_id=? and so.status in ('DRAFT','SCHEDULED') and sc.result_status in ('DRAFT','PLANNED','BLOCKED') and so.id<>?",Integer.class,container,id);
-            if(other!=null&&other>0)throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_RESERVED","КТК выбран в другой заявке на смену собственника");
-        }
+        Map<UUID,Candidate> eligible=new HashMap<>();
+        for(UUID container:containers)eligible.put(container,candidate(container,h));
         for(var l:existing)if(!containers.contains(l.containerId()))jdbc.update("delete from service_order_container where id=?",l.id());
-        for(UUID container:containers)jdbc.update("insert into service_order_container(id,service_order_id,container_id) values(?,?,?) on conflict(service_order_id,container_id) do nothing",UUID.randomUUID(),id,container);
+        for(UUID container:containers)jdbc.update("insert into service_order_container(id,service_order_id,container_id,container_visit_id) values(?,?,?,?) on conflict(service_order_id,container_id) do update set container_visit_id=excluded.container_visit_id",UUID.randomUUID(),id,container,eligible.get(container).visit());
         return details(id);
     }
     @Transactional public Details accept(UUID id){
         Header h=locked(id);draft(h);var links=links(id);
         if(links.isEmpty())throw error(HttpStatus.BAD_REQUEST,"SERVICE_ORDER_CONTAINERS_REQUIRED","Выберите хотя бы один КТК");
         LocalDate effective=date(h.effectiveDate());
-        if(effective.isBefore(jdbc.queryForObject("select billing_today()",LocalDate.class)))
-            throw error(HttpStatus.BAD_REQUEST,"EFFECTIVE_DATE_IN_PAST","Дата передачи не может быть раньше рабочей даты. Измените дату в черновике");
         stock.lockContainers(links.stream().map(Link::containerId).toList());
         var confirmedAt=jdbc.queryForObject("select billing_now()",java.time.OffsetDateTime.class);
-        var effectiveAt=effective.atStartOfDay(java.time.ZoneId.of("Europe/Moscow")).toOffsetDateTime();
-        if(effectiveAt.isBefore(confirmedAt)) effectiveAt=confirmedAt;
         for(var l:links){var state=stock.state(l.containerId());
-            if(state==null||state.client()==null)throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_NOT_FOUND","У КТК нет собственника на выбранную рабочую дату");
-            if(state.client().equals(h.clientId()))throw error(HttpStatus.CONFLICT,"CONTAINER_OWNER_UNCHANGED","КТК уже принадлежит выбранному собственнику");
-            var latest=jdbc.queryForObject("select max(occurred_at) from container_owner_history h where container_id=? and not exists(select 1 from container_ownership_period p where p.start_container_owner_history_id=h.id and p.is_withdrawn)",java.time.OffsetDateTime.class,l.containerId());
-            if(latest!=null && effectiveAt.isBefore(latest)) throw error(HttpStatus.CONFLICT,"OWNERSHIP_DATE_BEFORE_HISTORY","Дата передачи раньше предыдущих операций КТК. Проверьте календарь");
+            var candidate=candidate(l.containerId(),h);
+            if(l.containerVisitId()!=null && !l.containerVisitId().equals(candidate.visit()))throw error(HttpStatus.CONFLICT,"OWNERSHIP_VISIT_CHANGED","КТК поступил повторно; обновите состав заявки");
+            var effectiveAt=candidate.instant();
             UUID history=UUID.randomUUID();
             jdbc.update("insert into container_owner_history(id,container_id,old_client_id,new_client_id,old_status,new_status,order_id,order_type,occurred_at) values(?,?,?,?,?,?,?,'SERVICE_ORDER',?)",
-                history,l.containerId(),state.client(),h.clientId(),state.status(),state.status(),id,effectiveAt);
+                history,l.containerId(),candidate.previousClient(),h.clientId(),state.status(),state.status(),id,effectiveAt);
             jdbc.queryForObject("select apply_container_history(?)",Object.class,history);
-            jdbc.update("update service_order_container sc set container_visit_id=o.container_visit_id,expected_client_id=?,expected_status=o.status,result_status='CONFIRMED',result_reason=null,container_ownership_period_id=(select id from container_ownership_period where start_container_owner_history_id=?) from container_owner o where sc.service_order_id=? and sc.container_id=? and o.container_id=sc.container_id",state.client(),history,id,l.containerId());
+            jdbc.update("update service_order_container sc set container_visit_id=o.container_visit_id,expected_client_id=?,expected_status=o.status,result_status='CONFIRMED',result_reason=null,container_ownership_period_id=(select id from container_ownership_period where start_container_owner_history_id=?) from container_owner o where sc.service_order_id=? and sc.container_id=? and o.container_id=sc.container_id",candidate.previousClient(),history,id,l.containerId());
         }
         jdbc.update("update service_order set status='CONFIRMED',effective_date=?,completion_at=?::timestamptz at time zone 'UTC',updated_at=?::timestamptz at time zone 'UTC',updated_by='local' where id=?",effective,confirmedAt,confirmedAt,id);
         jdbc.update("insert into outbound_data(id,message_type,entity_type,root_object_id) values(?,'SERVICE_ORDER_CHAIN_PACKAGE','SERVICE_ORDER',?) on conflict(message_type,root_object_id) do nothing",UUID.randomUUID(),id);

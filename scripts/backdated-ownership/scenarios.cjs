@@ -1,0 +1,37 @@
+const {assert,run,sql,json,fs,api,clock,init,capture}=require('./check-lib.cjs');
+const owner=k=>sql(`select client_id from container_owner_current where container_id='${k}'`);
+const code=k=>sql(`select code from container where id='${k}'`);
+const candidates=(client,date,k)=>api('/service-orders/containers/available?clientId='+client+'&effectiveDate='+date+'&query='+code(k));
+async function deniedCreate(x,ktks,date){await api('/service-orders','POST',{clientId:x.b,service:'CHANGE_OWNER',effectiveDate:date,containerOwnerIds:ktks.map(k=>sql(`select id from container_owner where container_id='${k}'`))},409);}
+(async()=>{
+const x=await init('billing-backdate-check-new'),f=JSON.parse(fs.readFileSync('fixture.json'));assert.deepEqual(await capture(),JSON.parse(fs.readFileSync('before-api.json')));
+assert.equal((await candidates(x.c,'2026-09-15',f.ktk)).items.length,0);assert.equal((await candidates(x.c,'2026-09-16',f.ktk)).items.length,1);
+const proposed=(await candidates(x.c,'2026-09-17',f.ktk)).items[0];assert.equal(proposed.clientId,x.a);
+const middle=await x.schedule([f.ktk],x.c,'2026-09-17');assert.equal(owner(f.ktk),x.b);
+const original=JSON.parse(fs.readFileSync('before-history.json')),actual=json('select json_agg(h order by id) from container_owner_history h');for(const r of original)assert.deepEqual(actual.find(a=>a.id===r.id),r);
+let rows=(await x.report(f.ktk)).items;assert.deepEqual(rows.map(r=>r.storageDays).sort(),[1,1,3]);
+const history=await api('/containers/'+f.ktk+'/owner-history?includeReservations=true');assert.equal(history.find(h=>h.orderId===f.order).oldClientId,x.c);
+const csv=await(await fetch('http://127.0.0.1:8255/api/container-storage-periods/export?query='+code(f.ktk))).text();assert.equal(csv.trim().split('\n').length,4);assert.equal(csv.split('\n')[0].split(';').length,17);
+console.log('PASS A16→C17→B18 on day20: 1/1/3 days; current B; audit unchanged; chronological history and CSV recalculated');
+await clock('2026-09-17');assert.equal(owner(f.ktk),x.c);await clock('2026-09-16');assert.equal(owner(f.ktk),x.a);await clock('2026-09-20');
+const future=await x.schedule([f.ktk],x.a,'2026-09-23');const insert=await x.schedule([f.ktk],x.c,'2026-09-22');assert.equal(owner(f.ktk),x.b);assert.equal((await x.report(f.ktk)).items.length,3);
+await api('/service-orders/'+insert+'/withdraw','POST',undefined,409);await api('/service-orders/'+future+'/withdraw','POST');await api('/service-orders/'+future,'PUT',{id:future,service:'CHANGE_OWNER',effectiveDate:'2026-09-24'});await api('/service-orders/'+future+'/accept','POST');
+await clock('2026-09-24');assert.equal(owner(f.ktk),x.a);await x.ship(f.ktk);assert.equal((await candidates(x.b,'2026-09-18',f.ktk)).items.length,0);
+console.log('PASS calendar rollback; insertion before future transfer; future hidden; withdrawal dependencies and date move; departed KTK excluded');
+await clock('2026-09-25');const same=await x.arrival();await clock('2026-09-27');await x.schedule([same.ktk],x.b,'2026-09-25');await x.schedule([same.ktk],x.c,'2026-09-25');assert.deepEqual((await x.report(same.ktk)).items.map(r=>r.storageDays).sort(),[0,0,3]);
+console.log('PASS receiving date inclusive and multiple same-day backdated transfers');
+const expected=await x.arrival(undefined,x.a,false);assert.equal((await candidates(x.b,'2026-09-28',expected.ktk)).items.length,0);await deniedCreate(x,[expected.ktk],'2026-09-28');
+const later=await x.arrival();assert.equal((await candidates(x.b,'2026-09-26',later.ktk)).items.length,0);await deniedCreate(x,[later.ktk],'2026-09-26');
+const sameOwner=await candidates(x.b,'2026-09-17',f.ktk);assert.equal(sameOwner.items.length,0);
+const draft=await x.create([later.ktk],x.b,'2026-09-28');await api('/service-orders/'+draft,'PUT',{id:draft,service:'CHANGE_OWNER',effectiveDate:'2026-09-26'});await api('/service-orders/'+draft+'/accept','POST',undefined,409);await api('/service-orders/'+draft,'DELETE',undefined,204);
+const shipRace=await x.create([later.ktk],x.b,'2026-09-27');await x.ship(later.ktk);await api('/service-orders/'+shipRace+'/accept','POST',undefined,409);
+await clock('2026-09-28');await x.arrival(later.ktk,x.a);await api('/service-orders/'+shipRace,'PUT',{id:shipRace,service:'CHANGE_OWNER',effectiveDate:'2026-09-28'});await api('/service-orders/'+shipRace+'/accept','POST',undefined,409);await api('/service-orders/'+shipRace,'DELETE',undefined,204);
+assert.equal((await candidates(x.b,'2026-09-27',later.ktk)).items.length,0);
+console.log('PASS expected/future receiving excluded; direct API rejects invalid dates; shipping/repeated receiving after selection rejects stale confirmation');
+const reserved=await x.arrival();const shipment=await x.ship(reserved.ktk,false);await clock('2026-09-30');assert.equal((await candidates(x.b,'2026-09-28',reserved.ktk)).items.length,1);await x.schedule([reserved.ktk],x.b,'2026-09-28');await x.finish('shipping',shipment);await x.cancel('shipping',shipment);assert.equal(owner(reserved.ktk),x.b);
+await x.cancel('receiving',reserved.receiving);assert.equal((await x.report(reserved.ktk)).items.length,0);
+const valid=await x.arrival();const batch=await x.create([valid.ktk,later.ktk],x.b,'2026-09-30');await x.ship(later.ktk);await api('/service-orders/'+batch+'/accept','POST',undefined,409);assert.equal(sql(`select count(*) from container_owner_history where order_id='${batch}'`),'0');assert.equal(owner(valid.ktk),x.a);await api('/service-orders/'+batch,'DELETE',undefined,204);
+const race=await x.create([valid.ktk],x.b,'2026-09-30');const responses=await Promise.all([1,2].map(()=>fetch('http://127.0.0.1:8255/api/service-orders/'+race+'/accept',{method:'POST'})));assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);assert.equal(sql(`select count(*) from container_owner_history where order_id='${race}'`),'1');
+sql('do $$ declare r record;begin for r in select id from container_visit loop perform check_container_visit(r.id);end loop;end $$;');
+fs.writeFileSync('scenario-result.json',JSON.stringify({ok:true,middle,container:f.ktk}));console.log('PASS reserved-out backdating; shipping/receiving cancellation; batch rollback; parallel confirmation; all visits reconcile');
+})().catch(e=>{console.error(e.stack);process.exitCode=1});

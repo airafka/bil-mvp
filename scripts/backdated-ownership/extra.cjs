@@ -1,0 +1,21 @@
+const {assert,run,sql,fs,api,clock,init}=require('./check-lib.cjs');
+const {snapshot,health}=require('./ops.cjs');
+(async()=>{
+ const x=await init('billing-backdate-check-new');
+ await clock('2026-09-15');const classic=await x.arrival();await clock('2026-09-20');await x.schedule([classic.ktk],x.b,'2026-09-17');await x.ship(classic.ktk);assert.deepEqual((await x.report(classic.ktk)).items.map(r=>r.storageDays).sort(),[2,4]);
+ await clock('2026-09-16');const early=await x.arrival();await clock('2026-09-18');const late=await x.arrival();await clock('2026-09-20');
+ await x.schedule([early.ktk],x.b,'2026-09-19');
+ const code=sql(`select code from container where id='${early.ktk}'`);
+ assert.equal((await api('/service-orders/containers/available?clientId='+x.a+'&effectiveDate=2026-09-17&query='+code)).items.length,0);
+ assert.equal((await api('/service-orders/containers/available?clientId='+x.b+'&effectiveDate=2026-09-17&query='+code)).items.length,1);
+ const d=await x.create([late.ktk],x.b,'2026-09-20');
+ assert.equal((await api('/service-orders/'+d+'/containers/available?effectiveDate=2026-09-17')).items.some(i=>i.containerId===late.ktk),false);
+ await api('/service-orders/'+d,'DELETE',undefined,204);
+ const future=await x.schedule([late.ktk],x.b,'2026-09-21');
+ run(['stop','billing-backdate-check-new']);sql("update application_clock set business_date='2026-09-22',version=version+1");
+ const before=snapshot('billing-backdate-check-db','billing_backdate_check');run(['start','billing-backdate-check-new']);await health(8255);
+ assert.equal((await api('/service-orders/'+future)).order.status,'DONE');assert.equal(sql(`select client_id from container_owner_current where container_id='${late.ktk}'`),x.b);
+ await x.report(late.ktk);assert.deepEqual(snapshot('billing-backdate-check-db','billing_backdate_check'),before);
+ await clock('2026-09-20');
+ console.log('PASS 2/4 storage days; historical owner filter; edited-date candidates; backend downtime and read-only resolution');
+})().catch(e=>{console.error(e.stack);process.exitCode=1});

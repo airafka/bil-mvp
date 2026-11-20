@@ -210,7 +210,7 @@ public class ContainerStockService {
                 coalesce(r.number,s.number,so.number) as order_number,
                 (select p.id from container_storage_period p where p.end_history_id=h.id
                   and h.operation_type='OWNER_CHANGE') as previous_storage_period_id
-            from container_owner_history_view h left join client old on old.id=h.old_client_id
+            from container_owner_history_timeline h left join client old on old.id=h.timeline_old_client_id
             left join client new on new.id=h.new_client_id
             left join receiving_order r on h.order_type='RECEIVING_ORDER' and r.id=h.order_id
             left join shipping_order s on h.order_type='SHIPPING_ORDER' and s.id=h.order_id
@@ -219,7 +219,7 @@ public class ContainerStockService {
               and not exists(select 1 from container_ownership_period op where op.start_container_owner_history_id=h.id and op.is_withdrawn))) and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
                 and (r.order_status in ('COMPLETED','CANCELLED') or s.order_status in ('COMPLETED','CANCELLED') or so.status in ('DONE','PARTIAL'))))
             order by h.created_at desc,h.id desc
-            """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("old_client_id",UUID.class),rs.getString("old_name"),
+            """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("timeline_old_client_id",UUID.class),rs.getString("old_name"),
                 rs.getObject("new_client_id",UUID.class),rs.getString("new_name"),rs.getString("old_status"),rs.getString("new_status"),
                 rs.getObject("order_id",UUID.class),rs.getString("order_type"),rs.getObject("order_number",Long.class),rs.getObject("created_at",LocalDateTime.class),rs.getBoolean("cancellation"),rs.getString("operation_type"),rs.getObject("occurred_at",java.time.OffsetDateTime.class),
                 rs.getObject("storage_period_id",UUID.class),rs.getObject("previous_storage_period_id",UUID.class)),container,all,all);

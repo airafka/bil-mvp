@@ -1,0 +1,5 @@
+const {assert,run,sql,fs,api,clock,init,capture}=require('./check-lib.cjs');
+(async()=>{const x=await init();assert.equal(sql("select max(version::int) from flyway_schema_history where success"),'56');await clock('2026-09-16');const r=await x.arrival();const order=await x.schedule([r.ktk],x.b,'2026-09-18');await clock('2026-09-20');
+const fixture={...r,order,a:x.a,b:x.b,c:x.c};fs.writeFileSync('fixture.json',JSON.stringify(fixture));fs.writeFileSync('before-api.json',JSON.stringify(await capture()));fs.writeFileSync('before-history.json',sql('select json_agg(h order by id) from container_owner_history h'));
+run(['stop','billing-backdate-check-old']);fs.writeFileSync('seed-snapshot.json',JSON.stringify(require('./ops.cjs').snapshot('billing-backdate-check-db','billing_backdate_check')));
+run(['exec','billing-backdate-check-db','pg_dump','-U','billing','-d','billing_backdate_check','-Fc','-f','/tmp/seeded.dump']);run(['cp','billing-backdate-check-db:/tmp/seeded.dump','seeded.dump']);console.log('PASS V56 fixture A16→B18 saved on day20');})().catch(e=>{console.error(e.stack);process.exitCode=1});

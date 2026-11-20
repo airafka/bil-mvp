@@ -173,7 +173,7 @@ export function getOwnershipOrders(query = '', page = 0) { return request<PagedR
 export function getOwnershipOrder(id: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id) }
 export function createOwnershipOrder(clientId: string, comment: string, containerOwnerIds: string[], effectiveDate: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders', { method: 'POST', body: JSON.stringify({ clientId, service: 'CHANGE_OWNER', comment, containerOwnerIds, effectiveDate }) }) }
 export function updateOwnershipOrder(id: string, comment: string, effectiveDate: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id, { method: 'PUT', body: JSON.stringify({ id, service: 'CHANGE_OWNER', comment, effectiveDate }) }) }
-export function getOwnershipAvailable(id: string, query = '', page = 0) { return request<PagedResponse<import('./containerStock').OwnershipContainer>>('/api/service-orders/' + id + '/containers/available?' + new URLSearchParams({ query, page: String(page) })) }
+export function getOwnershipAvailable(id: string, query = '', page = 0, effectiveDate = '') { return request<PagedResponse<import('./containerStock').OwnershipContainer>>('/api/service-orders/' + id + '/containers/available?' + new URLSearchParams({ ...(effectiveDate ? { effectiveDate } : {}), query, page: String(page) })) }
 export function saveOwnershipSelection(id: string, containerOwnerIds: string[]) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id + '/containers', { method: 'PUT', body: JSON.stringify(containerOwnerIds.map(containerOwnerId => ({ containerOwnerId }))) }) }
 export function acceptOwnershipOrder(id: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id + '/accept', { method: 'POST' }) }
 export function withdrawOwnershipOrder(id: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id + '/withdraw', { method: 'POST' }) }
@@ -196,7 +196,7 @@ export function getWaybillSelectionOptions() {
   return request<import('./waybillSelection').WaybillSelectionOption[]>('/api/waybills/available/options')
 }
 
-export function getOwnershipAvailableForCreate(clientId: string, query = '', page = 0) { return request<PagedResponse<import('./containerStock').OwnershipContainer>>('/api/service-orders/containers/available?' + new URLSearchParams({ clientId, query, page: String(page) })) }
+export function getOwnershipAvailableForCreate(clientId: string, query = '', page = 0, effectiveDate = '') { return request<PagedResponse<import('./containerStock').OwnershipContainer>>('/api/service-orders/containers/available?' + new URLSearchParams({ ...(effectiveDate ? { effectiveDate } : {}), clientId, query, page: String(page) })) }
 
 export function getInvoiceTariff(invoiceId: string, chargeId: string) {
   return request<AppliedInvoiceTariff>(`/api/payment-invoices/${invoiceId}/tariffs/${chargeId}`)
