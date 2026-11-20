@@ -9,42 +9,38 @@ import { TableReveal } from '../components/TableReveal'
 import { storageBoundaryLabel, storageDate, storageClientOwner, storageTransport, type StorageVisit } from '../containerStorage'
 import './ContainerStoragePage.css'
 
-const columns = [44, 140, 90, 145, 105, 145, 105, 240, 110, 240, 220, 240, 110, 240, 220]
-const periodColumns = [220, 90, 145, 160, 105, 145, 160, 105]
+const columns = [44, 140, 200, 90, 145, 150, 105, 145, 150, 105, 240, 110, 240, 220, 240, 110, 240, 220]
 
 export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows: StorageVisit[]; emptyText: string; selectedPeriodId?: string }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   return <table className="storage-table"><colgroup>{columns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
-    <thead><tr><th aria-label="Раскрытие визита" /><th>Номер КТК</th><th>Дней хранения</th><th>Дата receiving</th><th>Заявка receiving</th><th>Дата shipping</th><th>Заявка shipping</th>
-      <th>Клиент/Собственник receiving</th><th>Транспорт receiving</th><th>Грузоперевозчик/грузоотправитель receiving</th><th>Груз receiving</th>
-      <th>Клиент/Собственник shipping</th><th>Транспорт shipping</th><th>Грузоперевозчик/грузополучатель shipping</th><th>Груз shipping</th></tr></thead>
+    <thead><tr><th aria-label="Раскрытие визита" /><th>Номер КТК</th><th>Собственник КТК</th><th>Дней хранения</th>
+      <th>Начало периода</th><th>Событие</th><th>Заявка</th><th>Конец периода</th><th>Событие</th><th>Заявка</th>
+      <th>Клиент/Собственник поставки</th><th>Транспорт поставки</th><th>Грузоперевозчик/грузоотправитель поставки</th><th>Груз поставки</th>
+      <th>Клиент/Собственник вывоза</th><th>Транспорт вывоза</th><th>Грузоперевозчик/грузополучатель вывоза</th><th>Груз вывоза</th></tr></thead>
     <tbody>{rows.length ? rows.map(visit => {
       const first = visit.periods[0], last = visit.periods[visit.periods.length - 1]
       const open = expanded[visit.id] ?? visit.periods.some(period => period.id === selectedPeriodId)
       const detailsId = 'storage-visit-' + visit.id
       return <Fragment key={visit.id}>
-        <tr data-visit-id={visit.id} className={open ? 'storage-visit-open' : ''}>
-          <td className="registry-index"><button type="button" className="storage-expand" aria-expanded={open} aria-controls={detailsId} aria-label={(open ? 'Свернуть' : 'Раскрыть') + ' визит ' + visit.containerName + ' от ' + storageDate(visit.receivingAt)} onClick={() => setExpanded(value => ({ ...value, [visit.id]: !open }))}><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg></button></td>
+        <tr data-visit-id={visit.id} className={'storage-visit-row' + (open ? ' storage-visit-open' : '')}>
+          <td className="registry-index"><button type="button" className="storage-expand" aria-expanded={open} aria-controls={open ? visit.periods.map(period => detailsId + '-' + period.id).join(' ') : undefined} aria-label={(open ? 'Свернуть' : 'Раскрыть') + ' визит ' + visit.containerName + ' от ' + storageDate(visit.receivingAt)} onClick={() => setExpanded(value => ({ ...value, [visit.id]: !open }))}><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg></button></td>
           <td><Link to={'/container-owners/' + visit.containerId + '/history'}>{visit.containerName}</Link></td>
-          <td>{visit.storageDays}</td><td>{storageDate(visit.receivingAt)}</td>
+          <td /><td className="storage-visit-total">{visit.storageDays}</td><td>{storageDate(visit.receivingAt)}</td><td>Поставка</td>
           <td><Link to={historyOrderPath({ orderId: visit.receivingOrderId, orderType: 'RECEIVING_ORDER' })}>{visit.receivingOrderNumber}</Link></td>
-          <td>{visit.shippingAt ? storageDate(visit.shippingAt) : ''}</td>
+          <td>{visit.shippingAt ? storageDate(visit.shippingAt) : ''}</td><td>{visit.shippingAt ? 'Вывоз' : ''}</td>
           <td>{visit.shippingOrderId && <Link to={historyOrderPath({ orderId: visit.shippingOrderId, orderType: 'SHIPPING_ORDER' })}>{visit.shippingOrderNumber}</Link>}</td>
           <td>{storageClientOwner(first.receivingClientName, first.receivingOwnerName)}</td><td>{storageTransport(first.arrivalTransport)}</td><td>{first.arrivalParty}</td><td>{first.arrivalCargo}</td>
           <td>{storageClientOwner(last.shippingClientName, last.shippingOwnerName)}</td><td>{storageTransport(last.departureTransport)}</td><td>{last.departureParty}</td><td>{last.departureCargo}</td>
         </tr>
-        {open && <tr className="storage-visit-details" id={detailsId}><td colSpan={columns.length}>
-          <div className="storage-period-frame"><table className="storage-period-table" aria-label={'Собственники визита ' + visit.containerName + ' от ' + storageDate(visit.receivingAt)}>
-            <caption>Собственники и передачи</caption><colgroup>{periodColumns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
-            <thead><tr><th>Собственник КТК</th><th>Дней хранения</th><th>Начало периода</th><th>Событие</th><th>Заявка</th><th>Конец периода</th><th>Событие</th><th>Заявка</th></tr></thead>
-            <tbody>{visit.periods.map(row => <tr key={row.id} data-period-id={row.id} className={row.id === selectedPeriodId ? 'storage-period-selected' : ''}>
-              <td>{row.ownerName || '—'}</td><td>{row.storageDays}</td><td>{storageDate(row.arrivalAt)}</td><td>{storageBoundaryLabel(row.startOrderType)}</td>
-              <td>{row.startOrderId && row.startOrderType && <Link to={historyOrderPath({ orderId: row.startOrderId, orderType: row.startOrderType })}>{row.startOrderNumber}</Link>}</td>
-              <td>{row.departureAt ? storageDate(row.departureAt) : ''}</td><td>{storageBoundaryLabel(row.endOrderType)}</td>
-              <td>{row.endOrderId && row.endOrderType && <Link to={historyOrderPath({ orderId: row.endOrderId, orderType: row.endOrderType })}>{row.endOrderNumber}</Link>}</td>
-            </tr>)}</tbody>
-          </table></div>
-        </td></tr>}
+        {open && visit.periods.map((row, index) => <tr key={row.id} id={detailsId + '-' + row.id} data-period-id={row.id} className={'storage-period-row' + (index === visit.periods.length - 1 ? ' storage-period-last' : '') + (row.id === selectedPeriodId ? ' storage-period-selected' : '')}>
+          <td className="storage-period-guide" aria-hidden="true" /><td />
+          <td>{row.ownerName || '—'}</td><td>{row.storageDays}</td><td>{storageDate(row.arrivalAt)}</td><td>{storageBoundaryLabel(row.startOrderType)}</td>
+          <td>{row.startOrderId && row.startOrderType && <Link to={historyOrderPath({ orderId: row.startOrderId, orderType: row.startOrderType })}>{row.startOrderNumber}</Link>}</td>
+          <td>{row.departureAt ? storageDate(row.departureAt) : ''}</td><td>{storageBoundaryLabel(row.endOrderType)}</td>
+          <td>{row.endOrderId && row.endOrderType && <Link to={historyOrderPath({ orderId: row.endOrderId, orderType: row.endOrderType })}>{row.endOrderNumber}</Link>}</td>
+          <td colSpan={8} />
+        </tr>)}
       </Fragment>
     }) : <tr><td colSpan={columns.length} className="table-message">{emptyText}</td></tr>}</tbody>
   </table>

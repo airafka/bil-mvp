@@ -18,8 +18,16 @@
 .storage-expand svg { transition: transform 120ms ease; }
 .storage-expand[aria-expanded="true"] svg { transform: rotate(90deg); }
 .storage-expand:focus-visible { outline: 2px solid var(--ui-field-focus); outline-offset: 2px; }
-.app-shell .storage-table > tbody > .storage-visit-open { background: #f0f5ff; }
-.app-shell .storage-table > tbody > .storage-visit-details > td { padding: 12px 16px 16px 44px; height: auto; background: #f8fafc; white-space: normal; }
-.storage-period-frame { width: 1130px; max-width: 100%; }
-.storage-period-table caption { text-align: left; padding: 0 0 8px; font-weight: 500; }
-.app-shell .storage-period-table .storage-period-selected { background: #dbeafe; }
+.app-shell .storage-table > tbody > .storage-visit-row { background: #f5f7fb; }
+.app-shell .storage-table > tbody > .storage-visit-open { background: #edf3fc; }
+.app-shell .storage-table .storage-visit-total { font-weight: 500; }
+.app-shell .storage-table > tbody > .storage-period-row { background: #fff; }
+.app-shell .storage-table > tbody > .storage-period-row:hover { background: #f5f9ff; }
+.app-shell .storage-table > tbody > .storage-period-selected { background: #e4efff; }
+.app-shell .storage-table > tbody > .storage-period-row > td { border-top-color: #edf1f7; }
+.storage-period-guide { position: relative; }
+.storage-period-guide::before { content: ''; position: absolute; left: 21px; top: 0; bottom: 0; width: 1px; background: #c8d6e9; }
+.storage-period-guide::after { content: ''; position: absolute; left: 21px; top: 50%; width: 10px; height: 1px; background: #c8d6e9; }
+.storage-period-last .storage-period-guide::before { bottom: 50%; }
+.storage-expand:hover { background: #dfe9f7; }
+@media (prefers-reduced-motion: reduce) { .storage-expand svg { transition: none; } }
