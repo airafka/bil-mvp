@@ -7,7 +7,8 @@ RUN mvn -q package
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-RUN addgroup -S app && adduser -S app -G app
+RUN apk add --no-cache postgresql16-client && addgroup -S app && adduser -S app -G app \
+    && mkdir /app/reset-backups && chown app:app /app/reset-backups
 COPY --from=build /app/target/*.jar app.jar
 USER app
 EXPOSE 8080

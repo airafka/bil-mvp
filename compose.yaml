@@ -30,8 +30,12 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-billing}
       FRONTEND_URL: http://localhost:${FRONTEND_PORT:-3001}
       SPRING_PROFILES_ACTIVE: dev
+      OPERATIONAL_RESET_ENABLED: ${OPERATIONAL_RESET_ENABLED:-true}
+      OPERATIONAL_RESET_BACKUP_DIR: /app/reset-backups
     ports:
       - "${BACKEND_PORT:-8081}:8080"
+    volumes:
+      - ./backups/ui-resets:/app/reset-backups
     depends_on:
       db:
         condition: service_healthy

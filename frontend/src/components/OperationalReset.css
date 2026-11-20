@@ -1,0 +1,14 @@
+.app-shell .operational-reset-trigger { flex-shrink: 0; margin-right: 12px; color: #a72c3b; }
+.app-shell .operational-reset-confirm { background: #b83243; }
+.app-shell .operational-reset-confirm:hover:not(:disabled) { background: #9c2636; }
+#app-overlay-root .operational-reset-dialog .route-drawer-body > p { margin: 0; }
+.operational-reset-counts { margin: 16px 0; }
+.operational-reset-counts > div { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--app-border); }
+.operational-reset-counts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.operational-reset-backup { overflow-wrap: anywhere; color: #64748b; font-size: 12px; }
+@media (max-width: 640px) {
+  .topbar:has(.operational-reset-trigger) { flex-wrap: wrap; height: auto; min-height: 64px; gap: 8px; padding-block: 8px; }
+  .topbar:has(.operational-reset-trigger) > .breadcrumbs { flex-basis: 100%; }
+  .app-shell .operational-reset-trigger { margin-right: 0; }
+  .topbar:has(.operational-reset-trigger) > .user-badge { display: none; }
+}
