@@ -25,17 +25,16 @@ public class ContainerStorageController {
         String receivingClientName,String receivingOwnerName,String arrivalTransport,String arrivalParty,String arrivalCargo,
         String shippingClientName,String shippingOwnerName,String departureTransport,String departureParty,String departureCargo) {}
     private static final String FROM="""
-        from container_storage_period_at(?::date) p
-        join container_owner_history h on h.id=p.start_history_id
+        from container_storage_report_at(?::date) p
         join container c on c.id=p.container_id
         """;
     private static final String SELECT="""
         select p.id,p.container_id,c.code container_name,ow.name owner_name,
-          h.occurred_at receiving_at,e.occurred_at shipping_at,p.status,
-          h.order_id start_order_id,h.order_type start_order_type,
-          case h.order_type when 'RECEIVING_ORDER' then r.number when 'SERVICE_ORDER' then so.number end::bigint start_order_number,
-          e.order_id end_order_id,e.order_type end_order_type,
-          case e.order_type when 'SHIPPING_ORDER' then s.number when 'SERVICE_ORDER' then eo.number end::bigint end_order_number,
+          p.start_at receiving_at,p.end_at shipping_at,p.status,
+          p.start_order_id start_order_id,p.start_order_type start_order_type,
+          case p.start_order_type when 'RECEIVING_ORDER' then r.number when 'SERVICE_ORDER' then so.number end::bigint start_order_number,
+          p.end_order_id end_order_id,p.end_order_type end_order_type,
+          case p.end_order_type when 'SHIPPING_ORDER' then s.number when 'SERVICE_ORDER' then eo.number end::bigint end_order_number,
           rc.name receiving_client_name,ro.name receiving_owner_name,r.transport_type arrival_transport,
           case r.transport_type when 'VEHICLE' then ic.name when 'RAILWAY' then r.consignor end arrival_party,
           incoming.cargo_name arrival_cargo,
@@ -43,23 +42,20 @@ public class ContainerStorageController {
           case s.transport_type when 'VEHICLE' then oc.name when 'RAILWAY' then cons.name end departure_party,
           outgoing.cargo_name departure_cargo
         from report_periods p
-        join container_owner_history h on h.id=p.start_history_id
         join container c on c.id=p.container_id
-        left join container_owner_history e on e.id=p.end_history_id
-        left join client ow on ow.id=(select client_id from container_ownership_period where id=p.id)
-        join container_owner_history origin on origin.id=storage_arrival_history(p.id)
-        join receiving_order r on r.id=origin.order_id
-        left join service_order so on so.id=h.order_id and h.order_type='SERVICE_ORDER'
-        left join shipping_order s on s.id=e.order_id and e.order_type='SHIPPING_ORDER'
-        left join service_order eo on eo.id=e.order_id and e.order_type='SERVICE_ORDER'
-        left join receiving_order_container rr on rr.receiving_order_id=r.id and rr.container_id=p.container_id and r.transport_type='VEHICLE'
+        left join client ow on ow.id=p.client_id
+        join receiving_order r on r.id=p.receiving_order_id
+        left join service_order so on so.id=p.start_order_id and p.start_order_type='SERVICE_ORDER'
+        left join shipping_order s on s.id=p.end_order_id and p.end_order_type='SHIPPING_ORDER'
+        left join service_order eo on eo.id=p.end_order_id and p.end_order_type='SERVICE_ORDER'
+        left join receiving_order_container rr on rr.id=p.receiving_order_container_id
         left join lateral (
           select wc.owner_container_id,wr.waybill_id
           from waybill w join waybill_railway_carriage wr on wr.waybill_id=w.id
           join waybill_container wc on wc.waybill_railway_carriage_id=wr.id
-          where w.receiving_order_id=r.id and wc.container_id=p.container_id and r.transport_type='RAILWAY'
+          where wc.id=p.waybill_container_id
         ) rail on true
-        left join shipping_order_container sr on sr.shipping_order_id=s.id and sr.container_id=p.container_id
+        left join shipping_order_container sr on sr.id=p.shipping_order_container_id
         left join client rc on rc.id=r.client_id
         left join client ro on ro.id=coalesce(rr.owner_container_id,rail.owner_container_id,r.default_container_owner_id)
         left join client sc on sc.id=s.client_id
@@ -85,8 +81,8 @@ public class ContainerStorageController {
     private static String reportQuery(Filter filter,boolean paged) {
         // Resolve source documents only for selected rows; keep the count independent of cargo joins.
         return "with report_periods as materialized (select p.* "+FROM+filter.sql()
-            +" order by h.occurred_at desc,p.id"+(paged?" limit ? offset ?":"")+") "
-            +SELECT+" order by h.occurred_at desc,p.id";
+            +" order by p.start_at desc,p.id"+(paged?" limit ? offset ?":"")+") "
+            +SELECT+" order by p.start_at desc,p.id";
     }
     record Filter(String sql,List<Object> args) {}
     private Filter filter(String query,String status,UUID clientId,UUID periodId,LocalDate from,LocalDate to,LocalDate asOf) {
@@ -97,12 +93,12 @@ public class ContainerStorageController {
         var args=new ArrayList<Object>();args.add(asOf);
         String sql=" where p.status in ('OPEN','CLOSED') and (?='' or position(lower(?) in lower(c.code))>0)";
         args.add(query.trim());args.add(query.trim());
-        // Retain the legacy client filter; only this optional filter needs the original arrival chain.
-        if(clientId!=null){sql+=" and exists(select 1 from container_storage_period_origin o join receiving_order r on r.id=o.receiving_order_id where o.id=p.id and r.client_id=?)";args.add(clientId);}
+        // Retain the receiving-client filter using the visit's direct document link.
+        if(clientId!=null){sql+=" and exists(select 1 from receiving_order r where r.id=p.receiving_order_id and r.client_id=?)";args.add(clientId);}
         if(periodId!=null){sql+=" and p.id=?";args.add(periodId);}
-        if(from!=null){sql+=" and (h.occurred_at at time zone 'Europe/Moscow')::date>=?";args.add(from);}
-        if(to!=null){sql+=" and (h.occurred_at at time zone 'Europe/Moscow')::date<=?";args.add(to);}
-        sql+=" and (h.occurred_at at time zone 'Europe/Moscow')::date<=?";args.add(asOf);
+        if(from!=null){sql+=" and (p.start_at at time zone 'Europe/Moscow')::date>=?";args.add(from);}
+        if(to!=null){sql+=" and (p.start_at at time zone 'Europe/Moscow')::date<=?";args.add(to);}
+        sql+=" and (p.start_at at time zone 'Europe/Moscow')::date<=?";args.add(asOf);
         sql+=switch(status){case "ACTIVE"->" and p.status<>'CANCELLED'";
             case "ALL"->"";default->" and p.status=?";};
         if(Set.of("OPEN","CLOSED","CANCELLED").contains(status))args.add(status);
@@ -132,7 +128,7 @@ public class ContainerStorageController {
         var reportDate=date(asOf);
         var f=filter(query,"ACTIVE",null,periodId,null,null,reportDate);
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
-        String visitsFrom=FROM+" join container_ownership_period op on op.id=p.id join container_visit v on v.id=op.container_visit_id ";
+        String visitsFrom=FROM+" join container_visit v on v.id=p.container_visit_id ";
         long count=jdbc.queryForObject("select count(distinct v.id) "+visitsFrom+f.sql(),Long.class,f.args().toArray());
         var args=new ArrayList<>(f.args());args.add(size);args.add((long)page*size);
         var ids=jdbc.query("select v.id "+visitsFrom+f.sql()+" group by v.id order by v.receiving_date desc,v.id limit ? offset ?",
@@ -142,10 +138,10 @@ public class ContainerStorageController {
         // A period deep link selects its visit without truncating that visit's ownership chain.
         var periodsByVisit=new LinkedHashMap<UUID,List<Row>>();ids.forEach(id->periodsByVisit.put(id,new ArrayList<>()));
         var periodsArgs=new ArrayList<Object>();periodsArgs.add(reportDate);periodsArgs.addAll(ids);
-        String sql="with report_periods as materialized (select p.*,op.container_visit_id from container_storage_period_at(?::date) p "
-            +"join container_ownership_period op on op.id=p.id where p.status in ('OPEN','CLOSED') and op.container_visit_id in ("
+        String sql="with report_periods as materialized (select p.* from container_storage_report_at(?::date) p "
+            +"where p.status in ('OPEN','CLOSED') and p.container_visit_id in ("
             +String.join(",",Collections.nCopies(ids.size(),"?"))+")) "
-            +SELECT.replace("select p.id,","select p.container_visit_id,p.id,")+" order by h.occurred_at,h.created_at,h.id";
+            +SELECT.replace("select p.id,","select p.container_visit_id,p.id,")+" order by p.start_at,p.recorded_at,p.id";
         jdbc.query(sql,(org.springframework.jdbc.core.RowCallbackHandler)rs->periodsByVisit.get(rs.getObject("container_visit_id",UUID.class)).add(row(rs,reportDate)),periodsArgs.toArray());
         var visits=new ArrayList<Visit>();
         periodsByVisit.forEach((id,periods)->{
@@ -160,7 +156,7 @@ public class ContainerStorageController {
     public List<ContainerOption> containers() {
         return jdbc.query("""
             select c.id,c.code from container c
-            where exists(select 1 from container_storage_period p where p.container_id=c.id and p.status in ('OPEN','CLOSED'))
+            where exists(select 1 from container_storage_report_at('infinity'::date) p where p.container_id=c.id)
             order by c.code,c.id
             """, (rs,n)->new ContainerOption(rs.getObject(1,UUID.class),rs.getString(2)));
     }
