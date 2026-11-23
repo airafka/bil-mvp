@@ -18,15 +18,16 @@ public class OrderStatusService {
 
     @Transactional
     public CreatedOrderResponse finish(String resource, UUID id, String eventCode) {
-        lockOrderRoute(resource, id);
+        return finish(resource,id,eventCode,null);
+    }
+
+    @Transactional
+    public CreatedOrderResponse finish(String resource, UUID id, String eventCode, UUID containerId) {
         boolean receiving = resource.equals("receiving-orders");
         if (!(receiving ? "UNLOAD_FINISH" : "LOAD_FINISH").equals(eventCode))
             throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_CONTAINER_EVENT","Для поставки требуется UNLOAD_FINISH, для вывоза — LOAD_FINISH");
-        var rows=jdbc.query("select number,order_status from " + (receiving ? "receiving_order" : "shipping_order") + " where id=? for update",
-            (rs,n)->new CreatedOrderResponse(id,rs.getInt(1),rs.getString(2)),id);
-        if(rows.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"ORDER_NOT_FOUND","Заявка не найдена");
-        if(rows.getFirst().status().equals("COMPLETED")) return rows.getFirst();
-        return change(resource,id,new ChangeStatusRequest(Status.CONFIRMED,Status.COMPLETED));
+        lockOrderRoute(resource,id);
+        return changeInternal(resource,id,new ChangeStatusRequest(Status.CONFIRMED,Status.COMPLETED),containerId,true);
     }
     public enum Status { DRAFT, CONFIRMED, COMPLETED }
     public record ChangeStatusRequest(@NotNull Status expectedStatus, @NotNull Status status) {}
@@ -38,10 +39,10 @@ public class OrderStatusService {
             throw new ApiException(HttpStatus.CONFLICT, "CONFIRM_THROUGH_ROUTE", "Подтвердите заявку через рейс");
         if(resource.equals("comprehensive-service-orders")) throw new ApiException(HttpStatus.CONFLICT,"SERVICE_STATUS_AUTOMATIC","Статус услуги меняется автоматически после выполнения связанных заявок");
         lockOrderRoute(resource, id);
-        return changeInternal(resource, id, request);
+        return changeInternal(resource, id, request,null,false);
     }
 
-    private CreatedOrderResponse changeInternal(String resource, UUID id, ChangeStatusRequest request) {
+    private CreatedOrderResponse changeInternal(String resource, UUID id, ChangeStatusRequest request, UUID containerId, boolean resultEvent) {
         String table = switch (resource) {
             case "receiving-orders" -> "receiving_order";
             case "shipping-orders" -> "shipping_order";
@@ -54,6 +55,10 @@ public class OrderStatusService {
                 (rs, row) -> new CreatedOrderResponse(id, rs.getInt("code"), rs.getString("status")), id);
         if (rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Заявка не найдена");
         var current = rows.getFirst();
+        if(resultEvent && current.status().equals("COMPLETED")){
+            if(containerId!=null) stock.verifyFinished(resource,id,containerId);
+            return current;
+        }
         if (!current.status().equals(request.expectedStatus().name())) {
             throw new ApiException(HttpStatus.CONFLICT, "STATUS_CHANGED", "Статус уже изменён. Обновите страницу перед следующим действием.");
         }
@@ -92,7 +97,8 @@ public class OrderStatusService {
             if (remaining != null && remaining > 0) throw new ApiException(HttpStatus.CONFLICT,
                     "SERVICE_CONTAINERS_UNASSIGNED", "Создайте заявки на вывоз для всех КТК перед выполнением услуги");
         }
-        stock.onOrderTransition(resource,id,request.status() == Status.COMPLETED);
+        if(request.status()==Status.CONFIRMED) stock.reserve(resource,id);
+        else if(!stock.finishContainers(resource,id,containerId)) return current;
         if (request.status() == Status.COMPLETED) billing.complete(resource, id);
         jdbc.update("update " + table + " set " + statusColumn + " = ? where id = ?", request.status().name(), id);
         if (!resource.equals("comprehensive-service-orders") && request.status() == Status.COMPLETED) {
@@ -145,7 +151,7 @@ public class OrderStatusService {
         ru.billing.app.containerstock.ContainerLocks.lockOrders(jdbc,
                 orders.stream().filter(o->o.resource().equals("receiving-orders")).map(Order::id).toList(),
                 orders.stream().filter(o->o.resource().equals("shipping-orders")).map(Order::id).toList());
-        for(var order:orders) changeInternal(order.resource(),order.id(),new ChangeStatusRequest(Status.DRAFT,Status.CONFIRMED));
+        for(var order:orders) changeInternal(order.resource(),order.id(),new ChangeStatusRequest(Status.DRAFT,Status.CONFIRMED),null,false);
         jdbc.update("update route set status='CONFIRMED' where id=?",routeId);
     }
 }

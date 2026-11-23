@@ -26,6 +26,11 @@ public class ContainerTaskRows {
                 +(receiving?"receiving_order_id":"shipping_order_id")+"=? order by container_id,id";
         var rows=jdbc.query(query,(rs,n)->new Row(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),
             rs.getObject(3,UUID.class),rs.getString(4),table),order);
+        if(receiving && !railway && rows.isEmpty() && Boolean.TRUE.equals(jdbc.queryForObject("""
+            select exists(select 1 from waybill w join waybill_railway_carriage wr on wr.waybill_id=w.id
+              join waybill_container wc on wc.waybill_railway_carriage_id=wr.id where w.receiving_order_id=?)
+            """,Boolean.class,order)))
+            throw conflict("RECEIVING_OWNER_REQUIRED","Укажите собственников КТК в заявке на поставку");
         var seen=new HashSet<UUID>();
         for(var row:rows) if(!seen.add(row.container())) throw conflict(
             "CONTAINER_TASK_AMBIGUOUS","В заявке несколько строк одного КТК. Для фактического выполнения нужна однозначная строка");
@@ -43,11 +48,6 @@ public class ContainerTaskRows {
         if(rows.size()!=1 || !"FINISHED".equals(rows.getFirst().status()))
             throw conflict("CONTAINER_TASK_NOT_FINISHED","Для периода хранения нужна выполненная строка КТК");
         return rows.getFirst();
-    }
-
-    public void cancel(UUID order,boolean receiving,String previousOrderStatus) {
-        String expected="COMPLETED".equals(previousOrderStatus)?"FINISHED":"UPLOADED";
-        for(var row:rows(order,receiving)) change(row,expected,null);
     }
 
     private ApiException conflict(String code,String message) {return new ApiException(HttpStatus.CONFLICT,code,message);}

@@ -75,55 +75,56 @@ public class ContainerStockService {
         }
         return null;
     }
-    public void onOrderTransition(String resource, UUID order, boolean completed) {
-        if(resource.equals("comprehensive-service-orders")) return;
+    public void reserve(String resource, UUID order) {
         boolean receiving=resource.equals("receiving-orders");
         var rows=tasks.rows(order,receiving);
-        // Legacy empty orders have no physical KTK to reserve.
-        if(rows.isEmpty()) {
-            if(receiving) {
-                Integer missing=jdbc.queryForObject("select count(*) from waybill w join waybill_railway_carriage rc on rc.waybill_id=w.id join waybill_container wc on wc.waybill_railway_carriage_id=rc.id where w.receiving_order_id=?",Integer.class,order);
-                if(missing!=null&&missing>0) throw error("RECEIVING_OWNER_REQUIRED","Укажите собственников КТК в заявке на поставку");
-            }
-            return;
-        }
         lockContainers(rows.stream().map(ContainerTaskRows.Row::container).toList());
         var conflicts = new ArrayList<String>();
-        var owners = new HashMap<UUID,UUID>();
-        for (var row:rows) {
-            State old = state(row.container());
-            if (!completed) {
-                if (receiving && row.owner()==null) conflicts.add(containerName(row.container())+": не указан собственник");
-                UUID previous = owners.putIfAbsent(row.container(),row.owner());
-                if (receiving && previous!=null && !previous.equals(row.owner())) conflicts.add(containerName(row.container())+": указаны разные собственники");
-                String problem=ContainerStockPolicy.reservationConflict(receiving,old==null?null:old.status());
-                if(problem!=null) conflicts.add(describe(row.container(),old,problem));
-            }
+        for(var row:rows) {
+            State old=state(row.container());
+            if(receiving && row.owner()==null) conflicts.add(containerName(row.container())+": не указан собственник");
+            String problem=ContainerStockPolicy.reservationConflict(receiving,old==null?null:old.status());
+            if(problem!=null) conflicts.add(describe(row.container(),old,problem));
         }
         if(!conflicts.isEmpty()) throw error("CONTAINER_RESERVATION_CONFLICT",String.join("; ",conflicts));
         for(var row:rows) {
-            tasks.change(row,completed?"UPLOADED":null,completed?"FINISHED":"UPLOADED");
-            State old=state(row.container());
-            if(receiving) {
-                if(!completed) {
-                    if(row.owner()==null) throw error("RECEIVING_OWNER_REQUIRED","Укажите собственника каждого КТК в заявке на поставку");
-                    if(old!=null&&!old.status().equals("DEPARTED")) throw error("CONTAINER_ALREADY_IN_STOCK","КТК уже ожидается, находится на терминале или зарезервирован для вывоза");
-                    transition(row.container(),row.owner(),"EXPECTED",order,old==null?null:old.shipping(),order,"RECEIVING_ORDER");
-                } else {
-                    if(old==null||!old.status().equals("EXPECTED")||!order.equals(old.receiving())) throw error("RECEIVING_RESERVATION_REQUIRED",describe(row.container(),old,"КТК не зарезервирован этой поставкой"));
-                    transition(row.container(),old.client(),"ON_TERMINAL",order,old.shipping(),order,"RECEIVING_ORDER");
-                }
-            } else {
-                if(!completed) {
-                    if(old==null||!old.status().equals("ON_TERMINAL")) throw error("SHIPPING_MISSING_IN_REMAINS","Для вывоза КТК должен быть принят и свободен в остатках");
-                    jdbc.update("update shipping_order_container set owner_container_id=? where shipping_order_id=? and container_id=?",old.client(),order,row.container());
-                    transition(row.container(),old.client(),"RESERVED_OUT",old.receiving(),order,order,"SHIPPING_ORDER");
-                } else {
-                    if(old==null||!old.status().equals("RESERVED_OUT")||!order.equals(old.shipping())) throw error("SHIPPING_RESERVATION_REQUIRED",describe(row.container(),old,"КТК не зарезервирован этим вывозом"));
-                    transition(row.container(),old.client(),"DEPARTED",old.receiving(),order,order,"SHIPPING_ORDER");
-                }
+            tasks.change(row,null,"UPLOADED");
+            if(receiving) transition(row.container(),row.owner(),"EXPECTED",order,null,order,"RECEIVING_ORDER");
+            else {
+                State old=state(row.container());
+                jdbc.update("update shipping_order_container set owner_container_id=? where id=?",old.client(),row.id());
+                transition(row.container(),old.client(),"RESERVED_OUT",old.receiving(),order,order,"SHIPPING_ORDER");
             }
         }
+    }
+
+    public void verifyFinished(String resource,UUID order,UUID containerId){
+        tasks.finished(order,containerId,resource.equals("receiving-orders"));
+    }
+
+    /** Caller holds the document lock. The manual button delivers all outstanding row results. */
+    public boolean finishContainers(String resource,UUID order,UUID containerId){
+        boolean receiving=resource.equals("receiving-orders");
+        var rows=tasks.rows(order,receiving);
+        if(containerId!=null && rows.stream().noneMatch(r->r.container().equals(containerId)))
+            throw error("CONTAINER_NOT_IN_ORDER","КТК отсутствует в этой заявке");
+        var outstanding=rows.stream().filter(r->!"FINISHED".equals(r.status())).toList();
+        var selected=outstanding.stream().filter(r->containerId==null || r.container().equals(containerId)).toList();
+        lockContainers(selected.stream().map(ContainerTaskRows.Row::container).toList());
+        for(var row:selected) applyFinishedResult(order,receiving,row);
+        // Read the persisted results while the order is locked. Empty legacy documents can be completed manually.
+        return tasks.rows(order,receiving).stream().allMatch(r->"FINISHED".equals(r.status()));
+    }
+
+    private void applyFinishedResult(UUID order,boolean receiving,ContainerTaskRows.Row row){
+        State old=state(row.container());
+        if(receiving && (old==null || !"EXPECTED".equals(old.status()) || !order.equals(old.receiving())))
+            throw error("RECEIVING_RESERVATION_REQUIRED",describe(row.container(),old,"КТК не зарезервирован этой поставкой"));
+        if(!receiving && (old==null || !"RESERVED_OUT".equals(old.status()) || !order.equals(old.shipping())))
+            throw error("SHIPPING_RESERVATION_REQUIRED",describe(row.container(),old,"КТК не зарезервирован этим вывозом"));
+        tasks.change(row,"UPLOADED","FINISHED");
+        if(receiving) transition(row.container(),old.client(),"ON_TERMINAL",order,null,order,"RECEIVING_ORDER");
+        else transition(row.container(),old.client(),"DEPARTED",old.receiving(),order,order,"SHIPPING_ORDER");
     }
     private String containerName(UUID id) {
         return jdbc.queryForObject("select code from container where id=?",String.class,id);
@@ -138,7 +139,8 @@ public class ContainerStockService {
         if("DRAFT".equals(previousStatus))return;
         boolean receiving=resource.equals("receiving-orders");
         String type=receiving?"RECEIVING_ORDER":"SHIPPING_ORDER";
-        var ids=tasks.rows(order,receiving).stream().map(ContainerTaskRows.Row::container).toList();
+        var rows=tasks.rows(order,receiving);
+        var ids=rows.stream().map(ContainerTaskRows.Row::container).toList();
         lockContainers(ids);
         var reservations=jdbc.query("""
             select container_id,old_client_id from container_owner_history_view
@@ -153,9 +155,13 @@ public class ContainerStockService {
         if(!previousOwners.keySet().equals(new HashSet<>(ids)))
             throw error("STOCK_HISTORY_REQUIRED","Состав заявки не совпадает с историей резервирования. Требуется сверка остатков");
         var conflicts=new ArrayList<String>();
-        for(UUID id:ids) {
+        for(var row:rows) {
+            UUID id=row.container();
+            boolean finished="FINISHED".equals(row.status());
+            if(!finished && (!"UPLOADED".equals(row.status()) || "COMPLETED".equals(previousStatus)))
+                throw error("CONTAINER_TASK_STATUS_CHANGED","Статус строки КТК не соответствует отменяемой операции");
             State old=state(id);
-            if(old==null || !ContainerStockPolicy.canCancel(receiving,"COMPLETED".equals(previousStatus),old.status(),receiving?old.receiving():old.shipping(),order))
+            if(old==null || !ContainerStockPolicy.canCancel(receiving,finished,old.status(),receiving?old.receiving():old.shipping(),order))
                 conflicts.add(describe(id,old,"отмена невозможна: КТК уже участвует в другой операции; сначала отмените последующие заявки"));
         }
         if(!conflicts.isEmpty())throw error("CANCELLATION_STOCK_CONFLICT",String.join("; ",conflicts));
@@ -171,7 +177,7 @@ public class ContainerStockService {
             transition(id,receiving&&previousOwner!=null?previousOwner:old.client(),receiving?"DEPARTED":"ON_TERMINAL",
                 receiving?previousOrder:old.receiving(),receiving?old.shipping():previousOrder,order,type);
         }
-        tasks.cancel(order,receiving,previousStatus);
+        for(var row:rows) tasks.change(row,row.status(),null);
     }
     static final String OWNER_SELECT="""
         select o.*,c.code as container_name,c.container_type,cl.name as client_name
@@ -207,7 +213,7 @@ public class ContainerStockService {
             left join service_order_current so on h.order_type='SERVICE_ORDER' and so.id=h.order_id
             where h.container_id=? and (? or ((h.occurred_at at time zone 'Europe/Moscow')::date<=billing_today()
               and not exists(select 1 from container_period op where op.start_container_owner_history_id=h.id and op.is_withdrawn))) and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
-                and (r.order_status in ('COMPLETED','CANCELLED') or s.order_status in ('COMPLETED','CANCELLED') or so.status in ('DONE','PARTIAL'))))
+                and (h.order_type in ('RECEIVING_ORDER','SHIPPING_ORDER') or so.status in ('DONE','PARTIAL'))))
             order by h.created_at desc,h.id desc
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("timeline_old_client_id",UUID.class),rs.getString("old_name"),
                 rs.getObject("new_client_id",UUID.class),rs.getString("new_name"),rs.getString("old_status"),rs.getString("new_status"),
