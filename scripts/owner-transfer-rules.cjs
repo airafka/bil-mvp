@@ -50,11 +50,22 @@ async function main() {
     const second = await x.transfer(a.ktk,x.c,'2026-09-18');
     const revoked = await x.transfer(b.ktk,x.c,'2026-09-18');
     await api('/service-orders/'+revoked+'/withdraw','POST');
+    await api('/service-orders/'+revoked+'/accept','POST');
+    await api('/service-orders/'+revoked+'/withdraw','POST');
     const early = await x.arrival();
     const shipped = await x.transfer(early.ktk,x.b,'2026-09-18');
     await x.ship(early.ktk);
     assert.equal(events(second), 0);
-    await clock('2026-09-19');
+    const periods = () => Number(sql(`select count(*) from container_period p join container_visit v on v.id=p.container_visit_id where v.container_id='${a.ktk}'`));
+    assert.equal(periods(), 1, 'Future plans have no factual storage periods');
+    assert.equal(sql(`select count(*) from service_order_container where service_order_id='${revoked}' and result_status='WITHDRAWN' and container_period_id is null`),'2');
+    // Advance the isolated DB calendar without invoking the application's calendar/refresh endpoint.
+    sql("update application_clock set business_date='2026-09-19',version=version+1 where id=1");
+    assert.equal(current(), x.a);
+    const lookup = () => api('/container-owners/lookup','POST',{containerIds:[a.ktk]});
+    const selections = await Promise.all([lookup(),lookup()]);
+    assert(selections.every(rows=>rows[0].ownerClientId===x.c), 'Shipment selection refreshes overdue transfers');
+    assert.equal(periods(), 3);
     assert.equal(current(), x.c);
     const history = await api('/containers/'+a.ktk+'/owner-history');
     const firstChange = history.find(event => event.orderId === draft.id);
@@ -83,7 +94,14 @@ async function main() {
     const back = await x.transfer(a.ktk,x.b,'2026-09-16');
     assert.equal(events(back), 1);
     assert.equal(current(), x.c);
+    await expectStorage(a.ktk,[{ownerClientId:x.a,storageDays:1},{ownerClientId:x.b,storageDays:1},
+        {ownerClientId:x.b,storageDays:1},{ownerClientId:x.c,storageDays:2}]);
+    await x.transfer(a.ktk,x.a,'2026-09-19');
+    await x.transfer(a.ktk,x.c,'2026-09-19');
     const departure = await x.ship(a.ktk);
+    await expectStorage(a.ktk,[{ownerClientId:x.a,storageDays:1},{ownerClientId:x.b,storageDays:1},
+        {ownerClientId:x.b,storageDays:1},{ownerClientId:x.c,storageDays:1},
+        {ownerClientId:x.a,storageDays:0},{ownerClientId:x.c,storageDays:1}]);
     const visitFacts = receiving => sql(`select concat_ws('|',receiving_date,coalesce(shipping_date::text,'open'),is_cancelled)
         from container_visit_facts where container_id='${a.ktk}' and receiving_order_id='${receiving}'`);
     assert.equal(visitFacts(a.receiving), '2026-09-15|2026-09-19|f');

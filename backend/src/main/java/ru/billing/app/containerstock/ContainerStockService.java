@@ -211,8 +211,7 @@ public class ContainerStockService {
             left join receiving_order r on h.order_type='RECEIVING_ORDER' and r.id=h.order_id
             left join shipping_order s on h.order_type='SHIPPING_ORDER' and s.id=h.order_id
             left join service_order_current so on h.order_type='SERVICE_ORDER' and so.id=h.order_id
-            where h.container_id=? and (? or ((h.occurred_at at time zone 'Europe/Moscow')::date<=billing_today()
-              and not exists(select 1 from container_period op where op.start_container_owner_history_id=h.id and op.is_withdrawn))) and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
+            where h.container_id=? and (? or (h.occurred_at at time zone 'Europe/Moscow')::date<=billing_today()) and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
                 and (h.order_type in ('RECEIVING_ORDER','SHIPPING_ORDER') or so.status in ('DONE','PARTIAL'))))
             order by h.created_at desc,h.id desc
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("timeline_old_client_id",UUID.class),rs.getString("old_name"),

@@ -27,7 +27,7 @@ public class OwnershipOrderService {
             String status,LocalDateTime completionAt,long containerQuantity,LocalDate effectiveDate,UUID sourceClientId,String sourceClientName) {}
     public record Details(Header order,List<Link> containers) {}
     private static final String HEADER="""
-        select s.*,c.name as client_name,src.name as source_client_name,(select count(*) from service_order_container sc where sc.service_order_id=s.id) as quantity
+        select s.*,c.name as client_name,src.name as source_client_name,(select count(*) from service_order_container_current sc where sc.service_order_id=s.id) as quantity
         from service_order_current s join client c on c.id=s.client_id
         left join client src on src.id=s.source_client_id
         """;
@@ -110,7 +110,7 @@ public class OwnershipOrderService {
     }
     @Transactional public void delete(UUID id){
         draft(locked(id));
-        if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from container_owner_history where order_type='SERVICE_ORDER' and order_id=?) or exists(select 1 from container_period where plan_order_id=?)",Boolean.class,id,id)))
+        if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from container_owner_history where order_type='SERVICE_ORDER' and order_id=?) or exists(select 1 from service_order_container where service_order_id=? and result_status='WITHDRAWN')",Boolean.class,id,id)))
             throw error(HttpStatus.CONFLICT,"SERVICE_ORDER_HAS_HISTORY","Ранее подтверждённая заявка сохраняется для истории; её можно изменить и подтвердить повторно");
         jdbc.update("delete from service_order_container where service_order_id=?",id);jdbc.update("delete from service_order where id=?",id);
     }
@@ -127,7 +127,7 @@ public class OwnershipOrderService {
             from ownership_transfer_candidates(?::date,?::uuid,?::uuid) candidate
             join container_owner o on o.id=candidate.owner_id join container c on c.id=o.container_id
             join client cl on cl.id=candidate.previous_client_id
-            left join service_order_container sc on sc.container_id=o.container_id and sc.service_order_id=?
+            left join service_order_container_current sc on sc.container_id=o.container_id and sc.service_order_id=?
             where (?='' or position(lower(?) in lower(c.code||' '||cl.name))>0)
               and (?::uuid is null or candidate.previous_client_id=?::uuid)
             """;
@@ -185,7 +185,7 @@ public class OwnershipOrderService {
         Set<UUID> lockedIds=new TreeSet<>(containers);existing.forEach(l->lockedIds.add(l.containerId()));stock.lockContainers(lockedIds);
         var eligible=validateCandidates(h,containers);
         for(var l:existing)if(!containers.contains(l.containerId()))jdbc.update("delete from service_order_container where id=?",l.id());
-        for(UUID container:containers)jdbc.update("insert into service_order_container(id,service_order_id,container_id,container_visit_id) values(?,?,?,?) on conflict(service_order_id,container_id) do update set container_visit_id=excluded.container_visit_id",UUID.randomUUID(),id,container,eligible.get(container).visit());
+        for(UUID container:containers)jdbc.update("insert into service_order_container(id,service_order_id,container_id,container_visit_id) values(?,?,?,?) on conflict(service_order_id,container_id) where result_status<>'WITHDRAWN' do update set container_visit_id=excluded.container_visit_id",UUID.randomUUID(),id,container,eligible.get(container).visit());
         return details(id);
     }
     @Transactional public Details accept(UUID id){
@@ -194,24 +194,23 @@ public class OwnershipOrderService {
         LocalDate effective=date(h.effectiveDate());
         var eligible=validateExisting(h,links);
         var confirmedAt=jdbc.queryForObject("select billing_now()",java.time.OffsetDateTime.class);
-        for(var l:links){var state=stock.state(l.containerId());
-            var candidate=eligible.get(l.containerId());
-            var effectiveAt=candidate.instant();
-            UUID period=jdbc.queryForObject("select confirm_ownership_assignment(?,?,?,?,?,?,?)",UUID.class,
-                    h.id(),l.containerId(),candidate.visit(),candidate.previousClient(),h.clientId(),state.status(),effectiveAt);
-            jdbc.update("update service_order_container set container_visit_id=?,expected_client_id=?,expected_status=?,result_status='CONFIRMED',result_reason=null,container_period_id=? where service_order_id=? and container_id=?",
-                    candidate.visit(),candidate.previousClient(),state.status(),period,id,l.containerId());
+        for (var link : links) {
+            var candidate=eligible.get(link.containerId());
+            jdbc.update("""
+                update service_order_container set container_visit_id=?,expected_client_id=?,expected_status='ON_TERMINAL',
+                    plan_client_id=?,plan_at=?,result_status='PLANNED',result_reason=null
+                where id=?
+                """,candidate.visit(),candidate.previousClient(),h.clientId(),candidate.instant(),link.id());
         }
         jdbc.update("update service_order set status='CONFIRMED',effective_date=?,completion_at=?::timestamptz at time zone 'UTC',updated_at=?::timestamptz at time zone 'UTC',updated_by='local' where id=?",effective,confirmedAt,confirmedAt,id);
+        ContainerLocks.refreshLockedOwners(jdbc,eligible.keySet());
         return details(id);
     }
     @Transactional public Details withdraw(UUID id) {
         Header h=locked(id);
         if(!h.status().equals("SCHEDULED")) throw error(HttpStatus.CONFLICT,"SERVICE_ORDER_NOT_SCHEDULED","Вернуть в черновик можно только ожидающую заявку");
         stock.lockContainers(links(id).stream().map(Link::containerId).toList());
-        var periods=jdbc.query("select container_period_id from service_order_container where service_order_id=? and container_period_id is not null",(rs,n)->rs.getObject(1,UUID.class),id);
-        for(UUID period:periods) jdbc.queryForObject("select withdraw_ownership_period(?,?)",Object.class,period,"Заявка возвращена в черновик");
-        jdbc.update("update service_order_container set container_period_id=null,container_visit_id=null,expected_client_id=null,expected_status=null,result_status='DRAFT',result_reason=null where service_order_id=?",id);
+        jdbc.queryForObject("select withdraw_ownership_order(?)",Object.class,id);
         jdbc.update("update service_order set status='DRAFT',completion_at=null,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",id);
         return details(id);
     }

@@ -215,7 +215,7 @@ function repair(){
 }
 async function api(p,method='GET',body,status=200){const r=await fetch(base+p,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();assert.equal(r.status,status,p+': '+text);return text?JSON.parse(text):null;}
 async function clock(date){const c=await api('/application-clock');await api('/application-clock','PUT',{date,version:c.version});}
-async function init(name){guard(name);verifyRelease(name.endsWith('-old')?59:latestVersion);
+async function init(name,version=name.endsWith('-old')?59:latestVersion){guard(name);verifyRelease(version);
 const tariff=json('select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where active order by id limit 1)t');
 const clients=await api('/references/clients'),a=tariff.client_id,[b,c]=clients.filter(x=>x.id!==a).slice(0,2).map(x=>x.id),party=clients.find(x=>x.id===a).name;
 const area=(await api('/references/terminal-areas')).find(x=>x.code==='CONTAINER').id;
@@ -250,7 +250,9 @@ function compareBytes(before,after){
   assert(expected.equals(actual),'Response bytes unchanged, including BOM/encoding: '+p);
  }
 }
-const count=(table,k)=>Number(sql(`select count(*) from ${table} where container_id='${k}'`));
+const count=(table,k)=>Number(sql(table==='container_period'
+ ? `select count(*) from container_period p join container_visit v on v.id=p.container_visit_id where v.container_id=${quote(k)}`
+ : `select count(*) from ${identifier(table)} where container_id=${quote(k)}`));
 const owner=k=>sql(`select client_id from container_owner_current where container_id='${k}'`);
 
 // init() verifies the whole isolated stack before its first API access.
@@ -277,7 +279,7 @@ function parseCsv(text){
 async function expectStorage(k,expected,periodTable='container_period'){
  const code=sql(`select code from container where id=${quote(k)}`);
  const report=await api('/container-storage-periods?size=100&query='+encodeURIComponent(code));
- const assignments=json(`select coalesce(json_agg(t),'[]') from (select p.id,p.client_id,c.name from ${identifier(periodTable)} p join client c on c.id=p.client_id where p.container_id=${quote(k)})t`);
+ const assignments=json(`select coalesce(json_agg(t),'[]') from (select p.id,p.client_id,c.name from ${identifier(periodTable)} p join container_visit v on v.id=p.container_visit_id join client c on c.id=p.client_id where v.container_id=${quote(k)})t`);
  const byId=new Map(assignments.map(p=>[p.id,p]));
  const actual=report.items.map(r=>{const p=byId.get(r.id);assert(p);assert.equal(r.containerId,k);assert.equal(r.ownerName,p.name);return {ownerClientId:p.client_id,storageDays:r.storageDays};});
  const sort=rows=>rows.slice().sort((a,b)=>a.ownerClientId.localeCompare(b.ownerClientId)||a.storageDays-b.storageDays);
@@ -308,11 +310,11 @@ console.log('PASS V59 fixtures: all four statuses asserted; exact A2/B4 and A1/C
 async function check(){
  // This SQL comparison must precede init(), capture(), or any other /api access.
  // The first API request can repair an incorrect migration backfill.
- guard('billing-register-owner-new');verifyRelease(latestVersion);
+ guard('billing-register-owner-new');verifyRelease(67);
  const before=JSON.parse(fs.readFileSync('owner-before-data.json')),after=snapshot();
  compareMigration(before,after);fs.writeFileSync('owner-after-migration-before-api.json',JSON.stringify(after));
- console.log(`PASS V59 -> V${latestVersion} before first API: ${Object.keys(before.tables).length} tables, ${Object.keys(before.sequences).length} sequences, owners/UUIDs/constraints/triggers`);
- const x=await init('billing-register-owner-new'),f=JSON.parse(fs.readFileSync('owner-fixture.json'));
+ console.log(`PASS V59 -> V67 before first API: ${Object.keys(before.tables).length} tables, ${Object.keys(before.sequences).length} sequences, owners/UUIDs/constraints/triggers`);
+ const x=await init('billing-register-owner-new',67),f=JSON.parse(fs.readFileSync('owner-fixture.json'));
  compareBytes(JSON.parse(fs.readFileSync('owner-before-api.json')),await capture());
  await expectOwner(f.terminal.ktk,x.a);await expectOwner(f.exactBack.ktk,x.b);
  await expectStorage(f.closed.ktk,[{ownerClientId:x.a,storageDays:2},{ownerClientId:x.b,storageDays:4}]);
