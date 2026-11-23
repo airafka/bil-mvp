@@ -31,14 +31,14 @@ MVP принимает результаты TOS по каждому КТК. Пр
 
 | Компонент | Адрес / имя |
 | --- | --- |
-| Compose-проект | billing-next |
-| UI | http://localhost:3001 |
-| Backend / health | http://localhost:8081 / http://localhost:8081/actuator/health |
-| PostgreSQL | localhost:5433, база billing_next, пользователь billing |
-| Контейнеры | billing-next-frontend-1, billing-next-backend-1, billing-next-db-1 |
-| Хранилище PostgreSQL | billing-next_postgres-data |
+| Compose-проект | billing-mvp |
+| UI | http://localhost:3021 |
+| Backend / health | http://localhost:8101 / http://localhost:8101/actuator/health |
+| PostgreSQL | localhost:5453, база billing_mvp, пользователь billing |
+| Контейнеры | billing-mvp-frontend-1, billing-mvp-backend-1, billing-mvp-db-1 |
+| Хранилище PostgreSQL | billing-mvp_postgres-data |
 
-Выполняйте команды из корня клона airafka/bil-mvp. Путь показывает `git rev-parse --show-toplevel`, адрес репозитория — `git remote -v`. Для запуска рядом с существующим billing-next задайте отдельное имя Compose-проекта, том PostgreSQL и свободные порты. Проверьте также имя проекта в скриптах запуска, восстановления и остановки.
+Выполняйте команды из корня клона airafka/bil-mvp. Путь показывает `git rev-parse --show-toplevel`, адрес репозитория — `git remote -v`. Compose создаёт сеть `billing-mvp_default` и том `billing-mvp_postgres-data` для этого клона. Все три порта доступны через loopback на этом компьютере.
 
 Для уже настроенной копии: запустить Docker Desktop, затем выполнить .\start.ps1. Остановка — .\stop.ps1. Скрипт запуска пересобирает приложение, остановка сохраняет БД. Для нового компьютера **сначала восстановите снимок в пустую БД**, затем запускайте приложение: [пошаговая инструкция](database/README.md).
 
@@ -50,9 +50,9 @@ MVP принимает результаты TOS по каждому КТК. Пр
 
 ## Просмотр БД в реальном времени
 
-Отдельный локальный интерфейс — http://localhost:3002, Compose-проект `billing-db-viewer`, исходники — `db-viewer/`. Показывает таблицы схемы public, строки, типы колонок, ключи и переходы по связям. Есть поиск, сортировка, страницы, полный просмотр записи, подсветка новых/изменённых строк и журнал наблюдаемых операций.
+Отдельный локальный интерфейс — http://localhost:3022, Compose-проект `billing-mvp-viewer`, исходники — `db-viewer/`. Показывает таблицы схемы public, строки, типы колонок, ключи и переходы по связям. Есть поиск, сортировка, страницы, полный просмотр записи, подсветка новых/изменённых строк и журнал наблюдаемых операций.
 
-Обновление идёт по событиям PostgreSQL после COMMIT: INSERT, UPDATE, DELETE и TRUNCATE. Периодического опроса БД нет. Интерфейс доступен только на этом компьютере и не позволяет изменять данные. Основной MVP продолжает работать на порту 3001.
+Обновление идёт по событиям PostgreSQL после COMMIT: INSERT, UPDATE, DELETE и TRUNCATE. Периодического опроса БД нет. Интерфейс доступен только на этом компьютере и не позволяет изменять данные. Основной MVP продолжает работать на порту 3021.
 
 Обычный запуск — `.\start-db-viewer.ps1`, остановка — `.\stop-db-viewer.ps1`. Перед первым запуском нужна отдельная установка служебных уведомлений после резервного копирования: [инструкция](database/README.md#просмотр-бд-в-реальном-времени). Наблюдатель не входит в миграции бизнес-схемы Flyway.
 
@@ -91,12 +91,12 @@ MVP принимает результаты TOS по каждому КТК. Пр
 
 - Frontend: React, TypeScript, React Router, Vite; зависимости фиксирует [package-lock.json](frontend/package-lock.json).
 - Backend: Java 21, Spring Boot 4.1.0, Spring JDBC, Bean Validation.
-- БД: PostgreSQL 16, Flyway. Активные миграции V1–V69 находятся в [db/baseline](backend/src/main/resources/db/baseline).
+- БД: PostgreSQL 16, Flyway. Активные миграции V1–V72 находятся в [db/baseline](backend/src/main/resources/db/baseline).
 - Сборка и запуск: Docker Compose; frontend раздаёт Nginx.
 
 [Backend Dockerfile](backend/Dockerfile) выполняет Maven package с тестами; [frontend Dockerfile](frontend/Dockerfile) — ESLint, Vitest и TypeScript/Vite build. Локально: mvn test из backend; npm ci, npm run lint, npm run test, npm run build из frontend. Для frontend dev доступен npm run dev.
 
-При запуске backend вне Compose необходимо явно настроить DB_HOST=localhost, DB_PORT=5433, DB_NAME=billing_next и локальные учётные данные: значения по умолчанию в application.yml — localhost:5432, база billing. Для тестов используйте отдельную БД и свободный порт.
+При запуске backend вне Compose необходимо явно настроить DB_HOST=localhost, DB_PORT=5453, DB_NAME=billing_mvp и локальные учётные данные: значения по умолчанию в application.yml — localhost:5432, база billing. Для тестов используйте отдельную БД и свободный порт.
 
 Проверки, меняющие данные, выполняются только в изолированной тестовой БД. Старые scripts могут содержать прежние пути и порты: перед запуском читать сценарий. Количество ранее пройденных тестов не является текущим результатом — после задачи сообщать только реально выполненные проверки.
 

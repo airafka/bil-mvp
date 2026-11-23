@@ -6,8 +6,8 @@ for (const oid of [20, 1114, 1184, 1082, 1700]) pg.types.setTypeParser(oid, valu
 export const CHANNEL = 'billing_db_viewer';
 export const connection = {
   host: process.env.DB_HOST || '127.0.0.1',
-  port: Number(process.env.DB_PORT || 5433),
-  database: process.env.DB_NAME || 'billing_next',
+  port: Number(process.env.DB_PORT || 5453),
+  database: process.env.DB_NAME || 'billing_mvp',
   user: process.env.DB_USER || 'billing',
   password: process.env.DB_PASSWORD,
   application_name: 'billing-db-viewer',

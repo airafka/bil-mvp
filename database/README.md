@@ -1,6 +1,6 @@
 # Запуск, обновление и перенос БД
 
-Рабочая БД — billing_next, PostgreSQL 16. Активный каталог миграций backend содержит V1–V72. Версию работающей БД проверяйте по flyway_schema_history. Опубликованный переносимый снимок имеет версию V28.
+Рабочая БД — billing_mvp, PostgreSQL 16. Активный каталог миграций backend содержит V1–V72. Версию работающей БД проверяйте по flyway_schema_history. Опубликованный переносимый снимок имеет версию V28.
 
 ## Номерной ЖД-вывоз и собственники (V71–V72)
 
@@ -90,7 +90,7 @@
 
 Актуальная модель — [CONTAINER_STOCK.md](../CONTAINER_STOCK.md#фактическая-поставка-и-собственники-v59). V55 разделила визит, собственника и склад; V56 удаляет хранимые окончания владения и шедулер. effective_date заполняется из истории по Europe/Moscow. Уже ожидающие передачи сразу превращаются в датированные назначения с проверкой закреплённого визита/собственника. UUID прежних периодов сохраняются; прежние миграции не изменяются.
 
-Перед выпуском: остановить запись через main backend, сделать свежий pg_dump billing_next, восстановить его в отдельном PostgreSQL без рабочих томов, сверить восстановленные данные и проверить очередную миграцию, отчёт и CSV. Затем обновить backend/frontend совместно; старый backend с новой схемой несовместим. Откат после перехода требует согласованного восстановления резервной БД и прежних образов. Опубликованный снимок V28, существующие резервные копии и явно защищённые файлы сохраняются.
+Перед выпуском: остановить запись через main backend, сделать свежий pg_dump billing_mvp, восстановить его в отдельном PostgreSQL без рабочих томов, сверить восстановленные данные и проверить очередную миграцию, отчёт и CSV. Затем обновить backend/frontend совместно; старый backend с новой схемой несовместим. Откат после перехода требует согласованного восстановления резервной БД и прежних образов. Опубликованный снимок V28, существующие резервные копии и явно защищённые файлы сохраняются.
 
 Для сценариев создать сеть billing-dated-check и PostgreSQL billing-dated-check-db с tmpfs, БД billing_dated_check, пользователем billing, меткой billing.task=dated-check. Восстановить копию V55. Старый backend billing-dated-check-old должен использовать DB_HOST=billing-dated-check-db, DB_NAME=billing_dated_check и порт 127.0.0.1:8245. В отдельном временном каталоге выполнить node <repo>/scripts/dated-ownership/seed.cjs. Затем запустить новый образ как billing-dated-check-new с теми же подключением/портом; Flyway применит V56. Выполнить scenarios.cjs. DOCKER_EXE задаёт путь к Docker. Повторный прогон требует восстановления созданного seeded.dump в свежую тестовую БД. Удалять только созданные для проверки ресурсы.
 
@@ -106,11 +106,11 @@
 
 Git не синхронизирует работающие PostgreSQL двух компьютеров. Получение нового файла dump не меняет локальную БД. .env, роли PostgreSQL, локальные резервные копии и последующие изменения данных в снимок автоматически не входят.
 
-Устаревший billing-snapshot.dump прежней схемы удалён из текущего дерева; при необходимости он доступен в истории Git. Для развёртывания используется только billing-next-snapshot.dump с его манифестом.
+Устаревший billing-snapshot.dump прежней схемы удалён из текущего дерева; при необходимости он доступен в истории Git. Для развёртывания используется только billing-next-snapshot.dump с его манифестом. Имя файла и поле `database` в манифесте указывают на источник снимка. Скрипт восстанавливает его в `billing_mvp`.
 
 ## Новый компьютер: Windows
 
-Нужны Git и работающий Docker Desktop с Linux containers и Compose v2. Отдельная установка Java, Node.js и PostgreSQL для запуска через Docker не требуется. Порты 3001/8081/5433 должны быть свободны.
+Нужны Git и работающий Docker Desktop с Linux containers и Compose v2. Отдельная установка Java, Node.js и PostgreSQL для запуска через Docker не требуется. Порты 3021/8101/5453 должны быть свободны.
 
 Выполнять по одной команде; при ошибке остановиться:
 
@@ -124,7 +124,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
 
 **Сначала восстановление, затем приложение.** Если backend запустить раньше, Flyway создаст объекты, и restore-snapshot.ps1 откажется заменять их.
 
-[restore-snapshot.ps1](../restore-snapshot.ps1) проверяет SHA-256, имя billing_next, отсутствие работающих backend/frontend и пользовательских объектов БД. Затем восстанавливает одной транзакцией. Скрипт не очищает существующую базу. Для нового клона при уже существующем Compose billing-next сначала разобраться с окружением: одно имя проекта использует те же контейнеры и volume.
+[restore-snapshot.ps1](../restore-snapshot.ps1) проверяет SHA-256, имя billing_mvp, отсутствие работающих backend/frontend и пользовательских объектов БД. Затем восстанавливает одной транзакцией. Скрипт не очищает существующую базу. Если `billing_mvp` уже подготовлена, запускайте приложение с существующим томом через `start.ps1`.
 
 Настройки — [.env.example](../.env.example). Порты меняются через FRONTEND_PORT/BACKEND_PORT/DB_PORT. Пароль и имя пользователя можно настроить до первого создания volume; последующая правка .env сама по себе не меняет пароль уже созданной роли. .env не публикуется.
 
@@ -137,16 +137,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\stop.ps1
 ```
 
-Это отдельные действия: start запускает с пересборкой, stop останавливает. БД остаётся в billing-next_postgres-data. Автоматического восстановления dump при запуске нет.
+Это отдельные действия: start запускает с пересборкой, stop останавливает. БД остаётся в billing-mvp_postgres-data. Автоматического восстановления dump при запуске нет.
 
 Проверка при стандартных портах:
 
 ```powershell
 . .\scripts\docker-command.ps1
 $billingDocker = Resolve-BillingDocker
-& $billingDocker compose -p billing-next ps
-Invoke-RestMethod http://localhost:8081/actuator/health
-(Invoke-WebRequest -UseBasicParsing http://localhost:3001).StatusCode
+& $billingDocker compose -p billing-mvp ps
+Invoke-RestMethod http://localhost:8101/actuator/health
+(Invoke-WebRequest -UseBasicParsing http://localhost:3021).StatusCode
 ```
 
 Ожидается backend UP, frontend HTTP 200. Compose ждёт готовности БД перед backend, затем backend перед frontend. Скрипты находят Docker через PATH или стандартные пути установки.
@@ -165,21 +165,21 @@ Invoke-RestMethod http://localhost:8081/actuator/health
 
 ## Резервная копия перед изменениями
 
-Из корня проекта, после проверки назначения контейнеров. Пример для стандартных billing_next / billing; при других настройках подставить проверенные имена:
+Из корня проекта, после проверки назначения контейнеров. Пример для стандартных billing_mvp / billing; при других настройках подставить проверенные имена:
 
 ```powershell
 $ErrorActionPreference = 'Stop'
 . .\scripts\docker-command.ps1
 $billingDocker = Resolve-BillingDocker
-$backupName = 'billing-next-before-change-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '.dump'
+$backupName = 'billing-mvp-before-change-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '.dump'
 $backupDir = Join-Path (Get-Location) 'backups'
 New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
 $backupPath = Join-Path $backupDir $backupName
-& $billingDocker compose -p billing-next exec -T db pg_dump -U billing -d billing_next -Fc -f "/tmp/$backupName"
+& $billingDocker compose -p billing-mvp exec -T db pg_dump -U billing -d billing_mvp -Fc -f "/tmp/$backupName"
 if ($LASTEXITCODE -ne 0) { throw 'pg_dump завершился ошибкой' }
-& $billingDocker compose -p billing-next exec -T db pg_restore --list "/tmp/$backupName" | Out-Null
+& $billingDocker compose -p billing-mvp exec -T db pg_restore --list "/tmp/$backupName" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Оглавление дампа не читается' }
-& $billingDocker compose -p billing-next cp "db:/tmp/$backupName" $backupPath
+& $billingDocker compose -p billing-mvp cp "db:/tmp/$backupName" $backupPath
 if ($LASTEXITCODE -ne 0) { throw 'Не удалось сохранить локальную копию' }
 Get-FileHash -LiteralPath $backupPath -Algorithm SHA256
 ```
@@ -190,7 +190,7 @@ Get-FileHash -LiteralPath $backupPath -Algorithm SHA256
 
 Новый переносимый снимок создаётся только по отдельному запросу. Обновлять dump и JSON-манифест вместе, проверив восстановление и содержимое таблиц/последовательностей на изолированной БД.
 
-Если целевая billing_next уже заполнена, restore-snapshot.ps1 не предназначен для её замены. Порядок отдельной операции переноса:
+Если целевая billing_mvp уже заполнена, restore-snapshot.ps1 не предназначен для её замены. Порядок отдельной операции переноса:
 
 1. Сделать свежую резервную копию целевой БД.
 2. Восстановить новый снимок в отдельную БД, проверить схему, данные и работу совместимого backend.
@@ -227,7 +227,7 @@ V54 добавляет только service_order.effective_date, расширя
 
 Перед применением V35 сделать свежую резервную копию. Проверка [application-clock-check.cjs](../scripts/application-clock-check.cjs) допускает запись только в восстановленную billing_clock_test с backend billing-next-clock-test на 8199: режим capture на V34 сохраняет отпечатки всех бизнес-строк, обычный запуск после V35 сравнивает их и проверяет операции. Режим recheck повторяет сценарий на уже мигрированной тестовой БД без повторной проверки миграции; нужны действующий тариф и демонстрационный состав. Проверяются время, конфликты, високосный день, хранение/отмена, начисление/счёт/оплата и сохранение даты после перезапуска. Сценарий оставляет тестовые документы и возвращает системный режим.
 
-[application-clock-ui.cjs](../scripts/application-clock-ui.cjs) использует тот же backend, его фикстуру и frontend на 3199; FRONTEND_URL тестового backend должен быть http://localhost:3199. Проверяет ввод, стрелки, пересчёт хранения, перезагрузку, «Сегодня», Escape и размеры окна. Нужны Chrome и Docker (при необходимости DOCKER_EXE). Не запускать изменяющие проверки на billing_next.
+[application-clock-ui.cjs](../scripts/application-clock-ui.cjs) использует тот же backend, его фикстуру и frontend на 3199; FRONTEND_URL тестового backend должен быть http://localhost:3199. Проверяет ввод, стрелки, пересчёт хранения, перезагрузку, «Сегодня», Escape и размеры окна. Нужны Chrome и Docker (при необходимости DOCKER_EXE). Не запускать изменяющие проверки на billing_mvp.
 
 ## Названия полей хранения (V36)
 
@@ -253,7 +253,7 @@ V38 удаляет из container_storage_period needs_review, review_reason и 
 
 Перед обновлением сделать свежую резервную копию. При наличии периодов с needs_review=true миграция останавливается до удаления полей: сначала требуется сверка этих данных, автоматического исправления нет. Backend и frontend обновляются вместе со схемой. Старые миграции V33/V37 сохраняются без изменения; после восстановления снимка V28 применяется вся цепочка до V53.
 
-Проверка scripts/storage-fields-check.cjs работает только с billing_storage_fields_test: capture на V37 сохраняет контрольные суммы бизнес-таблиц и проверяет атомарный отказ для проблемного периода; запуск после V38 проверяет сохранность остальных данных, удаление трёх полей и ограничения источников. Затем STORAGE_TEST_DB=billing_storage_fields_test запускает scripts/storage-period-check.cjs через backend billing-next-storage-fields-test на 8198 и проверяет жизненный цикл, отмены, отчёт и CSV. Изменяющие проверки не запускать на billing_next.
+Проверка scripts/storage-fields-check.cjs работает только с billing_storage_fields_test: capture на V37 сохраняет контрольные суммы бизнес-таблиц и проверяет атомарный отказ для проблемного периода; запуск после V38 проверяет сохранность остальных данных, удаление трёх полей и ограничения источников. Затем STORAGE_TEST_DB=billing_storage_fields_test запускает scripts/storage-period-check.cjs через backend billing-next-storage-fields-test на 8198 и проверяет жизненный цикл, отмены, отчёт и CSV. Изменяющие проверки не запускать на billing_mvp.
 
 ## Упрощение истории КТК (V39)
 
@@ -261,7 +261,7 @@ V38 удаляет из container_storage_period needs_review, review_reason и 
 
 Перед применением нужна свежая резервная копия и совместное обновление backend/frontend. Если история содержит needs_review=true, миграция отклоняется до удаления полей: сначала требуется сверка проблемных записей. Старые миграции не переписываются, снимок V28 остаётся прежним.
 
-[history-fields-check.cjs](../scripts/history-fields-check.cjs) работает только с отдельной billing_history_fields_test: capture на V38 сохраняет контрольные суммы всех бизнес-таблиц без шести удаляемых полей и значения последовательностей, проверяет атомарный отказ при проблемной истории. После штатной миграции backend до V39 сценарий проверяет полное совпадение остальных значений и сохранение связей. Затем STORAGE_TEST_DB=billing_history_fields_test запускает storage-period-check.cjs и container-task-check.cjs, CANCELLATION_TEST_DB=billing_history_fields_test — order-cancellation-check.cjs. Они проверяют имя БД и backend billing-next-history-fields-test на порту 8201; охватывают авто/ЖД, резервы, выполнение и отмены, параллельные повторы, собственников, хранение, возвраты, начисления, счета, рейсы и повторное использование накладных. Изменяющие проверки на billing_next запрещены. Исторические сценарии проверки V37/V38 сохраняют свои версии схемы.
+[history-fields-check.cjs](../scripts/history-fields-check.cjs) работает только с отдельной billing_history_fields_test: capture на V38 сохраняет контрольные суммы всех бизнес-таблиц без шести удаляемых полей и значения последовательностей, проверяет атомарный отказ при проблемной истории. После штатной миграции backend до V39 сценарий проверяет полное совпадение остальных значений и сохранение связей. Затем STORAGE_TEST_DB=billing_history_fields_test запускает storage-period-check.cjs и container-task-check.cjs, CANCELLATION_TEST_DB=billing_history_fields_test — order-cancellation-check.cjs. Они проверяют имя БД и backend billing-next-history-fields-test на порту 8201; охватывают авто/ЖД, резервы, выполнение и отмены, параллельные повторы, собственников, хранение, возвраты, начисления, счета, рейсы и повторное использование накладных. Изменяющие проверки на billing_mvp запрещены. Исторические сценарии проверки V37/V38 сохраняют свои версии схемы.
 
 ## Заявка вывоза в периоде хранения (V40)
 
@@ -279,7 +279,7 @@ scripts/storage-cargo-check.cjs работает только с billing_storage
 
 [V42](../backend/src/main/resources/db/baseline/V42__storage_owner_periods.sql) сохраняет таблицы, колонки и бизнес-записи. Новые смены собственника закрывают/открывают записи container_storage_period через одно событие OWNER_CHANGE; старые периоды не разделяются задним числом. receiving_order_id и точные строки исходной поставки сохраняются. Границы проверяются отложенными триггерами на периоде и истории; старые ограничения источника вывоза заменены с учётом закрытия без вывоза. Комментарии полей обновлены. Источник расчёта дней — события истории, день смены относится новому собственнику. Backend/frontend обновляются совместно со схемой; переносимый снимок остаётся V28.
 
-Перед рабочей миграцией нужна свежая резервная копия и проверка её восстановления. scripts/storage-owner-check.cjs по умолчанию ограничен billing_storage_owner_test, backend billing-next-storage-owner-test на 8202; для регрессии V43 разрешён STORAGE_TEST_DB=billing_stock_history_test на 8203. Режим capture запускается на восстановленной V41 до backend V42; migration после запуска сравнивает все бизнес-строки, последовательности и колонки. Обычный запуск создаёт новые тестовые документы и проверяет разделение, даты, авто/ЖД, неизменность старого периода при первой новой смене, отмены, ограничения, откат пакета, параллельный повтор и CSV. Сценарий оставляет фикстуры; предпочтителен новый восстановленный экземпляр для полного повторного прогона. Дополнительные регрессии запускаются с STORAGE_TEST_DB=billing_storage_owner_test (storage-period-check.cjs, container-task-check.cjs) и CANCELLATION_TEST_DB=billing_storage_owner_test (order-cancellation-check.cjs). UI — отдельный frontend на 3202, подключённый только к этому backend. Рабочая billing_next для изменяющих тестов не используется.
+Перед рабочей миграцией нужна свежая резервная копия и проверка её восстановления. scripts/storage-owner-check.cjs по умолчанию ограничен billing_storage_owner_test, backend billing-next-storage-owner-test на 8202; для регрессии V43 разрешён STORAGE_TEST_DB=billing_stock_history_test на 8203. Режим capture запускается на восстановленной V41 до backend V42; migration после запуска сравнивает все бизнес-строки, последовательности и колонки. Обычный запуск создаёт новые тестовые документы и проверяет разделение, даты, авто/ЖД, неизменность старого периода при первой новой смене, отмены, ограничения, откат пакета, параллельный повтор и CSV. Сценарий оставляет фикстуры; предпочтителен новый восстановленный экземпляр для полного повторного прогона. Дополнительные регрессии запускаются с STORAGE_TEST_DB=billing_storage_owner_test (storage-period-check.cjs, container-task-check.cjs) и CANCELLATION_TEST_DB=billing_storage_owner_test (order-cancellation-check.cjs). UI — отдельный frontend на 3202, подключённый только к этому backend. Рабочая billing_mvp для изменяющих тестов не используется.
 
 ## Восстановление резервирования по истории (V43)
 
@@ -331,7 +331,7 @@ Backend использует GET/POST /api/system/operational-reset. Предп�
 
 ## Просмотр БД в реальном времени
 
-`db-viewer/` — независимый Node.js-сервис со статическим интерфейсом, без изменений основного frontend/backend. `compose.db-viewer.yaml` запускает отдельный проект `billing-db-viewer` в существующей сети `billing-next_default`; PostgreSQL приложения должен уже работать. Адрес — http://localhost:3002, привязка только к 127.0.0.1. Порт меняется через DB_VIEWER_PORT. Настройки БД берутся из того же локального .env. Из браузера доступны только GET-запросы; произвольного SQL, редактирования и удаления записей нет. Все запросы данных выполняются в READ ONLY-транзакциях, пароли в браузер не передаются.
+`db-viewer/` — независимый Node.js-сервис со статическим интерфейсом, без изменений основного frontend/backend. `compose.db-viewer.yaml` запускает отдельный проект `billing-mvp-viewer` в существующей сети `billing-mvp_default`; PostgreSQL приложения должен уже работать. Адрес — http://localhost:3022, привязка только к 127.0.0.1. Порт меняется через DB_VIEWER_PORT. Настройки БД берутся из того же локального .env. Из браузера доступны только GET-запросы; произвольного SQL, редактирования и удаления записей нет. Все запросы данных выполняются в READ ONLY-транзакциях, пароли в браузер не передаются.
 
 ### Первая установка и новые таблицы
 
@@ -358,6 +358,6 @@ $billingDocker = Resolve-BillingDocker
 
 В `db-viewer/`: `npm ci`, `npm run lint`, `npm run build`, `npm test`. Build проверяет синтаксис buildless-интерфейса и сервера; Dockerfile выполняет lint/build и тесты без БД. Основной React frontend не изменяется.
 
-`test/database.test.mjs` включает изменяющий сценарий только с `VIEWER_INTEGRATION=1` и строго `DB_NAME=billing_db_viewer_test`. Создать эту отдельную БД заранее и передать её DB_HOST/DB_PORT/DB_USER/DB_PASSWORD. Сценарий создаёт/очищает только свою viewer_test_record и проверяет COMMIT/ROLLBACK, четыре вида событий, повторную установку, запрет записи через read-only соединение, безопасные идентификаторы и точность bigint. Не направлять его на billing_next.
+`test/database.test.mjs` включает изменяющий сценарий только с `VIEWER_INTEGRATION=1` и строго `DB_NAME=billing_db_viewer_test`. Создать эту отдельную БД заранее и передать её DB_HOST/DB_PORT/DB_USER/DB_PASSWORD. Сценарий создаёт/очищает только свою viewer_test_record и проверяет COMMIT/ROLLBACK, четыре вида событий, повторную установку, запрет записи через read-only соединение, безопасные идентификаторы и точность bigint. Не направлять его на billing_mvp.
 
-`test/http.test.mjs` с `VIEWER_URL=http://localhost:3002` проверяет только чтение всех таблиц, ограничение размера страницы, запрет POST, постороннего Origin и Host. `test/relations.test.mjs` с тем же VIEWER_URL проверяет внешние ключи всех таблиц, переход по всем частям составного ключа, отсутствие результата при несовпадающей части и корректный выбор связей договора/комплексной услуги. Проверка читает до 100 строк каждой таблицы и проверяет одну заполненную запись на связь; пустые таблицы и связи с NULL проверяются только по метаданным. Для браузерной проверки изменения записей использовать отдельный просмотрщик на тестовом порту 3197, подключённый к billing_db_viewer_test.
+`test/http.test.mjs` с `VIEWER_URL=http://localhost:3022` проверяет только чтение всех таблиц, ограничение размера страницы, запрет POST, постороннего Origin и Host. `test/relations.test.mjs` с тем же VIEWER_URL проверяет внешние ключи всех таблиц, переход по всем частям составного ключа, отсутствие результата при несовпадающей части и корректный выбор связей договора/комплексной услуги. Проверка читает до 100 строк каждой таблицы и проверяет одну заполненную запись на связь; пустые таблицы и связи с NULL проверяются только по метаданным. Для браузерной проверки изменения записей использовать отдельный просмотрщик на тестовом порту 3197, подключённый к billing_db_viewer_test.

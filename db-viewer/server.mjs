@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { CHANNEL, connection, overview, tablePage, InputError, pool } from './database.mjs';
 
-const port = Number(process.env.PORT || 3002);
+const port = Number(process.env.PORT || 3022);
 const clients = new Set();
 let listener;
 let connected = false;

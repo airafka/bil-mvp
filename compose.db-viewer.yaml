@@ -1,4 +1,4 @@
-name: billing-db-viewer
+name: billing-mvp-viewer
 
 services:
   viewer:
@@ -10,14 +10,14 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       HOST: 0.0.0.0
-      PORT: ${DB_VIEWER_PORT:-3002}
-      DB_HOST: billing-next-db-1
+      PORT: ${DB_VIEWER_PORT:-3022}
+      DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: ${POSTGRES_DB:-billing_next}
+      DB_NAME: ${POSTGRES_DB:-billing_mvp}
       DB_USER: ${POSTGRES_USER:-billing}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-billing}
     ports:
-      - "127.0.0.1:${DB_VIEWER_PORT:-3002}:${DB_VIEWER_PORT:-3002}"
+      - "127.0.0.1:${DB_VIEWER_PORT:-3022}:${DB_VIEWER_PORT:-3022}"
     networks: [billing]
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:'+process.env.PORT+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -28,4 +28,4 @@ services:
 networks:
   billing:
     external: true
-    name: billing-next_default
+    name: billing-mvp_default

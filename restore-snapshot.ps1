@@ -4,7 +4,7 @@ param()
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'scripts/docker-command.ps1')
 $dockerCommand = Resolve-BillingDocker
-$composeArgs = @('compose', '--project-directory', $PSScriptRoot, '-f', (Join-Path $PSScriptRoot 'compose.yaml'), '-p', 'billing-next')
+$composeArgs = @('compose', '--project-directory', $PSScriptRoot, '-f', (Join-Path $PSScriptRoot 'compose.yaml'), '-p', 'billing-mvp')
 function Invoke-BillingCompose {
     & $dockerCommand @composeArgs @args
     if ($LASTEXITCODE -ne 0) { throw 'Команда Docker Compose завершилась ошибкой. Восстановление остановлено.' }
@@ -15,7 +15,7 @@ if ((Get-FileHash -LiteralPath $dump -Algorithm SHA256).Hash -ne $manifest.sha25
 $config = (Invoke-BillingCompose config --format json) | ConvertFrom-Json
 $dbUser = $config.services.db.environment.POSTGRES_USER
 $dbName = $config.services.db.environment.POSTGRES_DB
-if ($dbName -ne 'billing_next') { throw 'Ожидается POSTGRES_DB=billing_next. Восстановление в другую БД запрещено.' }
+if ($dbName -ne 'billing_mvp') { throw 'Ожидается POSTGRES_DB=billing_mvp. Восстановление в другую БД запрещено.' }
 $running = @(Invoke-BillingCompose ps --status running --services)
 if (($running -contains 'backend') -or ($running -contains 'frontend')) {
     throw 'Сначала остановите backend/frontend новой копии: .\stop.ps1. Восстановление допускается только в пустую БД.'

@@ -13,5 +13,5 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=check /app/server.mjs /app/database.mjs /app/attribute-notes.mjs /app/install-observer.mjs ./
 COPY --from=check /app/public ./public
 USER node
-EXPOSE 3002
+EXPOSE 3022
 CMD ["node", "server.mjs"]

@@ -1,19 +1,19 @@
-name: billing-next
+name: billing-mvp
 
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-billing_next}
+      POSTGRES_DB: ${POSTGRES_DB:-billing_mvp}
       POSTGRES_USER: ${POSTGRES_USER:-billing}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-billing}
     ports:
-      - "${DB_PORT:-5433}:5432"
+      - "127.0.0.1:${DB_PORT:-5453}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-billing} -d ${POSTGRES_DB:-billing_next}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-billing} -d ${POSTGRES_DB:-billing_mvp}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -25,15 +25,15 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: ${POSTGRES_DB:-billing_next}
+      DB_NAME: ${POSTGRES_DB:-billing_mvp}
       DB_USER: ${POSTGRES_USER:-billing}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-billing}
-      FRONTEND_URL: http://localhost:${FRONTEND_PORT:-3001}
+      FRONTEND_URL: http://localhost:${FRONTEND_PORT:-3021}
       SPRING_PROFILES_ACTIVE: dev
       OPERATIONAL_RESET_ENABLED: ${OPERATIONAL_RESET_ENABLED:-true}
       OPERATIONAL_RESET_BACKUP_DIR: /app/reset-backups
     ports:
-      - "${BACKEND_PORT:-8081}:8080"
+      - "127.0.0.1:${BACKEND_PORT:-8101}:8080"
     volumes:
       - ./backups/ui-resets:/app/reset-backups
     depends_on:
@@ -51,7 +51,7 @@ services:
       context: ./frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3001}:80"
+      - "127.0.0.1:${FRONTEND_PORT:-3021}:80"
     depends_on:
       backend:
         condition: service_healthy
