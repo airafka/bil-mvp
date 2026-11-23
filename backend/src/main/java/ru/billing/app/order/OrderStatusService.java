@@ -49,19 +49,12 @@ public class OrderStatusService {
         if (Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from inbound_event where order_id=? and task_id=? and event_code=? and status='DONE')",Boolean.class,order,event.taskId(),event.eventCode()))) return;
         if (!doc.status().equals("CONFIRMED") && !doc.status().equals("COMPLETED"))
             throw new ApiException(HttpStatus.CONFLICT,"TOS_ORDER_STATUS","Заявка не подтверждена");
-        if (doc.status().equals("COMPLETED") && !receiving && doc.mode()!=FillingType.ALL && doc.mode()!=FillingType.CONTAINER)
+        if (doc.status().equals("COMPLETED") && !receiving && doc.mode()==FillingType.NONE_CONTAINER)
             throw new ApiException(HttpStatus.CONFLICT,"TOS_ORDER_COMPLETED","Новая строка для выполненной заявки недопустима");
         validateSource(resource,order);
         tos.process(event,receiving,doc.mode());
-        if (!doc.status().equals("COMPLETED") && stock.allTasksFinished(order,receiving) && (receiving || completeComposition(order,doc.mode())))
+        if (!doc.status().equals("COMPLETED") && stock.allTasksFinished(order,receiving))
             complete(resource,order,table,"order_status");
-    }
-
-    private boolean completeComposition(UUID order,FillingType mode) {
-        if (mode == FillingType.ALL) return true;
-        if (mode == FillingType.CONTAINER)
-            return !Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from shipping_order_container where shipping_order_id=? and shipping_order_railway_carriage_id is null)",Boolean.class,order));
-        return tos.plannedContainers(order) == jdbc.queryForObject("select count(*) from shipping_order_container where shipping_order_id=? and status='FINISHED'",Long.class,order);
     }
 
     public enum Status { DRAFT, CONFIRMED, COMPLETED }

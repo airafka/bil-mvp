@@ -102,7 +102,7 @@ public class ReturnReceivingService {
             tariffs.fix(parentId,clientId,contractId,services.getFirst());
         }
         CreatedOrderResponse created = receiving.create(new CreateOrderRequest(clientId, contractId, source.areaId(),
-                TransportType.VEHICLE, returnContainers, List.of(), List.of(), FillingType.ALL, List.of(), List.of())
+                TransportType.VEHICLE, returnContainers, List.of(), List.of(), FillingType.ALL, List.of())
                 .withDefaultContainerOwner(returnContainers.getFirst().ownerClientId()));
         jdbc.update("""
                 update receiving_order set comprehensive_service_order_id = ?, service_role = 'RETURN_RECEIVING',

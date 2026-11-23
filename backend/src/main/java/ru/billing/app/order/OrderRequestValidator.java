@@ -1,7 +1,5 @@
 package ru.billing.app.order;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -41,16 +39,10 @@ public class OrderRequestValidator {
             );
         }
 
-        switch (effectiveFillingType(request)) {
-            case ALL -> validateAll(request);
-            case RAILWAY_CARRIAGE -> validateOnlyNumberedCarriages(request);
-            case CONTAINER -> validateOnlyNumberedContainers(request);
-            case NONE -> validateUnnumbered(request);
-            case NONE_CONTAINER -> throw badRequest(
-                    "NONE_CONTAINER_ONLY_FOR_VEHICLE_SHIPPING",
-                    "Безномерный автовывоз разрешён только для автомобильного транспорта"
-            );
+        if (effectiveFillingType(request) != FillingType.ALL) {
+            throw badRequest("NONE_CONTAINER_ONLY_FOR_VEHICLE_SHIPPING", "Для ЖД-вывоза укажите номера вагонов и КТК");
         }
+        validateAll(request);
     }
 
     public FillingType effectiveFillingType(CreateOrderRequest request) {
@@ -80,7 +72,6 @@ public class OrderRequestValidator {
         if (hasValues(request.railwayCarriages())) {
             throw badRequest("RAILWAY_CARRIAGES_NOT_ALLOWED_FOR_VEHICLE", "Для автотранспорта вагоны не указываются");
         }
-        rejectCarriageQuantities(request);
         rejectContainerQuantities(request);
         if (!hasValues(request.containers())) {
             throw badRequest("EMPTY_CONTAINER_LIST", "Выберите хотя бы один КТК");
@@ -95,7 +86,6 @@ public class OrderRequestValidator {
         if (hasValues(request.railwayCarriages())) {
             throw badRequest("RAILWAY_CARRIAGES_NOT_ALLOWED_FOR_VEHICLE", "Для автотранспорта вагоны не указываются");
         }
-        rejectCarriageQuantities(request);
         if (hasValues(request.containers())) {
             throw badRequest(
                     "NUMBERED_CONTAINERS_NOT_ALLOWED",
@@ -140,7 +130,6 @@ public class OrderRequestValidator {
         if (effectiveFillingType(request) != FillingType.ALL) {
             throw badRequest("INVALID_FILLING_TYPE", "Тип заполнения поддерживается только для заявок на вывоз");
         }
-        rejectCarriageQuantities(request);
         rejectContainerQuantities(request);
         if (hasValues(request.containers())) {
             throw badRequest("CONTAINERS_NOT_ALLOWED_FOR_RAILWAY", "Железнодорожная заявка создаётся по накладным");
@@ -163,51 +152,14 @@ public class OrderRequestValidator {
     }
 
     private void validateAll(CreateOrderRequest request) {
-        rejectCarriageQuantities(request);
         rejectContainerQuantities(request);
         if (hasValues(request.containers())) {
             throw badRequest("CONTAINERS_NOT_ALLOWED_FOR_RAILWAY", "Для ЖД распределите КТК по вагонам");
         }
-        validateNumberedCarriages(request, true);
+        validateNumberedCarriages(request);
     }
 
-    private void validateOnlyNumberedCarriages(CreateOrderRequest request) {
-        rejectCarriageQuantities(request);
-        if (hasValues(request.containers())) {
-            throw badRequest("NUMBERED_CONTAINERS_NOT_ALLOWED", "Для этого типа номера КТК не указываются");
-        }
-        validateNumberedCarriages(request, false);
-        requireContainerQuantities(request);
-        validateContainerQuantities(request.containerQuantities());
-    }
-
-    private void validateOnlyNumberedContainers(CreateOrderRequest request) {
-        if (hasValues(request.railwayCarriages())) {
-            throw badRequest("NUMBERED_RAILWAY_CARRIAGES_NOT_ALLOWED", "Для этого типа номера вагонов не указываются");
-        }
-        rejectContainerQuantities(request);
-        requireCarriageQuantities(request);
-        validateCarriageQuantities(request.railwayCarriageQuantities());
-        if (!hasValues(request.containers())) {
-            throw badRequest("CONTAINERS_REQUIRED", "Добавьте хотя бы один номерной КТК");
-        }
-        validateContainers(request.containers(), new HashSet<>(), true);
-    }
-
-    private void validateUnnumbered(CreateOrderRequest request) {
-        if (hasValues(request.railwayCarriages())) {
-            throw badRequest("NUMBERED_RAILWAY_CARRIAGES_NOT_ALLOWED", "Для этого типа номера вагонов не указываются");
-        }
-        if (hasValues(request.containers())) {
-            throw badRequest("NUMBERED_CONTAINERS_NOT_ALLOWED", "Для этого типа номера КТК не указываются");
-        }
-        requireCarriageQuantities(request);
-        requireContainerQuantities(request);
-        validateCarriageQuantities(request.railwayCarriageQuantities());
-        validateContainerQuantities(request.containerQuantities());
-    }
-
-    private void validateNumberedCarriages(CreateOrderRequest request, boolean containersRequired) {
+    private void validateNumberedCarriages(CreateOrderRequest request) {
         if (!hasValues(request.railwayCarriages())) {
             throw badRequest("RAILWAY_CARRIAGES_REQUIRED", "Добавьте хотя бы один вагон");
         }
@@ -220,15 +172,10 @@ public class OrderRequestValidator {
             if (!carriageIds.add(carriage.railwayCarriageId())) {
                 throw badRequest("DUPLICATE_RAILWAY_CARRIAGE", "Один вагон нельзя добавить в заявку дважды");
             }
-            if (containersRequired && !hasValues(carriage.containers())) {
+            if (!hasValues(carriage.containers())) {
                 throw badRequest("EMPTY_RAILWAY_CARRIAGE", "Добавьте хотя бы один КТК на вагон");
             }
-            if (!containersRequired && hasValues(carriage.containers())) {
-                throw badRequest("NUMBERED_CONTAINERS_NOT_ALLOWED", "Для этого типа номера КТК не указываются");
-            }
-            if (hasValues(carriage.containers())) {
-                validateContainers(carriage.containers(), containerIds, true);
-            }
+            validateContainers(carriage.containers(), containerIds, true);
         }
     }
 
@@ -248,60 +195,6 @@ public class OrderRequestValidator {
         }
     }
 
-    private void validateCarriageQuantities(List<RailwayCarriageQuantityRequest> quantities) {
-        Set<UUID> types = new HashSet<>();
-        boolean nullTypeSeen = false;
-        for (RailwayCarriageQuantityRequest row : quantities) {
-            if (row.quantity() == null || row.quantity() <= 0) {
-                throw badRequest("INVALID_QUANTITY", "Количество вагонов должно быть целым числом больше нуля");
-            }
-            if (row.typeId() == null) {
-                if (nullTypeSeen) {
-                    throw badRequest("DUPLICATE_RAILWAY_CARRIAGE_TYPE", "Тип вагона нельзя повторять");
-                }
-                nullTypeSeen = true;
-            } else if (!types.add(row.typeId())) {
-                throw badRequest("DUPLICATE_RAILWAY_CARRIAGE_TYPE", "Тип вагона нельзя повторять");
-            }
-        }
-    }
-
-    private void validateContainerQuantities(List<ContainerQuantityRequest> quantities) {
-        Set<String> loadedRows = new HashSet<>();
-        for (ContainerQuantityRequest row : quantities) {
-            if (row == null) {
-                throw badRequest("CONTAINER_QUANTITY_REQUIRED", "Данные КТК обязательны");
-            }
-            if (row.quantity() == null || row.quantity() <= 0) {
-                throw badRequest("INVALID_QUANTITY", "Количество КТК должно быть целым числом больше нуля");
-            }
-            if (row.type() == null) {
-                throw badRequest("CONTAINER_TYPE_REQUIRED", "Тип КТК обязателен");
-            }
-            if (row.empty() == null) {
-                throw badRequest("CONTAINER_STATE_REQUIRED", "Состояние КТК обязательно");
-            }
-            List<CargoRequest> items = row.items() == null ? List.of() : row.items();
-            validateCargo(row.empty(), items);
-            if (!row.empty()) {
-                List<String> itemKeys = new ArrayList<>();
-                Set<String> uniqueItems = new HashSet<>();
-                for (CargoRequest item : items) {
-                    String key = item.etsngCodeId() + ":" + normalized(item.weight());
-                    if (!uniqueItems.add(key)) {
-                        throw badRequest("DUPLICATE_CONTAINER_QUANTITY_ROW", "Груз в группе КТК не должен повторяться");
-                    }
-                    itemKeys.add(key);
-                }
-                itemKeys.sort(String::compareTo);
-                String rowKey = row.type() + ":" + String.join("|", itemKeys);
-                if (!loadedRows.add(rowKey)) {
-                    throw badRequest("DUPLICATE_CONTAINER_QUANTITY_ROW", "Полностью одинаковая группа КТК уже добавлена");
-                }
-            }
-        }
-    }
-
     private void validateCargo(Boolean empty, List<CargoRequest> items) {
         if (Boolean.TRUE.equals(empty) && !items.isEmpty()) {
             throw badRequest("CARGO_FOR_EMPTY_CONTAINER", "Для порожнего КТК нельзя указывать груз");
@@ -316,24 +209,6 @@ public class OrderRequestValidator {
         }
     }
 
-    private void requireCarriageQuantities(CreateOrderRequest request) {
-        if (!hasValues(request.railwayCarriageQuantities())) {
-            throw badRequest("RAILWAY_CARRIAGE_QUANTITIES_REQUIRED", "Добавьте количество вагонов");
-        }
-    }
-
-    private void requireContainerQuantities(CreateOrderRequest request) {
-        if (!hasValues(request.containerQuantities())) {
-            throw badRequest("CONTAINER_QUANTITIES_REQUIRED", "Добавьте количество КТК");
-        }
-    }
-
-    private void rejectCarriageQuantities(CreateOrderRequest request) {
-        if (hasValues(request.railwayCarriageQuantities())) {
-            throw badRequest("RAILWAY_CARRIAGE_QUANTITIES_NOT_ALLOWED", "Количественные вагоны не разрешены");
-        }
-    }
-
     private void rejectContainerQuantities(CreateOrderRequest request) {
         if (hasValues(request.containerQuantities())) {
             throw badRequest("CONTAINER_QUANTITIES_NOT_ALLOWED", "Количественные КТК не разрешены");
@@ -342,10 +217,6 @@ public class OrderRequestValidator {
 
     private boolean hasValues(List<?> values) {
         return values != null && !values.isEmpty();
-    }
-
-    private String normalized(BigDecimal value) {
-        return value == null ? "null" : value.stripTrailingZeros().toPlainString();
     }
 
     private ApiException badRequest(String code, String message) {

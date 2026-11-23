@@ -58,7 +58,7 @@ class ShippingOwnerSnapshotTest {
         JdbcTemplate jdbc = guardedJdbc(Set.of(low, high));
         var request = new CreateOrderRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 TransportType.VEHICLE, List.of(container(high), container(low)), List.of(), null,
-                FillingType.ALL, List.of(), List.of());
+                FillingType.ALL, List.of());
         new ShippingOrderStore(jdbc).create(request);
         verify(jdbc, times(2)).queryForObject(contains("select client_id from container_owner_current"), eq(UUID.class), any(UUID.class));
     }
@@ -70,7 +70,7 @@ class ShippingOwnerSnapshotTest {
                 TransportType.RAILWAY, null, List.of(), List.of(
                     new ShippingOrderRailwayCarriageRequest(UUID.randomUUID(), List.of(container(high))),
                     new ShippingOrderRailwayCarriageRequest(UUID.randomUUID(), List.of(container(low)))),
-                FillingType.ALL, List.of(), List.of());
+                FillingType.ALL, List.of());
         new ShippingOrderStore(jdbc).create(request);
         verify(jdbc, times(2)).queryForObject(contains("select client_id from container_owner_current"), eq(UUID.class), any(UUID.class));
     }

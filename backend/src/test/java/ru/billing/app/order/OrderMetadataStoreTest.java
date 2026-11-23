@@ -20,8 +20,7 @@ class OrderMetadataStoreTest {
 
     private CreateOrderRequest request() {
         return new CreateOrderRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                TransportType.VEHICLE, List.of(), List.of(), List.of(), FillingType.ALL,
-                List.of(), List.of(), null, arrival, "  Отправитель  ", departure, "  Получатель  ");
+                TransportType.VEHICLE, List.of(), List.of(), List.of(), FillingType.ALL, List.of(), null, arrival, "  Отправитель  ", departure, "  Получатель  ");
     }
 
     @Test
@@ -40,7 +39,7 @@ class OrderMetadataStoreTest {
     void validatesAndPreservesReceivingContactsWhenSelectingOwner() {
         CreateOrderRequest base = request();
         CreateOrderRequest contact = new CreateOrderRequest(base.clientId(), base.contractId(), base.terminalAreaId(),
-                TransportType.VEHICLE, List.of(), List.of(), List.of(), FillingType.ALL, List.of(), List.of(),
+                TransportType.VEHICLE, List.of(), List.of(), List.of(), FillingType.ALL, List.of(),
                 null, arrival, "Отправитель", null, null, base.clientId(), "  Иванов  ", " +7 999 123-45-67 ", " bad-email ", " Комментарий ");
         assertThat(contact.withDefaultContainerOwner(UUID.randomUUID()).authorizedRepresentative()).isEqualTo("Иванов");
         assertThat(contact.phone()).isEqualTo("+7 999 123-45-67");
@@ -110,14 +109,14 @@ class OrderMetadataStoreTest {
     void rejectsOverlongCargoPartyNamesAndAcceptsMissingMetadata() {
         CreateOrderRequest base = request();
         CreateOrderRequest tooLong = new CreateOrderRequest(base.clientId(), base.contractId(), base.terminalAreaId(),
-                TransportType.VEHICLE, List.of(), List.of(), List.of(), FillingType.ALL, List.of(), List.of(),
+                TransportType.VEHICLE, List.of(), List.of(), List.of(), FillingType.ALL, List.of(),
                 null, null, "А".repeat(256), null, "Б".repeat(256));
         try (var factory = Validation.buildDefaultValidatorFactory()) {
             var validator = factory.getValidator();
             assertThat(validator.validate(tooLong)).extracting(v -> v.getPropertyPath().toString())
                     .containsExactlyInAnyOrder("consignor", "consignee");
             CreateOrderRequest legacy = new CreateOrderRequest(base.clientId(), base.contractId(), base.terminalAreaId(),
-                    TransportType.VEHICLE, List.of(), List.of(), List.of(), FillingType.ALL, List.of(), List.of());
+                    TransportType.VEHICLE, List.of(), List.of(), List.of(), FillingType.ALL, List.of());
             assertThat(validator.validate(legacy)).isEmpty();
             assertThat(legacy.arrivalAt()).isNull();
             assertThat(legacy.departureAt()).isNull();

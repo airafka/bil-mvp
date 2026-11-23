@@ -31,7 +31,6 @@ class ShippingOrderStoreTest {
                 List.of(),
                 List.of(),
                 FillingType.NONE_CONTAINER,
-                List.of(),
                 List.of(new ContainerQuantityRequest(1, ContainerType.STANDARD_40, true, List.of()))
         );
         when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any(Object[].class))).thenReturn(101);

@@ -16,7 +16,6 @@ public record OrderDetails(
         List<OrderContainerDetails> containers,
         List<OrderWaybillDetails> waybills,
         List<ShippingOrderRailwayCarriageDetails> railwayCarriages,
-        List<RailwayCarriageQuantityDetails> railwayCarriageQuantities,
         List<ContainerQuantityDetails> containerQuantities,
         UUID contractId,
         String contractName,

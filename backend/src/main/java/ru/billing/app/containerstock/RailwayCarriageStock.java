@@ -15,7 +15,6 @@ public class RailwayCarriageStock {
     public RailwayCarriageStock(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
     private record Wagon(UUID id, UUID owner, UUID type, String code, String status) {}
-    private record Plan(UUID owner, UUID type, int quantity) {}
     private static final String WAGON = """
             select c.id, o.client_owner_id, c.type_id, c.code, o.status from railway_carriage c
             left join railway_carriage_owner o on o.railway_carriage_id=c.id
@@ -51,18 +50,6 @@ public class RailwayCarriageStock {
         var mode=jdbc.queryForObject("select filling_type from shipping_order where id=?",String.class,id);
         if ("NONE_CONTAINER".equals(mode)) {
             checkAutoPlan(id);
-        } else if ("CONTAINER".equals(mode) || "NONE".equals(mode)) {
-            var plans=jdbc.query("select owner_railway_carriage_id,type_id,quantity from shipping_order_railway_carriage_qty where shipping_order_id=?",
-                    (rs,n)->new Plan(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),rs.getInt(3)),id);
-            if (plans.isEmpty()) throw invalid("Укажите плановые вагоны");
-            for (var plan : plans) {
-                if (plan.owner()==null || plan.type()==null) throw invalid("Для вагонов укажите собственника и тип");
-                long available = jdbc.queryForObject("""
-                        select count(*) from railway_carriage_owner o join railway_carriage c on c.id=o.railway_carriage_id
-                        where o.status='ON_TERMINAL' and o.client_owner_id=? and c.type_id=?
-                        """,Long.class,plan.owner(),plan.type());
-                if (available < plan.quantity()) throw invalid("Недостаточно вагонов выбранного собственника и типа. Доступно "+available+", требуется "+plan.quantity());
-            }
         } else {
             for (var wagon : wagons(SHIPMENTS,id)) {
                 available(wagon);
@@ -88,25 +75,10 @@ public class RailwayCarriageStock {
     }
     private record AutoPlan(UUID owner, String type, int quantity, boolean empty) {}
 
-    public UUID shipUnnumbered(UUID order, UUID carriage, OffsetDateTime at) {
-        var wagon=wagons("c.id=?",carriage).getFirst();
-        available(wagon);
-        if (wagon.type()==null) throw invalid("Не указан тип вагона "+wagon.code());
-        int remaining=jdbc.queryForObject("""
-                select coalesce((select sum(quantity) from shipping_order_railway_carriage_qty
-                      where shipping_order_id=? and owner_railway_carriage_id=? and type_id=?),0)
-                    - (select count(*) from shipping_order_railway_carriage s join railway_carriage c on c.id=s.railway_carriage_id
-                      where s.shipping_order_id=? and s.owner_railway_carriage_id=? and c.type_id=?)
-                """,Integer.class,order,wagon.owner(),wagon.type(),order,wagon.owner(),wagon.type());
-        if (remaining<=0) throw invalid("Для собственника и типа вагона "+wagon.code()+" нет остатка по плану вывоза");
-        record(carriage,wagon.owner(),null,order,"DEPARTED",at);
-        return wagon.owner();
-    }
     private void available(Wagon wagon) {
         if (!"ON_TERMINAL".equals(wagon.status())) throw invalid("Вагон "+wagon.code()+" отсутствует в свободных остатках терминала");
     }
     public void complete(boolean receiving, UUID order) {
-        // Only numbered wagons have a pending reservation. TOS already posted unnumbered wagons.
         String field=receiving?"receiving_order_id":"shipping_order_id";
         String before=receiving?"EXPECTED":"RESERVED_OUT";
         jdbc.update("""

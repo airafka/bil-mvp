@@ -47,7 +47,7 @@ public class ComprehensiveServiceOrderService {
         Integer serviceCode = jdbc.queryForObject("select nextval('comprehensive_service_order_number_seq')", Integer.class);
         CreatedOrderResponse delivery = receiving.create(new CreateOrderRequest(
                 request.clientId(), request.contractId(), areaId, TransportType.RAILWAY,
-                List.of(), request.waybillIds(), List.of(), FillingType.ALL, List.of(), List.of()).withDefaultContainerOwner(request.defaultContainerOwnerId()));
+                List.of(), request.waybillIds(), List.of(), FillingType.ALL, List.of()).withDefaultContainerOwner(request.defaultContainerOwnerId()));
         if (request.defaultRailwayCarriageOwnerId()!=null) jdbc.update("update receiving_order set default_railway_carriage_owner_id=? where id=?",request.defaultRailwayCarriageOwnerId(),delivery.id());
         if (!request.containerOwners().isEmpty()) {
             receiving.updateContainerAttributes(delivery.id(), new UpdateOrderContainersRequest(request.containerOwners().stream()
@@ -129,7 +129,7 @@ public class ComprehensiveServiceOrderService {
             UUID areaId, List<OrderContainerRequest> containers) {
         containers = containers.stream().map(container -> withWaybillCargo(deliveryId, container)).toList();
         CreatedOrderResponse created = shipping.create(new CreateOrderRequest(clientId, contractId, areaId,
-                TransportType.VEHICLE, containers, List.of(), List.of(), FillingType.ALL, List.of(), List.of()));
+                TransportType.VEHICLE, containers, List.of(), List.of(), FillingType.ALL, List.of()));
         jdbc.update("update shipping_order set comprehensive_service_order_id = ?, source_receiving_order_id = ? where id = ?",
                 serviceId, deliveryId, created.id());
         for (OrderContainerRequest container : containers) {

@@ -52,7 +52,6 @@ class OrderServiceTest {
                 List.of(UUID.randomUUID(), UUID.randomUUID()),
                 List.of(),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         ).withDefaultContainerOwner(UUID.randomUUID());
         CreatedOrderResponse expected = new CreatedOrderResponse(UUID.randomUUID(), 18, "DRAFT");
@@ -96,7 +95,6 @@ class OrderServiceTest {
                         List.of(new OrderContainerRequest(UUID.randomUUID(), true, null))
                 )),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         ).withDefaultContainerOwner(null);
         CreatedOrderResponse expected = new CreatedOrderResponse(UUID.randomUUID(), 10, "DRAFT");
@@ -121,7 +119,6 @@ class OrderServiceTest {
                 List.of(),
                 List.of(),
                 FillingType.NONE_CONTAINER,
-                List.of(),
                 List.of(new ContainerQuantityRequest(1, ContainerType.STANDARD_40, true, List.of()))
         );
         service.create(request);
@@ -158,7 +155,6 @@ class OrderServiceTest {
                 List.of(),
                 List.of(),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         ).withDefaultContainerOwner(UUID.randomUUID());
     }

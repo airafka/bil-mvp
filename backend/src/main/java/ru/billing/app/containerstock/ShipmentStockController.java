@@ -7,7 +7,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import ru.billing.app.error.ApiException;
-import ru.billing.app.reference.ReferenceOption;
 
 @RestController
 public class ShipmentStockController {
@@ -18,36 +17,12 @@ public class ShipmentStockController {
     @Transactional
     public List<Owner> containerOwners(@RequestParam(required=false) String type) {
         jdbc.queryForObject("select refresh_container_owner_clients()",Integer.class);
-        return owners("""
-                select o.client_id, count(*) n from container_owner_current o join container c on c.id=o.container_id
-                where o.status='ON_TERMINAL' and (?::text is null or c.container_type=?) group by o.client_id
-                """,type);
-    }
-    @GetMapping("/api/references/carriage-stock-owners")
-    public List<Owner> carriageOwners(@RequestParam(required=false) UUID type) {
-        return owners("""
-                select o.client_owner_id as client_id,count(*) n from railway_carriage_owner o join railway_carriage c on c.id=o.railway_carriage_id
-                where o.status='ON_TERMINAL' and (?::uuid is null or c.type_id=?) group by o.client_owner_id
-                """,type);
-    }
-    private List<Owner> owners(String counts,Object type) {
-        return jdbc.query("select c.id,c.name,coalesce(s.n,0) n from client c left join ("+counts+
-                ") s on s.client_id=c.id order by n desc,c.name,c.id",
-                (rs,n)->new Owner(rs.getObject(1,UUID.class),rs.getString(2),rs.getLong(3)),type,type);
-    }
-    @GetMapping("/api/shipping-orders/{order}/available-wagons")
-    public List<ReferenceOption> available(@PathVariable UUID order,@RequestParam(defaultValue="") String q) {
         return jdbc.query("""
-                select c.id,c.code from railway_carriage c where position(lower(?) in lower(c.code))>0 and (
-                    exists(select 1 from shipping_order_railway_carriage s where s.shipping_order_id=? and s.railway_carriage_id=c.id)
-                    or exists(select 1 from railway_carriage_owner o join shipping_order_railway_carriage_qty p
-                        on p.shipping_order_id=? and p.owner_railway_carriage_id=o.client_owner_id and p.type_id=c.type_id
-                        where o.railway_carriage_id=c.id and o.status='ON_TERMINAL' and p.quantity>(
-                            select count(*) from shipping_order_railway_carriage s join railway_carriage used on used.id=s.railway_carriage_id
-                            where s.shipping_order_id=p.shipping_order_id and s.owner_railway_carriage_id=p.owner_railway_carriage_id
-                            and used.type_id=p.type_id)))
-                order by c.code limit 100
-                """,(rs,n)->new ReferenceOption(rs.getObject(1,UUID.class),rs.getString(2)),q,order,order);
+                select c.id, c.name, coalesce(s.n,0) n from client c left join (
+                    select o.client_id, count(*) n from container_owner_current o join container k on k.id=o.container_id
+                    where o.status='ON_TERMINAL' and (?::text is null or k.container_type=?) group by o.client_id
+                ) s on s.client_id=c.id order by n desc,c.name,c.id
+                """,(rs,n)->new Owner(rs.getObject(1,UUID.class),rs.getString(2),rs.getLong(3)),type,type);
     }
     public record ReceiptWagon(UUID id,String code, UUID ownerId,String ownerName) {}
     @GetMapping("/api/receiving-orders/{order}/wagon-owners")
@@ -60,24 +35,19 @@ public class ShipmentStockController {
                 """,(rs,n)->new ReceiptWagon(rs.getObject(1,UUID.class),rs.getString(2),rs.getObject(3,UUID.class),rs.getString(4)),order);
     }
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PutMapping("/api/shipping-orders/{order}/plan/{kind}/{row}/owner")
+    @PutMapping("/api/shipping-orders/{order}/plan/containers/{row}/owner")
     @Transactional
-    public void setPlanOwner(@PathVariable UUID order,@PathVariable String kind,@PathVariable UUID row,
+    public void setPlanOwner(@PathVariable UUID order,@PathVariable UUID row,
             @jakarta.validation.Valid @RequestBody OwnerChoice choice) {
         var status=jdbc.queryForList("select order_status from shipping_order where id=? for update",String.class,order);
         if (!status.equals(List.of("DRAFT"))) throw new ApiException(HttpStatus.CONFLICT,"ORDER_NOT_DRAFT","Изменить план можно в черновике вывоза");
-        String query=switch(kind) {
-            case "containers" -> "update shipping_order_container_qty set owner_client_id=?";
-            case "wagons" -> "update shipping_order_railway_carriage_qty set owner_railway_carriage_id=?,type_id=coalesce(?::uuid,type_id)";
-            default -> throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_PLAN","Неизвестная группа плана");
-        };
-        query+=" where shipping_order_id=? and id=? and exists(select 1 from client where id=?)";
-        int changed=kind.equals("wagons")
-                ? jdbc.update(query,choice.ownerId(),choice.typeId(),order,row,choice.ownerId())
-                : jdbc.update(query,choice.ownerId(),order,row,choice.ownerId());
+        int changed=jdbc.update("""
+                update shipping_order_container_qty set owner_client_id=?
+                where shipping_order_id=? and id=? and exists(select 1 from client where id=?)
+                """,choice.ownerId(),order,row,choice.ownerId());
         if (changed!=1) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_PLAN","Строка плана или собственник не найдены");
     }
-    public record OwnerChoice(@jakarta.validation.constraints.NotNull UUID ownerId, UUID typeId) {}
+    public record OwnerChoice(@jakarta.validation.constraints.NotNull UUID ownerId) {}
     @PutMapping("/api/receiving-orders/{order}/wagons/{wagon}/owner")
     @Transactional
     public List<ReceiptWagon> setWagonOwner(@PathVariable UUID order,@PathVariable UUID wagon,@jakarta.validation.Valid @RequestBody OwnerChoice choice) {

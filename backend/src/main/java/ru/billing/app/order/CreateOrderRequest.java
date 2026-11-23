@@ -15,7 +15,6 @@ public record CreateOrderRequest(
     List<@NotNull UUID> waybillIds,
     List<@NotNull @Valid ShippingOrderRailwayCarriageRequest> railwayCarriages,
     FillingType fillingType,
-    List<@NotNull @Valid RailwayCarriageQuantityRequest> railwayCarriageQuantities,
     List<@NotNull @Valid ContainerQuantityRequest> containerQuantities,
     UUID routeId,
     LocalDateTime arrivalAt,
@@ -34,38 +33,34 @@ public record CreateOrderRequest(
     public UUID effectiveDefaultContainerOwnerId() { return defaultContainerOwnerId; }
     public CreateOrderRequest withDefaultContainerOwner(UUID owner) {
         return new CreateOrderRequest(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,
-            fillingType,railwayCarriageQuantities,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,owner,authorizedRepresentative,phone,email,comment,transportWaybillNumber,containerOwners,defaultRailwayCarriageOwnerId);
+            fillingType,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,owner,authorizedRepresentative,phone,email,comment,transportWaybillNumber,containerOwners,defaultRailwayCarriageOwnerId);
     }
     public CreateOrderRequest(UUID clientId,UUID contractId,UUID terminalAreaId,TransportType transportType,
             List<OrderContainerRequest> containers,List<UUID> waybillIds,List<ShippingOrderRailwayCarriageRequest> railwayCarriages,
-            FillingType fillingType,List<RailwayCarriageQuantityRequest> railwayCarriageQuantities,List<ContainerQuantityRequest> containerQuantities,
+            FillingType fillingType,List<ContainerQuantityRequest> containerQuantities,
             UUID routeId,LocalDateTime arrivalAt,String consignor,LocalDateTime departureAt,String consignee) {
-        this(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,fillingType,
-            railwayCarriageQuantities,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,null);
+        this(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,fillingType,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,null);
     }
     public CreateOrderRequest(UUID clientId,UUID contractId,UUID terminalAreaId,TransportType transportType,
             List<OrderContainerRequest> containers,List<UUID> waybillIds,List<ShippingOrderRailwayCarriageRequest> railwayCarriages,
-            FillingType fillingType,List<RailwayCarriageQuantityRequest> railwayCarriageQuantities,List<ContainerQuantityRequest> containerQuantities,
+            FillingType fillingType,List<ContainerQuantityRequest> containerQuantities,
             UUID routeId,LocalDateTime arrivalAt,String consignor,LocalDateTime departureAt,String consignee,UUID defaultContainerOwnerId) {
-        this(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,fillingType,
-            railwayCarriageQuantities,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,defaultContainerOwnerId,null,null,null,null);
+        this(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,fillingType,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,defaultContainerOwnerId,null,null,null,null);
     }
     public CreateOrderRequest(UUID clientId, UUID contractId, UUID terminalAreaId, TransportType transportType,
             List<OrderContainerRequest> containers, List<UUID> waybillIds, List<ShippingOrderRailwayCarriageRequest> railwayCarriages,
-            FillingType fillingType, List<RailwayCarriageQuantityRequest> railwayCarriageQuantities, List<ContainerQuantityRequest> containerQuantities,
+            FillingType fillingType, List<ContainerQuantityRequest> containerQuantities,
             UUID routeId, LocalDateTime arrivalAt, String consignor, LocalDateTime departureAt, String consignee, UUID defaultContainerOwnerId,
             String authorizedRepresentative, String phone, String email, String comment) {
-        this(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,fillingType,
-            railwayCarriageQuantities,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,defaultContainerOwnerId,
+        this(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,fillingType,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,defaultContainerOwnerId,
             authorizedRepresentative,phone,email,comment,null);
     }
     public CreateOrderRequest(UUID clientId, UUID contractId, UUID terminalAreaId, TransportType transportType,
             List<OrderContainerRequest> containers, List<UUID> waybillIds, List<ShippingOrderRailwayCarriageRequest> railwayCarriages,
-            FillingType fillingType, List<RailwayCarriageQuantityRequest> railwayCarriageQuantities, List<ContainerQuantityRequest> containerQuantities,
+            FillingType fillingType, List<ContainerQuantityRequest> containerQuantities,
             UUID routeId, LocalDateTime arrivalAt, String consignor, LocalDateTime departureAt, String consignee, UUID defaultContainerOwnerId,
             String authorizedRepresentative, String phone, String email, String comment, String transportWaybillNumber) {
-        this(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,fillingType,
-            railwayCarriageQuantities,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,defaultContainerOwnerId,
+        this(clientId,contractId,terminalAreaId,transportType,containers,waybillIds,railwayCarriages,fillingType,containerQuantities,routeId,arrivalAt,consignor,departureAt,consignee,defaultContainerOwnerId,
             authorizedRepresentative,phone,email,comment,transportWaybillNumber,List.of(),null);
     }
     public CreateOrderRequest {
@@ -82,19 +77,17 @@ public record CreateOrderRequest(
     public CreateOrderRequest(UUID clientId, UUID contractId, UUID terminalAreaId, TransportType transportType,
             List<OrderContainerRequest> containers, List<UUID> waybillIds,
             List<ShippingOrderRailwayCarriageRequest> railwayCarriages, FillingType fillingType,
-            List<RailwayCarriageQuantityRequest> railwayCarriageQuantities,
             List<ContainerQuantityRequest> containerQuantities, UUID routeId) {
         this(clientId, contractId, terminalAreaId, transportType, containers, waybillIds, railwayCarriages,
-                fillingType, railwayCarriageQuantities, containerQuantities, routeId, null, null, null, null);
+                fillingType, containerQuantities, routeId, null, null, null, null);
     }
 
     public CreateOrderRequest(UUID clientId, UUID contractId, UUID terminalAreaId, TransportType transportType,
             List<OrderContainerRequest> containers, List<UUID> waybillIds,
             List<ShippingOrderRailwayCarriageRequest> railwayCarriages, FillingType fillingType,
-            List<RailwayCarriageQuantityRequest> railwayCarriageQuantities,
             List<ContainerQuantityRequest> containerQuantities) {
         this(clientId, contractId, terminalAreaId, transportType, containers, waybillIds, railwayCarriages,
-                fillingType, railwayCarriageQuantities, containerQuantities, null);
+                fillingType, containerQuantities, null);
     }
     private static String clean(String value) { return value == null || value.isBlank() ? null : value.strip(); }
 }

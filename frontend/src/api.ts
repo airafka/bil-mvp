@@ -35,7 +35,7 @@ export function deletePaymentInvoice(id: string) {
   return request<void>(`/api/payment-invoices/${id}`, { method: 'DELETE' })
 }
 
-export function getReferenceOptions(resource: 'clients' | 'containers' | 'etsng-codes' | 'railway-carriages' | 'railway-carriage-types' | 'seal-types' | 'hazard-classes' | 'danger-products' | 'railway-carriage-models' | 'railway-carriage-kinds', query = '') {
+export function getReferenceOptions(resource: 'clients' | 'containers' | 'etsng-codes' | 'railway-carriages' | 'seal-types' | 'hazard-classes' | 'danger-products' | 'railway-carriage-models' | 'railway-carriage-kinds', query = '') {
   return request<ReferenceOption[]>(`/api/references/${resource}?limit=100&q=${encodeURIComponent(query)}`)
 }
 

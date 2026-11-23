@@ -50,7 +50,7 @@ public class OrderContainerAdditionService {
             }
         }
         var combined=new CreateOrderRequest(order.clientId(),order.contractId(),order.terminalArea().id(),order.transportType(),
-            containers,List.of(),carriages.entrySet().stream().map(entry->new ShippingOrderRailwayCarriageRequest(entry.getKey(),entry.getValue())).toList(),FillingType.ALL,List.of(),List.of());
+            containers,List.of(),carriages.entrySet().stream().map(entry->new ShippingOrderRailwayCarriageRequest(entry.getKey(),entry.getValue())).toList(),FillingType.ALL,List.of());
         if(incoming) validator.validate(combined); else validator.validateShipping(combined);
         if(railway) references.validateShippingRailwayReferences(combined); else references.validateReferences(combined);
         if(!incoming&&!railway) references.validateVehicleShippingCapacity(containers);

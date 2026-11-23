@@ -370,43 +370,14 @@ tbody tr:hover { background: #fbfcff; }
 .view-ktk-state-grid { grid-template-columns: minmax(260px, 1fr) 160px; }
 .view-railway-cargo-grid { grid-template-columns: minmax(150px, .6fr) minmax(180px, .75fr) minmax(260px, 1.2fr) 150px; }
 .cargo-table-header.railway-cargo-grid, .cargo-row.railway-cargo-grid { grid-template-columns: minmax(150px, .6fr) minmax(170px, .7fr) minmax(260px, 1.2fr) 150px; }
-.quantity-table-section { min-width: 0; }
-.quantity-table { width: 100%; min-width: 680px; border: 1px solid #edf0f4; border-radius: 2px; overflow: hidden; }
-.quantity-table-header, .quantity-table-row { display: grid; align-items: center; }
-.quantity-table-header.carriage-quantity-grid, .quantity-table-row.carriage-quantity-grid { grid-template-columns: 44px minmax(110px, .5fr) minmax(160px, 1fr) minmax(220px, 1fr) 44px; }
-.quantity-table-header.container-quantity-grid, .quantity-table-row.container-quantity-grid { grid-template-columns: 44px minmax(90px, .5fr) minmax(135px, 1fr) minmax(205px, 1fr) 90px 44px; }
-.quantity-table-header { min-height: 36px; color: #3f444d; background: #edf3ff; font-size: 12px; font-weight: 500; }
-.quantity-table-header > span { height: 100%; display: flex; align-items: center; padding: 0 10px; border-right: 1px solid #e3e9f4; }
-.quantity-table-header > span:first-child, .quantity-table-header > span:last-child, .quantity-table-header.container-quantity-grid > span:nth-child(5) { justify-content: center; }
-.quantity-table-header b { margin-left: 3px; color: #e05160; }
-.quantity-table-row { min-height: 44px; background: #fff; border-top: 1px solid #edf0f4; }
-.quantity-table-row:nth-child(odd) { background: #fcfdff; }
-.quantity-table-row > * { min-width: 0; }
-.quantity-table-row > .field { padding: 4px 8px; border-left: 1px solid #edf0f4; }
-.quantity-table-row > .field + .field { border-right: 1px solid #edf0f4; }
-.quantity-table-row .field input, .quantity-table-row .field select { height: 34px; color: #4b4b51; font-size: 12px; }
-.quantity-table-row > .table-checkbox { height: 100%; border-right: 1px solid #edf0f4; }
 .quantity-section { min-width: 0; margin-top: 24px; padding-top: 18px; border-top: 1px solid #edf0f4; }
 .quantity-section > h3, .quantity-section .waybill-section-title h3 { margin: 0 0 12px; color: #30343b; font-size: 14px; font-weight: 500; }
-.quantity-row { min-width: 680px; min-height: 68px; display: grid; align-items: end; gap: 12px; padding: 10px 12px; border: 1px solid #e2e5e9; border-top: 0; background: #fff; }
-.quantity-row:first-of-type { border-top: 1px solid #e2e5e9; border-radius: 5px 5px 0 0; }
-.carriage-quantity-row { grid-template-columns: 90px 180px minmax(260px, 1fr) 36px; }
-.quantity-row > strong { align-self: center; color: #4b4b51; font-size: 12px; font-weight: 500; }
-.container-quantity-list, .view-container-quantity-list { display: grid; gap: 12px; }
+.view-container-quantity-list { display: grid; gap: 12px; }
 .container-quantity-card { border: 1px solid #dfe3e8; border-radius: 6px; overflow: hidden; background: #fff; }
-.container-quantity-head { min-width: 850px; min-height: 72px; display: grid; grid-template-columns: 90px 170px minmax(250px, 1fr) 120px 36px; align-items: end; gap: 12px; padding: 10px 12px; background: #f4f7fd; }
-.container-quantity-head > strong { align-self: center; font-size: 13px; font-weight: 500; }
-.quantity-empty { align-self: center; display: flex; align-items: center; gap: 7px; color: #4b4b51; font-size: 12px; }
-.quantity-empty input { width: 15px; height: 15px; accent-color: var(--blue); }
-.quantity-cargo-list { padding: 8px 12px 10px; }
-.quantity-cargo-row { min-width: 720px; min-height: 48px; display: grid; grid-template-columns: 90px minmax(260px, 1fr) 230px 36px; align-items: center; gap: 10px; border-bottom: 1px solid #edf0f4; }
-.quantity-cargo-row > span { color: #77777d; font-size: 12px; }
 .numbered-container-table { margin-top: 10px; }
-.view-quantity-grid { grid-template-columns: 180px minmax(300px, 1fr); }
 .view-container-quantity-head { min-height: 48px; display: grid; grid-template-columns: 160px minmax(260px, 1fr) 140px; align-items: center; gap: 12px; padding: 0 14px; background: #f4f7fd; color: #4b4b51; font-size: 12px; }
 .view-container-quantity-head strong { color: #191a1f; font-size: 13px; font-weight: 500; }
 .view-container-quantity-card .view-data-table { margin: 0; border-width: 1px 0 0; }
-.view-quantity-cargo-grid { grid-template-columns: minmax(260px, 1fr) 220px; }
 .unnumbered-vehicle-view-table { max-width: 900px; }
 .unnumbered-vehicle-view-grid { grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.4fr) 140px 160px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

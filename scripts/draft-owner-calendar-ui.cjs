@@ -16,7 +16,7 @@ const clients = ['А', 'Б', 'В'].map((name, index) => ({ id: 'owner-' + index,
 const saved = { containerId: 'saved', containerName: 'SAVED1234567', empty: false, ownerClientId: 'owner-0', ownerClientName: clients[0].name, sealNumbers: 'original', cargo: null, cargoItems: [], containerStatus: 'ON_TERMINAL' };
 const order = () => ({ id: 'audit-order', code: 999, status, clientId: 'owner-0', clientName: clients[0].name, contractId: 'contract', contractName: 'Договор', terminalArea: { id: 'area', name: 'Площадка' },
   transportType: transport, fillingType: 'ALL', containers: transport === 'VEHICLE' ? [saved] : [], railwayCarriages: transport === 'RAILWAY' ? [{ railwayCarriageId: 'wagon', railwayCarriageCode: '12345678', containers: [saved] }] : [],
-  waybills: [], railwayCarriageQuantities: [], containerQuantities: [], arrivalAt: null, departureAt: '2026-09-15T12:00:00', consignee: clients[0].name, consignor: null, returnOrders: [] });
+  waybills: [], containerQuantities: [], arrivalAt: null, departureAt: '2026-09-15T12:00:00', consignee: clients[0].name, consignor: null, returnOrders: [] });
 const ownerAt = date => date >= '2026-09-18' ? clients[2] : date >= '2026-09-17' ? clients[1] : clients[0];
 async function fulfill(id, body, code = 200) {
   await send('Fetch.fulfillRequest', { requestId: id, responseCode: code, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(JSON.stringify(body)).toString('base64') });

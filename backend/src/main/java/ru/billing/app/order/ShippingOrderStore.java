@@ -60,24 +60,7 @@ public class ShippingOrderStore {
         } else if (request.transportType() == TransportType.VEHICLE) {
             request.containers().forEach(container -> insertContainer(orderId, null, container));
         } else {
-            switch (fillingType) {
-                case ALL -> insertAllComposition(orderId, request);
-                case RAILWAY_CARRIAGE -> {
-                    insertNumberedCarriages(orderId, request, false);
-                    insertContainerQuantities(orderId, request.containerQuantities());
-                }
-                case CONTAINER -> {
-                    insertRailwayCarriageQuantities(orderId, request.railwayCarriageQuantities());
-                    request.containers().forEach(container -> insertContainer(orderId, null, container));
-                }
-                case NONE -> {
-                    insertRailwayCarriageQuantities(orderId, request.railwayCarriageQuantities());
-                    insertContainerQuantities(orderId, request.containerQuantities());
-                }
-                case NONE_CONTAINER -> throw new IllegalStateException(
-                        "NONE_CONTAINER must be handled before railway composition"
-                );
-            }
+            insertNumberedCarriages(orderId, request);
         }
 
         jdbcTemplate.update("update shipping_order set authorized_representative=?, phone=?, email=?, comment=?, transport_waybill_number=? where id=?",
@@ -152,9 +135,8 @@ public class ShippingOrderStore {
         }
 
         OrderHeader header = headers.getFirst();
-        List<OrderContainerDetails> containers = (header.transportType()==TransportType.VEHICLE || header.fillingType()==FillingType.CONTAINER) ? loadContainers(id) : List.of();
+        List<OrderContainerDetails> containers = header.transportType()==TransportType.VEHICLE ? loadContainers(id) : List.of();
         List<ShippingOrderRailwayCarriageDetails> railwayCarriages = header.transportType()==TransportType.RAILWAY ? loadRailwayCarriages(id) : List.of();
-        List<RailwayCarriageQuantityDetails> carriageQuantities=loadRailwayCarriageQuantities(id);
         List<ContainerQuantityDetails> containerQuantities=loadContainerQuantities(id);
 
         List<ReturnReceivingOrder> returns = ReturnReceivingOrder.find(jdbcTemplate, "r.source_shipping_order_id=?", id);
@@ -162,7 +144,7 @@ public class ShippingOrderStore {
                 header.id(), header.code(), header.clientId(), header.clientName(),
                 header.terminalArea(), header.transportType(),
                 header.fillingType(), header.status(),
-                containers, List.of(), railwayCarriages, carriageQuantities, containerQuantities,
+                containers, List.of(), railwayCarriages, containerQuantities,
                 header.contractId(), header.contractName(), header.comprehensiveServiceOrderId(), header.sourceReceivingOrderId(), header.routeId(), null, returns,
                 null, null, header.departureAt(), header.consignee(), null, null, header.authorizedRepresentative(), header.phone(), header.email(), header.comment(), header.contractType(), header.createdAt(), header.transportWaybillNumber()
         );
@@ -193,11 +175,7 @@ public class ShippingOrderStore {
         }
     }
 
-    private void insertAllComposition(UUID orderId, CreateOrderRequest request) {
-        insertNumberedCarriages(orderId, request, true);
-    }
-
-    private void insertNumberedCarriages(UUID orderId, CreateOrderRequest request, boolean withContainers) {
+    private void insertNumberedCarriages(UUID orderId, CreateOrderRequest request) {
         for (ShippingOrderRailwayCarriageRequest carriage : request.railwayCarriages()) {
             UUID carriageRowId = UUID.randomUUID();
             jdbcTemplate.update(
@@ -207,19 +185,7 @@ public class ShippingOrderStore {
                     orderId,
                     carriage.railwayCarriageId()
             );
-            if (withContainers) {
-                carriage.containers().forEach(container -> insertContainer(orderId, carriageRowId, container));
-            }
-        }
-    }
-
-    private void insertRailwayCarriageQuantities(UUID orderId, List<RailwayCarriageQuantityRequest> rows) {
-        for (RailwayCarriageQuantityRequest row : rows) {
-            jdbcTemplate.update(
-                    "insert into shipping_order_railway_carriage_qty (id, shipping_order_id, quantity, type_id, owner_railway_carriage_id) "
-                            + "values (?, ?, ?, ?, ?)",
-                    UUID.randomUUID(), orderId, row.quantity(), row.typeId(), row.ownerRailwayCarriageId()
-            );
+            carriage.containers().forEach(container -> insertContainer(orderId, carriageRowId, container));
         }
     }
 
@@ -231,14 +197,6 @@ public class ShippingOrderStore {
                             + "values (?, ?, ?, ?, ?, ?)",
                     rowId, orderId, row.quantity(), row.type().name(), row.empty(), row.ownerClientId()
             );
-            List<CargoRequest> items = row.items() == null ? List.of() : row.items();
-            for (CargoRequest item : items) {
-                jdbcTemplate.update(
-                        "insert into shipping_order_etsng_code "
-                                + "(id, shipping_order_container_qty_id, etsng_code_id, weight) values (?, ?, ?, ?)",
-                        UUID.randomUUID(), rowId, item.etsngCodeId(), item.weight()
-                );
-            }
         }
     }
 
@@ -344,64 +302,21 @@ public class ShippingOrderStore {
         )).toList();
     }
 
-    private List<RailwayCarriageQuantityDetails> loadRailwayCarriageQuantities(UUID orderId) {
-        return jdbcTemplate.query(
-                """
-                select qty.id, qty.quantity, qty.type_id, type.code as type_code, type.name as type_name, qty.owner_railway_carriage_id, owner.name as owner_name
-                  from shipping_order_railway_carriage_qty qty
-                  left join railway_carriage_type type on type.id = qty.type_id
-                  left join client owner on owner.id=qty.owner_railway_carriage_id
-                 where qty.shipping_order_id = ?
-                 order by type.code nulls first, qty.id
-                """,
-                (resultSet, rowNumber) -> new RailwayCarriageQuantityDetails(
-                        resultSet.getObject("id", UUID.class),
-                        resultSet.getInt("quantity"),
-                        resultSet.getObject("type_id", UUID.class),
-                        resultSet.getString("type_code"),
-                        resultSet.getString("type_name"), resultSet.getObject("owner_railway_carriage_id",UUID.class), resultSet.getString("owner_name")
-                ),
-                orderId
-        );
-    }
-
     private List<ContainerQuantityDetails> loadContainerQuantities(UUID orderId) {
-        List<ContainerQuantityHeader> headers = jdbcTemplate.query(
+        return jdbcTemplate.query(
                 """
                 select q.id, q.quantity, q.type, q.empty, q.owner_client_id, owner.name as owner_name
                   from shipping_order_container_qty q left join client owner on owner.id=q.owner_client_id
                  where shipping_order_id = ?
                  order by q.type, q.empty desc, q.id
                 """,
-                (resultSet, rowNumber) -> new ContainerQuantityHeader(
+                (resultSet, rowNumber) -> new ContainerQuantityDetails(
                         resultSet.getObject("id", UUID.class),
                         resultSet.getInt("quantity"),
                         ContainerType.valueOf(resultSet.getString("type")),
                         resultSet.getBoolean("empty"), resultSet.getObject("owner_client_id",UUID.class), resultSet.getString("owner_name")
                 ),
                 orderId
-        );
-        return headers.stream().map(header -> new ContainerQuantityDetails(
-                header.id(), header.quantity(), header.type(), header.empty(), loadContainerQuantityItems(header.id()), header.ownerId(), header.ownerName()
-        )).toList();
-    }
-
-    private List<ContainerQuantityItemDetails> loadContainerQuantityItems(UUID rowId) {
-        return jdbcTemplate.query(
-                """
-                select item.id, item.etsng_code_id, code.code as etsng_code, item.weight
-                  from shipping_order_etsng_code item
-                  join etsng_code code on code.id = item.etsng_code_id
-                 where item.shipping_order_container_qty_id = ?
-                 order by code.code, item.weight
-                """,
-                (resultSet, rowNumber) -> new ContainerQuantityItemDetails(
-                        resultSet.getObject("id", UUID.class),
-                        resultSet.getObject("etsng_code_id", UUID.class),
-                        resultSet.getString("etsng_code"),
-                        resultSet.getBigDecimal("weight")
-                ),
-                rowId
         );
     }
 
@@ -444,11 +359,4 @@ public class ShippingOrderStore {
     }
 
 
-    private record ContainerQuantityHeader(
-            UUID id,
-            int quantity,
-            ContainerType type,
-            boolean empty, UUID ownerId, String ownerName
-    ) {
-    }
 }

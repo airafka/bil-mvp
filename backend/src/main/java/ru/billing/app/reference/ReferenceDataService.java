@@ -223,8 +223,6 @@ public class ReferenceDataService {
         if (request.defaultRailwayCarriageOwnerId()!=null) ensureExists("client",request.defaultRailwayCarriageOwnerId(),"CLIENT_NOT_FOUND","Собственник вагонов не найден");
         for (var row:values(request.containerQuantities())) if (row.ownerClientId()!=null)
             ensureExists("client",row.ownerClientId(),"CLIENT_NOT_FOUND","Собственник КТК не найден");
-        for (var row:values(request.railwayCarriageQuantities())) if (row.ownerRailwayCarriageId()!=null)
-            ensureExists("client",row.ownerRailwayCarriageId(),"CLIENT_NOT_FOUND","Собственник вагонов не найден");
         validateContract(request.clientId(), request.contractId());
         String terminalAreaCode = findTerminalAreaCode(request.terminalAreaId());
         orderScenarioPolicy.validate(terminalAreaCode, request.transportType());
@@ -240,25 +238,6 @@ public class ReferenceDataService {
                     "Вагон не найден"
             );
             values(carriage.containers()).forEach(this::validateNumberedContainer);
-        }
-        values(request.containers()).forEach(this::validateNumberedContainer);
-        values(request.railwayCarriageQuantities()).forEach(row -> {
-            if (row.typeId() != null) {
-                ensureExists(
-                        "railway_carriage_type",
-                        row.typeId(),
-                        "REFERENCE_NOT_FOUND",
-                        "Тип вагона не найден"
-                );
-            }
-        });
-        for (ContainerQuantityRequest row : values(request.containerQuantities())) {
-            values(row.items()).forEach(item -> ensureExists(
-                    "etsng_code",
-                    item.etsngCodeId(),
-                    "ETSNG_CODE_NOT_FOUND",
-                    "Код ЕТСНГ не найден"
-            ));
         }
     }
 

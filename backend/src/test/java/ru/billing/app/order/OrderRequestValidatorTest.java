@@ -39,7 +39,6 @@ class OrderRequestValidatorTest {
                 List.of(WAYBILL_ONE),
                 List.of(),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         )))
                 .doesNotThrowAnyException();
@@ -56,7 +55,6 @@ class OrderRequestValidatorTest {
                 List.of(),
                 List.of(),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         ), "TERMINAL_AREA_REQUIRED");
     }
@@ -72,7 +70,6 @@ class OrderRequestValidatorTest {
                 List.of(),
                 List.of(),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         ), "TRANSPORT_TYPE_REQUIRED");
     }
@@ -136,7 +133,6 @@ class OrderRequestValidatorTest {
                 List.of(WAYBILL_ONE),
                 List.of(),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         ), "CONTAINERS_NOT_ALLOWED_FOR_RAILWAY");
     }
@@ -152,7 +148,6 @@ class OrderRequestValidatorTest {
                 List.of(),
                 List.of(),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         ), "EMPTY_WAYBILL_LIST");
         assertError(new CreateOrderRequest(
@@ -164,7 +159,6 @@ class OrderRequestValidatorTest {
                 List.of(WAYBILL_ONE, WAYBILL_ONE),
                 List.of(),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         ), "DUPLICATE_WAYBILL");
     }
@@ -183,7 +177,6 @@ class OrderRequestValidatorTest {
                         List.of(empty(CONTAINER_ONE))
                 )),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         );
         assertThatCode(() -> validator.validateShipping(request)).doesNotThrowAnyException();
@@ -236,7 +229,6 @@ class OrderRequestValidatorTest {
                 List.of(),
                 List.of(),
                 FillingType.ALL,
-                List.of(),
                 List.of()
         );
     }
@@ -255,7 +247,6 @@ class OrderRequestValidatorTest {
                 waybillIds,
                 railwayCarriages,
                 FillingType.ALL,
-                List.of(),
                 List.of()
         );
     }
@@ -273,7 +264,6 @@ class OrderRequestValidatorTest {
                 List.of(),
                 List.of(),
                 FillingType.NONE_CONTAINER,
-                List.of(),
                 containerQuantities
         );
     }
@@ -292,7 +282,6 @@ class OrderRequestValidatorTest {
                 List.of(),
                 railwayCarriages,
                 FillingType.ALL,
-                List.of(),
                 List.of()
         );
         assertThatThrownBy(() -> validator.validateShipping(request))
@@ -312,7 +301,6 @@ class OrderRequestValidatorTest {
             FillingType fillingType,
             List<ShippingOrderRailwayCarriageRequest> railwayCarriages,
             List<OrderContainerRequest> containers,
-            List<RailwayCarriageQuantityRequest> carriageQuantities,
             List<ContainerQuantityRequest> containerQuantities
     ) {
         return new CreateOrderRequest(
@@ -324,7 +312,6 @@ class OrderRequestValidatorTest {
                 List.of(),
                 railwayCarriages,
                 fillingType,
-                carriageQuantities,
                 containerQuantities
         );
     }
@@ -346,110 +333,6 @@ class OrderRequestValidatorTest {
                 .isInstanceOf(ApiException.class)
                 .extracting(exception -> ((ApiException) exception).getCode())
                 .isEqualTo(expectedCode);
-    }
-
-    @Test
-    void acceptsAllUnnumberedShippingMatrices() {
-        UUID carriage = UUID.randomUUID();
-        RailwayCarriageQuantityRequest carriageQuantity = new RailwayCarriageQuantityRequest(2, null);
-        ContainerQuantityRequest emptyQuantity = new ContainerQuantityRequest(
-                3, ContainerType.STANDARD_20, true, List.of()
-        );
-        ContainerQuantityRequest loadedQuantity = new ContainerQuantityRequest(
-                1,
-                ContainerType.STANDARD_40,
-                false,
-                List.of(new CargoRequest(ETSNG_ID, new BigDecimal("30000.000")))
-        );
-
-        assertThatCode(() -> validator.validateShipping(shippingRequest(
-                FillingType.RAILWAY_CARRIAGE,
-                List.of(new ShippingOrderRailwayCarriageRequest(carriage, List.of())),
-                List.of(),
-                List.of(),
-                List.of(emptyQuantity, loadedQuantity)
-        ))).doesNotThrowAnyException();
-        assertThatCode(() -> validator.validateShipping(shippingRequest(
-                FillingType.CONTAINER,
-                List.of(),
-                List.of(empty(CONTAINER_ONE), loaded(CONTAINER_TWO)),
-                List.of(carriageQuantity),
-                List.of()
-        ))).doesNotThrowAnyException();
-        assertThatCode(() -> validator.validateShipping(shippingRequest(
-                FillingType.NONE,
-                List.of(),
-                List.of(),
-                List.of(carriageQuantity),
-                List.of(emptyQuantity, loadedQuantity)
-        ))).doesNotThrowAnyException();
-    }
-
-    @Test
-    void rejectsUnnumberedCompositionMismatchAndInvalidValues() {
-        UUID carriage = UUID.randomUUID();
-        ContainerQuantityRequest emptyQuantity = new ContainerQuantityRequest(
-                1, ContainerType.STANDARD_20, true, List.of()
-        );
-        assertShippingError(shippingRequest(
-                FillingType.RAILWAY_CARRIAGE, List.of(), List.of(), List.of(), List.of(emptyQuantity)
-        ), "RAILWAY_CARRIAGES_REQUIRED");
-        assertShippingError(shippingRequest(
-                FillingType.CONTAINER,
-                List.of(new ShippingOrderRailwayCarriageRequest(carriage, List.of())),
-                List.of(empty(CONTAINER_ONE)),
-                List.of(new RailwayCarriageQuantityRequest(1, null)),
-                List.of()
-        ), "NUMBERED_RAILWAY_CARRIAGES_NOT_ALLOWED");
-        assertShippingError(shippingRequest(
-                FillingType.NONE,
-                List.of(),
-                List.of(),
-                List.of(new RailwayCarriageQuantityRequest(0, null)),
-                List.of(emptyQuantity)
-        ), "INVALID_QUANTITY");
-        assertShippingError(shippingRequest(
-                FillingType.NONE,
-                List.of(),
-                List.of(),
-                List.of(
-                        new RailwayCarriageQuantityRequest(1, null),
-                        new RailwayCarriageQuantityRequest(2, null)
-                ),
-                List.of(emptyQuantity)
-        ), "DUPLICATE_RAILWAY_CARRIAGE_TYPE");
-    }
-
-    @Test
-    void rejectsInvalidAndDuplicateContainerQuantityRows() {
-        RailwayCarriageQuantityRequest carriageQuantity = new RailwayCarriageQuantityRequest(1, null);
-        ContainerQuantityRequest missingCargo = new ContainerQuantityRequest(
-                1, ContainerType.STANDARD_40, false, List.of()
-        );
-        assertShippingError(shippingRequest(
-                FillingType.NONE, List.of(), List.of(), List.of(carriageQuantity), List.of(missingCargo)
-        ), "CARGO_REQUIRED");
-
-        ContainerQuantityRequest cargoForEmpty = new ContainerQuantityRequest(
-                1,
-                ContainerType.STANDARD_40,
-                true,
-                List.of(new CargoRequest(ETSNG_ID, BigDecimal.ONE))
-        );
-        assertShippingError(shippingRequest(
-                FillingType.NONE, List.of(), List.of(), List.of(carriageQuantity), List.of(cargoForEmpty)
-        ), "CARGO_FOR_EMPTY_CONTAINER");
-
-        ContainerQuantityRequest duplicate = new ContainerQuantityRequest(
-                2, ContainerType.STANDARD_20, false, List.of(new CargoRequest(ETSNG_ID, BigDecimal.ONE))
-        );
-        assertShippingError(shippingRequest(
-                FillingType.NONE,
-                List.of(),
-                List.of(),
-                List.of(carriageQuantity),
-                List.of(duplicate, duplicate)
-        ), "DUPLICATE_CONTAINER_QUANTITY_ROW");
     }
 
     @Test
@@ -508,7 +391,6 @@ class OrderRequestValidatorTest {
                 List.of(),
                 List.of(),
                 FillingType.NONE_CONTAINER,
-                List.of(),
                 List.of(new ContainerQuantityRequest(1, ContainerType.STANDARD_40, true, List.of()))
         );
         assertThatThrownBy(() -> validator.validate(request))
@@ -518,7 +400,6 @@ class OrderRequestValidatorTest {
 
         assertShippingError(shippingRequest(
                 FillingType.NONE_CONTAINER,
-                List.of(),
                 List.of(),
                 List.of(),
                 List.of(new ContainerQuantityRequest(1, ContainerType.STANDARD_40, true, List.of()))

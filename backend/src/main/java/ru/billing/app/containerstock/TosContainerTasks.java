@@ -1,7 +1,6 @@
 package ru.billing.app.containerstock;
 
-import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
@@ -16,10 +15,8 @@ public class TosContainerTasks {
     private final JdbcTemplate jdbc;
     private final ContainerTaskRows tasks;
     private final ContainerStockService stock;
-    private final RailwayCarriageStock wagons;
 
-    public TosContainerTasks(JdbcTemplate jdbc, ContainerTaskRows tasks, ContainerStockService stock, RailwayCarriageStock wagons) {
-        this.wagons = wagons;
+    public TosContainerTasks(JdbcTemplate jdbc, ContainerTaskRows tasks, ContainerStockService stock) {
         this.jdbc = jdbc;
         this.tasks = tasks;
         this.stock = stock;
@@ -30,19 +27,11 @@ public class TosContainerTasks {
         var cargo = event.cargoResult();
         if (cargo.isEmpty() && event.addServicesResult().isEmpty())
             throw invalid("Пакет не содержит результатов");
-        if (receiving || mode == FillingType.ALL || mode == FillingType.CONTAINER) {
+        if (receiving || mode == FillingType.ALL) {
             var row = tasks.rows(event.orderId(), receiving).stream()
                     .filter(task -> task.id().equals(event.taskId())).findFirst()
                     .orElseThrow(() -> invalid("Задание _id отсутствует в заявке _order"));
             if ("FINISHED".equals(row.status())) return;
-            if (mode == FillingType.CONTAINER) {
-                if (cargo.size() != 1) throw invalid("Для задания КТК требуется один результат");
-                var result = cargo.getFirst();
-                requireContainer(row.container(), result.cargoNumber());
-                var wagon = wagon(event.orderId(), result, false, event.eventDateTime());
-                jdbc.update("update shipping_order_container set shipping_order_railway_carriage_id=?,seal_numbers=? where id=?",
-                        wagon, seals(result), row.id());
-            }
             if (!cargo.isEmpty() && !row.table().equals("waybill_container"))
                 jdbc.update("update "+row.table()+" set actual_quantity=? where id=?",cargo.getFirst().qty(),row.id());
             stock.finishContainers(receiving ? "receiving-orders" : "shipping-orders",event.orderId(),
@@ -50,67 +39,26 @@ public class TosContainerTasks {
             return;
         }
 
-        if (cargo.isEmpty() || (mode == FillingType.NONE_CONTAINER && cargo.size() != 1))
-            throw invalid("Для безномерного вывоза требуется результат по фактическому КТК");
-        var containerIds = cargo.stream().map(c -> reference("container",c.cargoNumber())).toList();
-        if (new HashSet<>(containerIds).size() != containerIds.size()) throw invalid("Номер КТК повторяется в пакете");
-        ContainerLocks.lockCurrentOwners(jdbc,containerIds);
-        var order = event.orderId();
-        long existing = jdbc.queryForObject("select count(*) from shipping_order_container where shipping_order_id=?",Long.class,order);
-        if (existing + cargo.size() > plannedContainers(order)) throw invalid("Превышено количество КТК заявки");
-        for (int i=0; i<cargo.size(); i++) {
-            var result = cargo.get(i);
-            UUID container = containerIds.get(i);
-            UUID row = i == 0 ? event.taskId() : UUID.nameUUIDFromBytes(
-                    (event.taskId()+"/"+container).getBytes(StandardCharsets.UTF_8));
-            var state = stock.state(container);
-            String conflict = ContainerStockPolicy.reservationConflict(false, state == null ? null : state.status());
-            if (conflict != null) throw invalid(result.cargoNumber()+": "+conflict);
-            boolean vehicle = mode == FillingType.NONE_CONTAINER;
-            UUID carriage = vehicle ? null : wagon(order,result,mode == FillingType.RAILWAY_CARRIAGE,event.eventDateTime());
-            jdbc.update("""
-                    insert into shipping_order_container(id,shipping_order_id,container_id,shipping_order_railway_carriage_id,
-                        owner_container_id,empty,seal_numbers,status,actual_quantity) values(?,?,?,?,?,?,?,'UPLOADED',?)
-                    """,row,order,container,carriage,state.client(),vehicle || result.cargoSpec().isEmpty(),seals(result),result.qty());
-            if (!vehicle) for (var item : result.cargoSpec()) {
-                if (item.code()==null || item.qty()==null || item.qty().signum()<=0) throw invalid("Не указан код ЕТСНГ или масса груза");
-                jdbc.update("insert into shipping_order_container_item(id,shipping_order_container_id,etsng_code_id,wight_net) values(?,?,?,?)",
-                        UUID.randomUUID(),row,reference("etsng_code",item.code()),item.qty());
-            }
-            stock.transition(container,state.client(),"RESERVED_OUT",state.receiving(),order,order,"SHIPPING_ORDER",event.eventDateTime());
-            stock.finishContainers("shipping-orders",order,container,event.eventDateTime());
-        }
-    }
-
-    public long plannedContainers(UUID order) {
-        return jdbc.queryForObject("select coalesce(sum(quantity),0) from shipping_order_container_qty where shipping_order_id=?",Long.class,order);
-    }
-
-    private UUID wagon(UUID order, TosEvent.Cargo cargo, boolean mustExist, java.time.OffsetDateTime at) {
-        if (!"ЖД".equals(cargo.transportType())) throw invalid("В ЖД-результате требуется вагон");
-        UUID carriage = reference("railway_carriage",cargo.transportNumber());
-        var rows = jdbc.query("select id from shipping_order_railway_carriage where shipping_order_id=? and railway_carriage_id=?",
-                (rs,n)->rs.getObject(1,UUID.class),order,carriage);
-        if (!rows.isEmpty()) {
-            jdbc.update("update shipping_order_railway_carriage set status='FINISHED' where id=?",rows.getFirst());
-            return rows.getFirst();
-        }
-        if (mustExist) throw invalid("Вагон отсутствует в составе заявки");
-        var id = UUID.randomUUID();
-        var owner = wagons.shipUnnumbered(order,carriage,at);
-        jdbc.update("insert into shipping_order_railway_carriage(id,shipping_order_id,railway_carriage_id,owner_railway_carriage_id,status) values(?,?,?,?,'FINISHED')",
-                id,order,carriage,owner);
-        return id;
-    }
-
-    private UUID reference(String table, String code) {
-        var matches=jdbc.query("select id from "+table+" where upper(code)=upper(?)",(rs,n)->rs.getObject(1,UUID.class),code);
-        if (matches.size()!=1) throw invalid("Номер отсутствует или неоднозначен в справочнике: "+code);
-        return matches.getFirst();
-    }
-
-    private void requireContainer(UUID container, String code) {
-        if (!container.equals(reference("container",code))) throw invalid("Номер КТК не соответствует заданию");
+        if (cargo.size() != 1) throw invalid("Для автовывоза требуется результат по одному КТК");
+        var result = cargo.getFirst();
+        var matches = jdbc.queryForList("select id from container where upper(code)=upper(?)", UUID.class, result.cargoNumber());
+        if (matches.size()!=1) throw invalid("Номер КТК отсутствует или неоднозначен в справочнике: "+result.cargoNumber());
+        UUID container = matches.getFirst();
+        UUID order = event.orderId();
+        ContainerLocks.lockCurrentOwners(jdbc, List.of(container));
+        if (!Boolean.TRUE.equals(jdbc.queryForObject("""
+                select exists(select 1 from shipping_order_container_qty where shipping_order_id=?)
+                   and not exists(select 1 from shipping_order_container where shipping_order_id=?)
+                """, Boolean.class, order, order))) throw invalid("Нет свободной позиции КТК в плане вывоза");
+        var state = stock.state(container);
+        String conflict = ContainerStockPolicy.reservationConflict(false, state == null ? null : state.status());
+        if (conflict != null) throw invalid(result.cargoNumber()+": "+conflict);
+        jdbc.update("""
+                insert into shipping_order_container(id,shipping_order_id,container_id,owner_container_id,empty,seal_numbers,status,actual_quantity)
+                values(?,?,?,?,true,?,'UPLOADED',?)
+                """,event.taskId(),order,container,state.client(),seals(result),result.qty());
+        stock.transition(container,state.client(),"RESERVED_OUT",state.receiving(),order,order,"SHIPPING_ORDER",event.eventDateTime());
+        stock.finishContainers("shipping-orders",order,container,event.eventDateTime());
     }
 
     private String seals(TosEvent.Cargo cargo) {

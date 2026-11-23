@@ -189,7 +189,6 @@ describe('order form state', () => {
       waybillIds: [],
       railwayCarriages: [],
       fillingType: 'ALL',
-      railwayCarriageQuantities: [],
       containerQuantities: [],
     })
   })
@@ -212,7 +211,6 @@ describe('order form state', () => {
       defaultRailwayCarriageOwnerId: 'client-1',
       railwayCarriages: [],
       fillingType: 'ALL',
-      railwayCarriageQuantities: [],
       containerQuantities: [],
     })
   })
@@ -264,7 +262,6 @@ describe('order form state', () => {
         },
       ],
       fillingType: 'ALL',
-      railwayCarriageQuantities: [],
       containerQuantities: [],
     })
   })
@@ -370,12 +367,12 @@ describe('собственник КТК по умолчанию', () => {
 })
 
 it('builds an unnumbered vehicle shipment with a planned quantity', () => {
-  const state: OrderFormState = { ...initialOrderFormState, transportType: 'VEHICLE', fillingType: 'NONE_CONTAINER', containerQuantities: [{ key: 1, quantity: '2', type: 'STANDARD_20', empty: true, items: [] }] }
-  expect(buildPayload(state, 'shipping')).toMatchObject({ fillingType: 'NONE_CONTAINER', containers: [], containerQuantities: [{ quantity: 2 }] })
+  const state: OrderFormState = { ...initialOrderFormState, transportType: 'VEHICLE', fillingType: 'NONE_CONTAINER', containerQuantities: [{ key: 1, quantity: '1', type: 'STANDARD_20', empty: true, items: [] }] }
+  expect(buildPayload(state, 'shipping')).toMatchObject({ fillingType: 'NONE_CONTAINER', containers: [], containerQuantities: [{ quantity: 1 }] })
 })
 
-it('rejects a quantity plan on a numbered order', () => {
-  const state: OrderFormState = { ...initialOrderFormState, transportType: 'RAILWAY', railwayCarriageQuantities: [{ key: 1, quantity: '1', typeId: '' }] }
+it('rejects unnumbered vehicle mode on a railway shipment', () => {
+  const state: OrderFormState = { ...initialOrderFormState, transportType: 'RAILWAY', fillingType: 'NONE_CONTAINER' }
   expect(validateStep(state, 1, 'shipping')).toHaveLength(1)
   expect(() => buildPayload(state, 'shipping')).toThrow('конкретный состав')
 })

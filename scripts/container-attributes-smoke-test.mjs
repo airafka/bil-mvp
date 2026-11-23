@@ -54,8 +54,6 @@ const rail={...common,transportType:'RAILWAY',fillingType:'ALL',containers:[],ra
 const shipping=await call('/api/shipping-orders',rail,201)
 equal((await call('/api/shipping-orders/'+shipping.id)).railwayCarriages[0].containers[0])
 equal((await call('/api/shipping-orders/'+shipping.id+'/containers',{containers:[{containerId:c.id,...attrs,sealNumbers:'0010'}]},200,'PATCH')).railwayCarriages[0].containers[0],{...attrs,sealNumbers:'0010'})
-const railTop=await call('/api/shipping-orders',{...common,transportType:'RAILWAY',fillingType:'CONTAINER',railwayCarriageQuantities:[{quantity:1,typeId:types[0].id}]},201)
-equal((await call('/api/shipping-orders/'+railTop.id)).containers[0])
 const payer='ATTRIBUTES-'+Date.now()
 const billPayload={payer,departureStation:11111,destinationStation:999999,railwayCarriages:[{railwayCarriageId:cars[0].id,containers:[{containerId:c.id,grossWeight:String(c.tareWeight),ownerClientId:attrs.ownerClientId,sealNumbers:attrs.sealNumbers,sealTypeId}]}]}
 const created=await call('/api/waybills',billPayload,201)

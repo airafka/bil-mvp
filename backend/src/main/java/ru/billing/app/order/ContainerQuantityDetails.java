@@ -1,6 +1,5 @@
 package ru.billing.app.order;
 
-import java.util.List;
 import java.util.UUID;
 
 public record ContainerQuantityDetails(
@@ -8,6 +7,6 @@ public record ContainerQuantityDetails(
         int quantity,
         ContainerType type,
         boolean empty,
-        List<ContainerQuantityItemDetails> items, UUID ownerClientId, String ownerName
+        UUID ownerClientId, String ownerName
 ) {
 }

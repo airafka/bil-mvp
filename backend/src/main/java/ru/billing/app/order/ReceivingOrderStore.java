@@ -208,7 +208,7 @@ public class ReceivingOrderStore {
                 header.id(), header.code(), header.clientId(), header.clientName(),
                 header.terminalArea(), header.transportType(),
                 FillingType.ALL, header.status(),
-                OrderContainerDetails.merge(containers), waybills, List.of(), List.of(), List.of(),
+                OrderContainerDetails.merge(containers), waybills, List.of(), List.of(),
                 header.contractId(), header.contractName(), header.comprehensiveServiceOrderId(), null, header.routeId(),
                 header.sourceShippingOrderId(), List.of(),
                 header.arrivalAt(), header.consignor(), null, null, header.defaultContainerOwnerId(), header.defaultContainerOwnerName(),
