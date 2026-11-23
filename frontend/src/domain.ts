@@ -9,14 +9,17 @@ export type ReferenceOption = {
 }
 
 export type TransportType = 'VEHICLE' | 'RAILWAY'
-// Legacy values are decoded only to reject unsupported requests; new orders use ALL.
-export type FillingType = 'ALL' | 'RAILWAY_CARRIAGE' | 'CONTAINER' | 'NONE' | 'VEHICLE_UNNUMBERED'
+export type FillingType = 'ALL' | 'RAILWAY_CARRIAGE' | 'CONTAINER' | 'NONE' | 'NONE_CONTAINER'
 export type ContainerType =
   | 'STANDARD_20'
   | 'STANDARD_40'
 
 export const fillingTypeOptions: Array<{ value: FillingType; name: string }> = [
   { value: 'ALL', name: 'Заданы номера вагонов и КТК' },
+  { value: 'RAILWAY_CARRIAGE', name: 'Заданы только номера вагонов' },
+  { value: 'CONTAINER', name: 'Заданы только номера КТК' },
+  { value: 'NONE', name: 'Не заданы номера вагонов и КТК' },
+  { value: 'NONE_CONTAINER', name: 'Безномерный вывоз по авто' },
 ]
 
 export const fillingTypeLabel = (value: FillingType | null | undefined) =>

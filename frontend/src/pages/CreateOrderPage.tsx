@@ -1,3 +1,4 @@
+import { containerTypeOptions, fillingTypeOptions, type FillingType } from '../domain'
 import { CreationSteps } from '../components/CreationSteps'
 import { businessDateLabel, useApplicationClock, useBusinessDateTime } from '../applicationClock'
 import { catalogDate } from '../transportCatalogs'
@@ -13,7 +14,7 @@ import { receivingWaybillRows } from '../orderContainerRows'
 import { WaybillCompositionTable } from '../components/WaybillCompositionTable'
 import { StatusBadge } from '../components/StatusBadge'
 import { UiInput, UiSelect } from '../components/FormControls'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { getAvailableOrderServices, createOrder, createComprehensiveServiceOrder, getContracts, getTariffClients, getRoutes, getReferenceOptions, getTerminalAreas, getTransportTypes } from '../api'
 import { WaybillSelectionTable } from '../components/WaybillSelectionTable'
@@ -74,6 +75,12 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
   const [requestError, setRequestError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const submitLock = useRef(false)
+  const nextRailwayQuantityKey = useRef(1)
+  const nextContainerQuantityKey = useRef(1)
+  const nextQuantityCargoKey = useRef(1)
+  const [railwayCarriageTypes, setRailwayCarriageTypes] = useState<ReferenceOption[]>([])
+  const loadedContainerQuantityGroups = form.containerQuantities.filter(row => !row.empty)
+  const isUnnumberedVehicleShipping = form.fillingType === 'NONE_CONTAINER'
   const nextRailwayKey = useRef(1)
 
 
@@ -86,13 +93,14 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
       getReferenceOptions('containers'),
       getReferenceOptions('etsng-codes'),
       getReferenceOptions('railway-carriages'),
+      getReferenceOptions('railway-carriage-kinds'),
       getTerminalAreas(),
       getTransportTypes(),
       getContracts(serviceMode),
       serviceMode ? getTariffClients() : Promise.resolve([]),
       serviceMode ? getAvailableOrderServices() : Promise.resolve([]),
     ])
-      .then(([clientOptions, containerOptions, etsngOptions, carriageOptions, terminalAreas, transportOptions, contractOptions, tariffClientOptions, availableServices]) => {
+      .then(([clientOptions, containerOptions, etsngOptions, carriageOptions, carriageTypes, terminalAreas, transportOptions, contractOptions, tariffClientOptions, availableServices]) => {
         const containerArea = findContainerArea(terminalAreas)
         setServiceOptions(availableServices)
         setContracts(contractOptions)
@@ -101,6 +109,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
         setContainers(containerOptions)
         setCargoOptions(etsngOptions)
         setRailwayCarriages(carriageOptions)
+        setRailwayCarriageTypes(carriageTypes)
         setTerminalArea(containerArea)
         setTransportTypes(filterTransportTypes(transportOptions))
         if (containerArea) {
@@ -123,17 +132,11 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
     getRoutes().then(setRoutes).catch(() => setRouteLoadError('Не удалось загрузить рейсы')).finally(()=>setRoutesLoading(false))
   }, [serviceMode])
 
-  const loadedContainers = useMemo(
-    () => form.containers.filter((container) => !container.empty),
-    [form.containers],
-  )
-  const loadedRailwayContainers = useMemo(
-    () => form.railwayCarriages.flatMap((carriage, carriageIndex) =>
+  const loadedContainers = form.containers.filter(container => !container.empty)
+  const loadedRailwayContainers = form.railwayCarriages.flatMap((carriage, carriageIndex) =>
       carriage.containers
         .filter((container) => !container.empty)
         .map((container) => ({ carriage, carriageIndex, container })),
-    ),
-    [form.railwayCarriages],
   )
 
   const isRailwayReceiving = config.kind === 'receiving' && form.transportType === 'RAILWAY'
@@ -144,7 +147,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
     ? receivingRailwaySteps
     : isRailwayShipping
       ? shippingRailwaySteps
-      : vehicleSteps
+      : isUnnumberedVehicleShipping ? vehicleSteps.slice(0,2) : vehicleSteps
   const visibleSteps = serviceMode ? steps : [steps[0], 'Рейс', ...steps.slice(1)]
   const lastStep = visibleSteps.length
   const contentStep = serviceMode ? step : step === 2 ? 0 : step > 2 ? step - 1 : step
@@ -268,6 +271,26 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
 
 
 
+  const changeFillingType = (fillingType: FillingType) => {
+    const hasComposition = form.railwayCarriages.length > 0
+      || form.railwayCarriageQuantities.length > 0
+      || form.containers.length > 0
+      || form.containerQuantities.length > 0
+    if (hasComposition && fillingType !== form.fillingType) {
+      if (!window.confirm('При изменении наличия данных текущий состав нужно очистить. Очистить состав и продолжить?')) return
+    }
+    setContainerRows([''])
+    setErrors([])
+    setForm((state) => ({
+      ...state,
+      fillingType,
+      railwayCarriages: [],
+      railwayCarriageQuantities: [],
+      containers: [],
+      containerQuantities: fillingType === 'NONE_CONTAINER' ? [{ key: 1, quantity: '1', type: '', empty: true, items: [] }] : [],
+    }))
+  }
+
   const updateRailwayCarriage = (
     key: number,
     update: (carriage: typeof form.railwayCarriages[number]) => typeof form.railwayCarriages[number],
@@ -380,6 +403,9 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
                 <div className="form-fields-column">
                   <label className="field horizontal-field"><span>Площадка:<b>*</b></span><span className="field-control"><UiInput value={loadingReferences ? 'Загрузка…' : terminalArea?.name ?? ''} placeholder="Контейнерная площадка недоступна" readOnly aria-readonly="true" />{!loadingReferences && !terminalArea && <small>Контейнерная площадка не найдена.</small>}</span></label>
                   <label className="field horizontal-field"><span>Вид транспорта:<b>*</b></span><span className="field-control"><UiSelect required value={form.transportType} onChange={event => changeTransport(event.target.value as TransportType | '')} disabled={loadingReferences}><option value="" hidden disabled />{availableTransportTypes.map(option => <option key={option.value} value={option.value}>{option.name}</option>)}</UiSelect>{!loadingReferences && transportTypes.length === 0 && <small>Типы транспорта недоступны.</small>}</span></label>
+                  {config.kind === 'shipping' && form.transportType && <label className="field horizontal-field"><span>Наличие номеров:</span><UiSelect value={form.fillingType} onChange={e => changeFillingType(e.target.value as FillingType)}>
+                    {fillingTypeOptions.filter(option => form.transportType === 'RAILWAY' ? option.value !== 'NONE_CONTAINER' : ['ALL','NONE_CONTAINER'].includes(option.value)).map(option => <option key={option.value} value={option.value}>{form.transportType === 'VEHICLE' && option.value === 'ALL' ? 'Заданы номера КТК' : option.name}</option>)}
+                  </UiSelect></label>}
                   <label className="field horizontal-field"><span>Номер транспортной накладной:</span><UiInput maxLength={255} value={form.transportWaybillNumber} onChange={event => setForm(state => ({ ...state, transportWaybillNumber: event.target.value }))} /></label>
                 </div>
                 {<div className="form-fields-column">
@@ -407,7 +433,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
           onCreated={route=>setRoutes(current=>[route,...current])}
           /></div>}
 
-        {contentStep === 2 && !isRailway && <div className="form-section"><OrderContainerTable
+        {((contentStep === 2 && !isRailway && !isUnnumberedVehicleShipping) || (contentStep === 3 && form.fillingType === 'CONTAINER')) && <div className="form-section"><OrderContainerTable
    rows={containerRows.map((id,index) => ({ ...(form.containers.find(c => c.id===id) ?? { empty:false }), key:String(index), containerId:id, name:containers.find(c => c.id===id)?.name ?? '' }))}
    options={containers} ownerReadOnly={config.kind === 'shipping'} defaultOwnerId={form.defaultContainerOwnerId}
    onSelect={(key,id) => setContainerAt(Number(key),id)} onAdd={() => setContainerRows(rows => [...rows,''])}
@@ -419,6 +445,54 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
 
 
 
+        {contentStep === 2 && isUnnumberedVehicleShipping && (
+          <div className="form-section unnumbered-vehicle-section">
+            <div className="unnumbered-vehicle-fields">
+              <label className="field horizontal-field">
+                <span>Количество КТК <b>*</b></span>
+                <span className="field-control">
+                  <UiInput
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.containerQuantities[0]?.quantity ?? ''}
+                    placeholder="Введите количество"
+
+
+                    onChange={(event) => setForm((state) => ({
+                      ...state,
+                      containerQuantities: state.containerQuantities.map((row, index) =>
+                        index === 0 ? { ...row, quantity: event.target.value } : row,
+                      ),
+                    }))}
+                  />
+                </span>
+              </label>
+              <label className="field horizontal-field">
+                <span>Типоразмер КТК <b>*</b></span>
+                <span className="field-control">
+                  <UiSelect
+                    value={form.containerQuantities[0]?.type ?? ''}
+                    onChange={(event) => setForm((state) => ({
+                      ...state,
+                      containerQuantities: state.containerQuantities.map((row, index) =>
+                        index === 0 ? { ...row, type: event.target.value as typeof row.type } : row,
+                      ),
+                    }))}
+                  >
+                    <option value="">Выберите типоразмер</option>
+                    {containerTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.name}</option>)}
+                  </UiSelect>
+                </span>
+              </label>
+              <label className="field horizontal-field">
+                <span>Состояние КТК <b>*</b></span>
+                <span className="field-control"><UiInput value="Порожний" readOnly aria-readonly="true" /></span>
+              </label>
+            </div>
+          </div>
+        )}
+
         {contentStep === 2 && isRailwayReceiving && <WaybillSelectionTable filter={waybillFilter} selected={form.waybills} disabled={submitting}
           onChange={waybills => { setForm(state => ({ ...state, waybills })); const ids = new Set(receivingWaybillRows(waybills, form.defaultContainerOwnerId, clients).map(row => row.containerId)); setContainerOwners(current => Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id)))); setErrors([]) }} />}
 
@@ -427,14 +501,14 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
           <WaybillCompositionTable key={contentStep} waybills={form.waybills} tab={contentStep === 3 ? 'wagons' : 'cargo'} wagonAttributes />
         )}
 
-        {contentStep === 2 && isRailwayShipping && (
+        {contentStep === 2 && isRailwayShipping && (form.fillingType === 'RAILWAY_CARRIAGE' || form.fillingType === 'ALL') && (
           <div className="form-section shipping-railway-section">
             <div className="waybill-section-title">
 
               {(
                 <button type="button" className="outline-action-button" onClick={() => setForm((state) => ({
                   ...state,
-                  railwayCarriages: [...state.railwayCarriages, { key: nextRailwayKey.current++, railwayCarriageId: '', containers: [{ id: '', name: '', empty: false, etsngCodeId: '', weight: '' }] }],
+                  railwayCarriages: [...state.railwayCarriages, { key: nextRailwayKey.current++, railwayCarriageId: '', containers: state.fillingType === 'ALL' ? [{ id: '', name: '', empty: false, etsngCodeId: '', weight: '' }] : [] }],
                 }))}>⊕ Добавить вагон</button>
               )}
             </div>
@@ -468,7 +542,68 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
           </div>
         )}
 
-        {contentStep === 3 && isRailwayShipping && (
+        {contentStep === 2 && isRailwayShipping && <>
+            {(form.fillingType === 'CONTAINER' || form.fillingType === 'NONE') && (
+              <div className="quantity-table-section">
+                <div className="ktk-toolbar">
+                  <button type="button" className="outline-action-button" onClick={() => setForm((state) => ({
+                    ...state,
+                    railwayCarriageQuantities: [...state.railwayCarriageQuantities, { key: nextRailwayQuantityKey.current++, quantity: '', typeId: '' }],
+                  }))}><span>⊕</span> Добавить</button>
+                </div>
+                <div className="quantity-table" role="table" aria-label="Количество вагонов">
+                  <div className="quantity-table-header carriage-quantity-grid" role="row">
+                    <span role="columnheader">№</span>
+                    <span role="columnheader">Количество вагонов <b>*</b></span>
+                    <span role="columnheader">Род/тип вагона</span>
+                    <span role="columnheader" aria-label="Действия" />
+                  </div>
+                  {form.railwayCarriageQuantities.map((row, index) => (
+                    <div className="quantity-table-row carriage-quantity-grid" role="row" key={row.key}>
+                      <span className="ktk-row-number" role="cell">{index + 1}</span>
+                      <label className="field" role="cell"><span className="sr-only">Количество вагонов в строке {index + 1}</span><UiInput type="number" min="1" step="1" value={row.quantity} onChange={(event) => setForm((state) => ({ ...state, railwayCarriageQuantities: state.railwayCarriageQuantities.map((item) => item.key === row.key ? { ...item, quantity: event.target.value } : item) }))} /></label>
+                      <label className="field" role="cell"><span className="sr-only">Род или тип вагона в строке {index + 1}</span><UiSelect value={row.typeId} onChange={(event) => setForm((state) => ({ ...state, railwayCarriageQuantities: state.railwayCarriageQuantities.map((item) => item.key === row.key ? { ...item, typeId: event.target.value } : item) }))}>
+                        <option value="">Тип не указан</option>
+                        {railwayCarriageTypes.map((option) => <option key={option.id} value={option.id} disabled={row.typeId !== option.id && form.railwayCarriageQuantities.some((item) => item.typeId === option.id)}>{option.name}</option>)}
+                      </UiSelect></label>
+                      <button type="button" className="row-clear-button" aria-label={`Удалить строку вагонов ${index + 1}`} onClick={() => setForm((state) => ({ ...state, railwayCarriageQuantities: state.railwayCarriageQuantities.filter((item) => item.key !== row.key) }))}>×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+        </>}
+        {contentStep === 3 && isRailwayShipping && <>
+            {(form.fillingType === 'RAILWAY_CARRIAGE' || form.fillingType === 'NONE') && (
+              <div className="quantity-table-section">
+                <div className="ktk-toolbar">
+                  <button type="button" className="outline-action-button" onClick={() => setForm((state) => ({
+                    ...state,
+                    containerQuantities: [...state.containerQuantities, { key: nextContainerQuantityKey.current++, quantity: '', type: '', empty: false, items: [] }],
+                  }))}><span>⊕</span> Добавить</button>
+                </div>
+                <div className="quantity-table" role="table" aria-label="Количество КТК">
+                  <div className="quantity-table-header container-quantity-grid" role="row">
+                    <span role="columnheader">№</span>
+                    <span role="columnheader">Количество КТК <b>*</b></span>
+                    <span role="columnheader">Тип КТК <b>*</b></span>
+                    <span role="columnheader">Порожний</span>
+                    <span role="columnheader" aria-label="Действия" />
+                  </div>
+                  {form.containerQuantities.map((row, rowIndex) => (
+                    <div className="quantity-table-row container-quantity-grid" role="row" key={row.key}>
+                      <span className="ktk-row-number" role="cell">{rowIndex + 1}</span>
+                      <label className="field" role="cell"><span className="sr-only">Количество КТК в строке {rowIndex + 1}</span><UiInput type="number" min="1" step="1" value={row.quantity} onChange={(event) => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.map((item) => item.key === row.key ? { ...item, quantity: event.target.value } : item) }))} /></label>
+                      <label className="field" role="cell"><span className="sr-only">Тип КТК в строке {rowIndex + 1}</span><UiSelect value={row.type} onChange={(event) => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.map((item) => item.key === row.key ? { ...item, type: event.target.value as typeof row.type } : item) }))}><option value="">Выберите тип</option>{containerTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.name}</option>)}</UiSelect></label>
+                      <label className="table-checkbox" role="cell"><UiInput type="checkbox" checked={row.empty} onChange={(event) => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.map((item) => item.key === row.key ? { ...item, empty: event.target.checked, items: event.target.checked ? [] : item.items } : item) }))} /><span aria-hidden="true">{row.empty ? '✓' : ''}</span><span className="sr-only">Порожний</span></label>
+                      <button type="button" className="row-clear-button" aria-label={`Удалить строку КТК ${rowIndex + 1}`} onClick={() => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.filter((item) => item.key !== row.key) }))}>×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+        </>}
+        {contentStep === 3 && isRailwayShipping && form.fillingType === 'ALL' && (
           <div className="form-section shipping-railway-section">
             <div className="waybill-section-title">
 
@@ -500,7 +635,29 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
 
 
 
-        {contentStep === 4 && isRailwayShipping && (
+        {contentStep === 4 && isRailwayShipping && <>
+
+            {(form.fillingType === 'RAILWAY_CARRIAGE' || form.fillingType === 'NONE') && (loadedContainerQuantityGroups.length === 0 ? (
+              <div className="all-empty-message"><span>✓</span><div><strong>Все группы КТК порожние</strong><p>Данные о грузе заполнять не требуется.</p></div></div>
+            ) : <div className="container-quantity-list">
+              {loadedContainerQuantityGroups.map((row) => {
+                const rowIndex = form.containerQuantities.indexOf(row)
+                return <article className="container-quantity-card" key={row.key}>
+                  <div className="view-container-quantity-head"><strong>Группа {rowIndex + 1}</strong><span>{row.quantity} КТК</span><span>{containerTypeOptions.find((option) => option.value === row.type)?.name ?? 'Тип не выбран'}</span></div>
+                  <div className="quantity-cargo-list">
+                    {row.items.map((item, itemIndex) => <div className="quantity-cargo-row" key={item.key}>
+                      <span>Груз {itemIndex + 1}</span>
+                      <label className="field"><UiSelect value={item.etsngCodeId} onChange={(event) => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.map((group) => group.key === row.key ? { ...group, items: group.items.map((cargo) => cargo.key === item.key ? { ...cargo, etsngCodeId: event.target.value } : cargo) } : group) }))}><option value="">Выберите ЕТСНГ</option>{cargoOptions.map((cargo) => <option key={cargo.id} value={cargo.id}>{cargo.name}</option>)}</UiSelect></label>
+                      <label className="field"><UiInput type="text" inputMode="decimal" placeholder="Масса на один КТК, кг" value={item.weight} onChange={(event) => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.map((group) => group.key === row.key ? { ...group, items: group.items.map((cargo) => cargo.key === item.key ? { ...cargo, weight: event.target.value } : cargo) } : group) }))} /></label>
+                      <button type="button" className="row-clear-button" onClick={() => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.map((group) => group.key === row.key ? { ...group, items: group.items.filter((cargo) => cargo.key !== item.key) } : group) }))}>×</button>
+                    </div>)}
+                    <button type="button" className="railway-add-container-button" onClick={() => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.map((group) => group.key === row.key ? { ...group, items: [...group.items, { key: nextQuantityCargoKey.current++, etsngCodeId: '', weight: '' }] } : group) }))}>⊕ Добавить груз</button>
+                  </div>
+                </article>
+              })}
+            </div>)}
+        </>}
+        {contentStep === 4 && isRailwayShipping && form.fillingType === 'ALL' && (
           <div className="form-section shipping-railway-section">
 
             {form.fillingType === 'ALL' && (loadedRailwayContainers.length === 0 ? (
@@ -524,7 +681,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
           </div>
         )}
 
-        {contentStep === 3 && !isRailway && (
+        {((contentStep === 3 && !isRailway && !isUnnumberedVehicleShipping) || (contentStep === 4 && form.fillingType === 'CONTAINER')) && (
           <div className="form-section">
 
             {loadedContainers.length === 0 ? (

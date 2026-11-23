@@ -222,8 +222,6 @@ public class ReferenceDataService {
 
         validateContract(request.clientId(), request.contractId());
         String terminalAreaCode = findTerminalAreaCode(request.terminalAreaId());
-        FillingType fillingType = request.fillingType() == null ? FillingType.ALL : request.fillingType();
-        if(fillingType!=FillingType.ALL) throw new ApiException(HttpStatus.BAD_REQUEST,"NUMBERED_COMPOSITION_REQUIRED","Поддерживается только номерной состав");
         orderScenarioPolicy.validate(terminalAreaCode, request.transportType());
     }
 

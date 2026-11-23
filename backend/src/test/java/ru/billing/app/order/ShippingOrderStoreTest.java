@@ -19,7 +19,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class ShippingOrderStoreTest {
 
     @Test
-    void rejectsUnnumberedCompositionBeforeWriting() {
+    void storesUnnumberedVehicleContainerInExistingQuantityTable() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ShippingOrderStore store = new ShippingOrderStore(jdbcTemplate);
         CreateOrderRequest request = new CreateOrderRequest(
@@ -30,11 +30,22 @@ class ShippingOrderStoreTest {
                 List.of(),
                 List.of(),
                 List.of(),
-                FillingType.VEHICLE_UNNUMBERED,
+                FillingType.NONE_CONTAINER,
                 List.of(),
                 List.of(new ContainerQuantityRequest(1, ContainerType.STANDARD_40, true, List.of()))
         );
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> store.create(request)).isInstanceOf(ru.billing.app.error.ApiException.class);
-        org.mockito.Mockito.verifyNoInteractions(jdbcTemplate);
+        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any(Object[].class))).thenReturn(101);
+
+        CreatedOrderResponse response = store.create(request);
+
+        assertThat(response.code()).isEqualTo(101);
+        verify(jdbcTemplate).update(
+                startsWith("insert into shipping_order_container_qty"),
+                any(), any(), eq(1), eq("STANDARD_40"), eq(true)
+        );
+        verify(jdbcTemplate, never()).update(
+                startsWith("insert into shipping_order_container "),
+                any(), any(), any(), any(), any()
+        );
     }
 }

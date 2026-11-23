@@ -34,6 +34,7 @@ public class OrderContainerAdditionService {
                 || incoming && order.transportType()!=TransportType.VEHICLE)
             throw error(HttpStatus.CONFLICT,"CONTAINER_COMPOSITION_FROM_SOURCE","Состав КТК этой заявки изменяется через исходную поставку или накладные");
 
+        if (!incoming && order.fillingType()!=FillingType.ALL) throw error(HttpStatus.CONFLICT,"UNNUMBERED_COMPOSITION","Фактические номера поступают из TOS");
         boolean railway=order.transportType()==TransportType.RAILWAY;
         var containers=new ArrayList<>(order.containers().stream().map(OrderContainerAdditionService::request).toList());
         var carriages=new LinkedHashMap<UUID,List<OrderContainerRequest>>();

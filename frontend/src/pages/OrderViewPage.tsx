@@ -17,7 +17,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { updateOrderContainerAttributes, assignRouteOrders, getOrder, getRoutes, getReferenceOptions } from '../api'
 import type { OrderConfig, OrderDetails } from '../domain'
-import { fillingTypeLabel, transportTypeLabel } from '../domain'
+import { containerTypeLabel, fillingTypeLabel, transportTypeLabel } from '../domain'
 import { getWaybillStationName } from '../waybillOptions'
 import type { RouteSummary, RouteType } from '../routes'
 
@@ -110,7 +110,7 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
   const returnButton = canCreateReturn && !editing && <button type="button" className="secondary-button" onClick={() => setReturnDialogOpen(true)}>Создать возврат</button>
   const numberedContainers = order ? [...order.containers, ...order.railwayCarriages.flatMap(w => w.containers)] : []
   const canEditDefaultOwner = config.kind === 'receiving' && order?.status === 'DRAFT'
-  const canAddContainers = order?.status === 'DRAFT' && !order.comprehensiveServiceOrderId && !order.sourceReceivingOrderId && !order.sourceShippingOrderId
+  const canAddContainers = order?.status === 'DRAFT' && order.fillingType === 'ALL' && !order.comprehensiveServiceOrderId && !order.sourceReceivingOrderId && !order.sourceShippingOrderId
     && (order.transportType === 'VEHICLE' || (config.kind === 'shipping' && order.transportType === 'RAILWAY'))
   const canEditContainers = order?.status === 'DRAFT' && (numberedContainers.length > 0 || canAddContainers)
 
@@ -253,7 +253,7 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
               {order.sourceReceivingOrderId && <div className="details-wide"><dt>Исходная поставка</dt><dd><RelatedOrderLink kind="receiving-orders" id={order.sourceReceivingOrderId} /></dd></div>}
               {order.sourceShippingOrderId && <div className="details-wide"><dt>Исходный вывоз</dt><dd><RelatedOrderLink kind="shipping-orders" id={order.sourceShippingOrderId} /></dd></div>}
               {order.returnOrders?.map(item => <div className="details-wide" key={item.id}><dt>Заявка на возврат</dt><dd><Link to={`/receiving-orders/${item.id}`}>№{item.code}</Link> — {item.clientName}, {item.contractName}; КТК: {item.containerNames.join(', ')}. Услуга <Link to={`/comprehensive-service-orders/${item.comprehensiveServiceOrderId}`}>№{item.comprehensiveServiceOrderCode}</Link></dd></div>)}
-              {isRailwayShipping && <div className="details-wide"><dt>Наличие данных</dt><dd>{fillingTypeLabel(order.fillingType)}</dd></div>}
+              {config.kind === 'shipping' && <div className="details-wide"><dt>Наличие данных</dt><dd>{fillingTypeLabel(order.fillingType)}</dd></div>}
             </dl>
             {<>
               <div className="form-section-heading ui-section-divider"><h2>Контактная информация</h2></div>
@@ -279,7 +279,10 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
             {routeError && <Notification kind="error">{routeError}</Notification>}
           </div>}
 
-          {contentTab === 2 && !isRailway && containerTable(order.containers)}
+          {contentTab === 2 && !isRailway && <>
+            {order.containerQuantities.length > 0 && <div className="quantity-section"><h3>Плановые группы КТК</h3><div className="view-container-quantity-list">{order.containerQuantities.map((row) => <article className="container-quantity-card" key={row.id}><div className="view-container-quantity-head"><strong>{row.quantity} КТК</strong><span>{containerTypeLabel(row.type)}</span><span>{row.empty ? 'Порожние' : 'Гружёные'}</span></div></article>)}</div></div>}
+            {containerTable(order.containers)}
+          </>}
 
 
 
@@ -303,7 +306,8 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
           {contentTab === 2 && isRailwayShipping && <div className="form-section railway-details">
             {order.railwayCarriages.length > 0 && <div className="shipping-railway-list">{order.railwayCarriages.map((carriage, index) => <article className="shipping-railway-card view-shipping-railway-card" key={carriage.railwayCarriageId}><div className="shipping-railway-card-head"><strong>Вагон {index + 1}</strong><span className="railway-carriage-code">{carriage.railwayCarriageCode}</span></div></article>)}</div>}
 
-            {order.railwayCarriages.length === 0 && <div className="inline-empty">Вагоны не найдены</div>}
+            {order.railwayCarriageQuantities.length > 0 && <div className="quantity-section"><div className="view-data-table"><div className="view-data-header view-quantity-grid"><span>Количество</span><span>Род/тип вагона</span></div>{order.railwayCarriageQuantities.map((row) => <div className="view-data-row view-quantity-grid" key={row.id}><strong>{row.quantity}</strong><span>{row.typeName ?? 'Тип не указан'}</span></div>)}</div></div>}
+            {order.railwayCarriages.length === 0 && order.railwayCarriageQuantities.length === 0 && <div className="inline-empty">Вагоны не найдены</div>}
           </div>}
 
           {contentTab === 3 && isRailwayShipping && <div className="form-section railway-details">
@@ -313,14 +317,16 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
             </article>)}</div>}
             {order.containers.length > 0 && <div className="quantity-section"><h3>Номерные КТК</h3>{containerTable(order.containers)}</div>}
 
-            {order.railwayCarriages.every((carriage) => carriage.containers.length === 0) && order.containers.length === 0 && <div className="inline-empty">КТК не найдены</div>}
+            {order.containerQuantities.length > 0 && <div className="quantity-section"><h3>Плановые группы КТК</h3><div className="view-container-quantity-list">{order.containerQuantities.map((row) => <article className="container-quantity-card" key={row.id}><div className="view-container-quantity-head"><strong>{row.quantity} КТК</strong><span>{containerTypeLabel(row.type)}</span><span>{row.empty ? 'Порожние' : 'Гружёные'}</span></div></article>)}</div></div>}
+            {order.containerQuantities.length === 0 && order.railwayCarriages.every((carriage) => carriage.containers.length === 0) && order.containers.length === 0 && <div className="inline-empty">КТК не найдены</div>}
           </div>}
 
           {contentTab === 4 && isRailwayShipping && <div className="form-section railway-details">
             {railwayCargoContainers.length > 0 && <div className="view-data-table"><div className="view-data-header view-railway-cargo-grid"><span>Вагон</span><span>КТК</span><span>Груз</span><span>Масса брутто, кг</span></div>{railwayCargoContainers.map(({ carriage, container }) => <div className="view-data-row view-railway-cargo-grid" key={`${carriage.railwayCarriageId}-${container.containerId}-${container.cargo?.etsngCodeId}`}><strong>{carriage.railwayCarriageCode}</strong><strong>{container.containerName}</strong><span>{container.cargo?.etsngCodeName}</span><span>{container.cargo ? formatWeight(container.cargo.weight) : '—'}</span></div>)}</div>}
             {cargoContainers.length > 0 && <div className="quantity-section"><div className="view-data-table"><div className="view-data-header view-cargo-grid"><span>КТК</span><span>Груз</span><span>Масса брутто, кг</span></div>{cargoContainers.map((container) => <div className="view-data-row view-cargo-grid" key={`${container.containerId}-${container.cargo?.etsngCodeId}`}><strong>{container.containerName}</strong><span>{container.cargo?.etsngCodeName}</span><span>{container.cargo ? formatWeight(container.cargo.weight) : '—'}</span></div>)}</div></div>}
 
-            {railwayCargoContainers.length === 0 && cargoContainers.length === 0 && <div className="all-empty-message"><span>✓</span><div><strong>В заявке нет гружёных КТК</strong><p>Данные о грузе отсутствуют.</p></div></div>}
+            {order.containerQuantities.filter((row) => !row.empty).map((row) => <article className="container-quantity-card" key={row.id}><div className="view-container-quantity-head"><strong>{row.quantity} КТК</strong><span>{containerTypeLabel(row.type)}</span><span>Гружёные</span></div><div className="view-data-table"><div className="view-data-header view-quantity-cargo-grid"><span>ЕТСНГ</span><span>Масса на один КТК, кг</span></div>{row.items.map((item) => <div className="view-data-row view-quantity-cargo-grid" key={item.id}><span>{item.etsngCode}</span><strong>{formatWeight(item.weight)}</strong></div>)}</div></article>)}
+            {order.containerQuantities.every(row=>row.empty) && railwayCargoContainers.length === 0 && cargoContainers.length === 0 && <div className="all-empty-message"><span>✓</span><div><strong>В заявке нет гружёных КТК</strong><p>Данные о грузе отсутствуют.</p></div></div>}
           </div>}
 
           {contentTab === 3 && !isRailway && cargoContainers.length > 0 && <VehicleReceivingCargoTable containers={order.containers} />}

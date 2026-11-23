@@ -22,13 +22,14 @@ public class OperationalResetService {
     static final List<String> CLEARED = List.of(
         "billing_charge", "comprehensive_service_order", "comprehensive_service_order_tariff",
         "container_owner", "container_owner_history", "container_period", "container_visit",
+        "inbound_event", "shipping_order_container_qty", "shipping_order_railway_carriage_qty", "shipping_order_etsng_code",
         "payment_invoice", "payment_invoice_line", "receiving_order", "receiving_order_container",
         "receiving_order_container_item", "route", "service_execution", "service_order", "service_order_container",
         "shipping_order", "shipping_order_container", "shipping_order_container_item", "shipping_order_railway_carriage",
         "shipping_order_source_container", "waybill", "waybill_container", "waybill_container_relocation",
         "waybill_product", "waybill_railway_carriage", "waybill_zpu");
     static final List<String> PRESERVED = List.of(
-        "application_clock", "client", "client_driver", "client_related_entity", "client_vehicle",
+        "application_clock", "client", "client_driver", "client_related_entity", "client_vehicle", "inbound_event_config",
         "complex_service_catalog", "complex_service_tariff", "container", "contract", "danger_class",
         "danger_product", "etsng_code", "flyway_schema_history", "payer", "railway_carriage",
         "railway_carriage_model", "railway_carriage_type", "railway_station", "seal_type", "terminal_area_catalog");

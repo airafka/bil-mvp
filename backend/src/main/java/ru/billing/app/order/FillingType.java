@@ -5,5 +5,5 @@ public enum FillingType {
     RAILWAY_CARRIAGE,
     CONTAINER,
     NONE,
-    VEHICLE_UNNUMBERED
+    NONE_CONTAINER
 }

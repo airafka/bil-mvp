@@ -247,19 +247,23 @@ export function setContainerCargo(
 
 export function validateStep(state: OrderFormState, step: number, kind: OrderKind = 'receiving'): string[] {
   const errors: string[] = []
-  if (state.fillingType !== 'ALL' || state.railwayCarriageQuantities.length || state.containerQuantities.length) {
-    return ['В MVP доступны только заявки с номерами КТК и, для ЖД, вагонов']
-  }
+  if ((state.fillingType === 'ALL' && (state.railwayCarriageQuantities.length || state.containerQuantities.length))
+      || (kind === 'receiving' && state.fillingType !== 'ALL')) return ['Для номерной заявки укажите конкретный состав']
   if (step >= 1 && !state.clientId) errors.push('Выберите клиента')
   if (step >= 1 && !state.contractId) errors.push('Выберите договор')
   if (step >= 1 && kind === 'receiving' && !state.defaultContainerOwnerId) errors.push('Выберите собственника КТК по умолчанию')
   if (step >= 1 && !state.terminalAreaId) errors.push('Контейнерная площадка недоступна')
   if (step >= 1 && !state.transportType) errors.push('Выберите тип транспорта')
 
-  if (step >= 2 && state.transportType === 'VEHICLE' && state.containers.length === 0) {
+  const isUnnumberedVehicleShipping = kind === 'shipping'
+    && state.transportType === 'VEHICLE'
+    && state.fillingType === 'NONE_CONTAINER'
+  if (step >= 2 && state.transportType === 'VEHICLE' && !isUnnumberedVehicleShipping && state.containers.length === 0) {
     errors.push('Выберите хотя бы один КТК')
   }
-
+  if (step >= 2 && isUnnumberedVehicleShipping) {
+    validateUnnumberedVehicleShipping(state, errors)
+  }
   if (step >= 2 && state.transportType === 'RAILWAY' && kind === 'receiving' && state.waybills.length === 0) {
     errors.push('Выберите хотя бы одну накладную')
   }
@@ -273,7 +277,7 @@ export function validateStep(state: OrderFormState, step: number, kind: OrderKin
     if (step >= 4) validateShippingRailwayCargo(state, errors)
   }
 
-  if (step >= 3 && state.transportType === 'VEHICLE') {
+  if (step >= 3 && state.transportType === 'VEHICLE' && !isUnnumberedVehicleShipping) {
     validateContainerCargo(state.containers, errors)
   }
   return errors
@@ -284,9 +288,9 @@ export function buildPayload(
   kind: OrderKind = 'receiving',
 ): CreateOrderPayload {
   if (!state.transportType) throw new Error('Тип транспорта обязателен')
-  if (state.fillingType !== 'ALL' || state.railwayCarriageQuantities.length || state.containerQuantities.length) {
-    throw new Error('В MVP доступны только заявки с номерами КТК и, для ЖД, вагонов')
-  }
+  if ((state.fillingType === 'ALL' && (state.railwayCarriageQuantities.length || state.containerQuantities.length))
+      || (kind === 'receiving' && state.fillingType !== 'ALL')) throw new Error('Для номерной заявки укажите конкретный состав')
+  const isUnnumberedVehicleShipping = kind === 'shipping' && state.fillingType === 'NONE_CONTAINER'
   return {
     clientId: state.clientId,
     contractId: state.contractId,
@@ -306,13 +310,43 @@ export function buildPayload(
     ...(state.routeId ? { routeId: state.routeId } : {}),
     terminalAreaId: state.terminalAreaId,
     transportType: state.transportType,
-    fillingType: 'ALL',
-    containers: state.transportType === 'VEHICLE' ? state.containers.map(containerPayload) : [],
-    waybillIds: state.transportType === 'RAILWAY' && kind === 'receiving' ? state.waybills.map(w => w.id) : [],
+    fillingType: (state.transportType === 'RAILWAY' && kind === 'shipping') || isUnnumberedVehicleShipping
+      ? state.fillingType
+      : 'ALL',
+    containers: (state.transportType === 'VEHICLE' && !isUnnumberedVehicleShipping)
+      || (state.transportType === 'RAILWAY' && kind === 'shipping' && state.fillingType === 'CONTAINER')
+      ? state.containers.map(containerPayload)
+      : [],
+    waybillIds: state.transportType === 'RAILWAY' && kind === 'receiving'
+      ? state.waybills.map((waybill) => waybill.id)
+      : [],
     railwayCarriages: state.transportType === 'RAILWAY' && kind === 'shipping'
-      ? state.railwayCarriages.map(carriage => ({ railwayCarriageId: carriage.railwayCarriageId, containers: carriage.containers.map(containerPayload) })) : [],
-    railwayCarriageQuantities: [],
-    containerQuantities: [],
+      && (state.fillingType === 'ALL' || state.fillingType === 'RAILWAY_CARRIAGE')
+      ? state.railwayCarriages.map((carriage) => ({
+          railwayCarriageId: carriage.railwayCarriageId,
+          containers: state.fillingType === 'ALL' ? carriage.containers.map(containerPayload) : [],
+        }))
+      : [],
+    railwayCarriageQuantities: state.transportType === 'RAILWAY' && kind === 'shipping'
+      && (state.fillingType === 'CONTAINER' || state.fillingType === 'NONE')
+      ? state.railwayCarriageQuantities.map((row) => ({
+          quantity: Number(row.quantity),
+          typeId: row.typeId || null,
+        }))
+      : [],
+    containerQuantities: isUnnumberedVehicleShipping
+      || (state.transportType === 'RAILWAY' && kind === 'shipping'
+      && (state.fillingType === 'RAILWAY_CARRIAGE' || state.fillingType === 'NONE'))
+      ? state.containerQuantities.map((row) => ({
+          quantity: Number(row.quantity),
+          type: row.type as ContainerType,
+          empty: row.empty,
+          items: row.empty ? [] : row.items.map((item) => ({
+            etsngCodeId: item.etsngCodeId,
+            weight: Number(item.weight.replace(',', '.')),
+          })),
+        }))
+      : [],
   }
 }
 
@@ -356,8 +390,26 @@ export function validateContainerCargo(containers: SelectedContainer[], errors: 
 
 
 
-function validateShippingRailwayCarriages(state: OrderFormState, errors: string[]) {
+function validateUnnumberedVehicleShipping(state: OrderFormState, errors: string[]) {
+  if (state.containers.length > 0) errors.push('Для безномерного вывоза номер КТК не указывается')
+  if (state.containerQuantities.length !== 1) {
+    errors.push('Для безномерного вывоза должна быть указана одна строка КТК')
+    return
+  }
+  const row = state.containerQuantities[0]
+  if (!/^\d+$/.test(row.quantity) || Number(row.quantity) <= 0) {
+    errors.push('Укажите целое количество КТК больше нуля')
+  }
+  if (!row.type) errors.push('Выберите типоразмер КТК')
+  if (!row.empty) errors.push('Безномерный вывоз разрешён только для порожнего КТК')
+  if (row.items.length > 0) errors.push('Для безномерного вывоза сведения о грузе не указываются')
+}
 
+function validateShippingRailwayCarriages(state: OrderFormState, errors: string[]) {
+  if (state.fillingType === 'CONTAINER' || state.fillingType === 'NONE') {
+    validateRailwayCarriageQuantities(state, errors)
+    return
+  }
   if (state.railwayCarriages.length === 0) {
     errors.push('Добавьте хотя бы один вагон')
     return
@@ -373,8 +425,15 @@ function validateShippingRailwayCarriages(state: OrderFormState, errors: string[
 }
 
 function validateShippingRailwayContainers(state: OrderFormState, errors: string[]) {
-
-
+  if (state.fillingType === 'CONTAINER') {
+    if (state.containers.length === 0) errors.push('Выберите хотя бы один номерной КТК')
+    validateContainerSelection(state.containers, errors)
+    return
+  }
+  if (state.fillingType === 'RAILWAY_CARRIAGE' || state.fillingType === 'NONE') {
+    validateContainerQuantityComposition(state, errors)
+    return
+  }
 
   const containerIds = new Set<string>()
   state.railwayCarriages.forEach((carriage, carriageIndex) => {
@@ -393,7 +452,80 @@ function validateShippingRailwayContainers(state: OrderFormState, errors: string
 }
 
 function validateShippingRailwayCargo(state: OrderFormState, errors: string[]) {
-  state.railwayCarriages.forEach(carriage => validateContainerCargo(carriage.containers.filter(c => Boolean(c.id)), errors))
+  if (state.fillingType === 'ALL') {
+    state.railwayCarriages.forEach((carriage) => {
+      validateContainerCargo(carriage.containers.filter((container) => Boolean(container.id)), errors)
+    })
+    return
+  }
+  if (state.fillingType === 'CONTAINER') {
+    validateContainerCargo(state.containers, errors)
+    return
+  }
+  validateContainerQuantityCargo(state, errors)
+}
+
+function validateContainerSelection(containers: SelectedContainer[], errors: string[]) {
+  const containerIds = new Set<string>()
+  containers.forEach((container, index) => {
+    if (!container.id) {
+      errors.push(`Выберите КТК ${index + 1}`)
+      return
+    }
+    if (containerIds.has(container.id)) errors.push(`КТК ${container.name} уже выбран`)
+    containerIds.add(container.id)
+  })
+}
+
+function validateRailwayCarriageQuantities(state: OrderFormState, errors: string[]) {
+  if (state.railwayCarriageQuantities.length === 0) {
+    errors.push('Добавьте хотя бы одну строку количества вагонов')
+    return
+  }
+  const typeIds = new Set<string>()
+  state.railwayCarriageQuantities.forEach((row, index) => {
+    if (!/^\d+$/.test(row.quantity) || Number(row.quantity) <= 0) {
+      errors.push(`Укажите целое количество вагонов больше нуля в строке ${index + 1}`)
+    }
+    const typeKey = row.typeId || '__UNKNOWN__'
+    if (typeIds.has(typeKey)) errors.push('Один тип вагона нельзя добавить дважды')
+    typeIds.add(typeKey)
+  })
+}
+
+function validateContainerQuantityComposition(state: OrderFormState, errors: string[]) {
+  if (state.containerQuantities.length === 0) {
+    errors.push('Добавьте хотя бы одну количественную группу КТК')
+    return
+  }
+  state.containerQuantities.forEach((row, rowIndex) => {
+    if (!/^\d+$/.test(row.quantity) || Number(row.quantity) <= 0) {
+      errors.push(`Укажите целое количество КТК больше нуля в группе ${rowIndex + 1}`)
+    }
+    if (!row.type) errors.push(`Выберите тип КТК в группе ${rowIndex + 1}`)
+    if (row.empty && row.items.length > 0) errors.push(`Удалите груз у порожней группы ${rowIndex + 1}`)
+  })
+}
+
+function validateContainerQuantityCargo(state: OrderFormState, errors: string[]) {
+  const rowKeys = new Set<string>()
+  state.containerQuantities.forEach((row, rowIndex) => {
+    if (!row.empty && row.items.length === 0) errors.push(`Добавьте груз в группу ${rowIndex + 1}`)
+    row.items.forEach((item, itemIndex) => {
+      if (!item.etsngCodeId) errors.push(`Выберите ЕТСНГ для груза ${itemIndex + 1} в группе ${rowIndex + 1}`)
+      const weight = item.weight.replace(',', '.')
+      if (!/^\d+(\.\d{1,3})?$/.test(weight) || Number(weight) <= 0) {
+        errors.push(`Укажите положительную массу на один КТК для груза ${itemIndex + 1} в группе ${rowIndex + 1}`)
+      }
+    })
+    const itemKey = row.items
+      .map((item) => `${item.etsngCodeId}:${item.weight.replace(',', '.')}`)
+      .sort()
+      .join('|')
+    const rowKey = `${row.quantity}:${row.type}:${row.empty}:${itemKey}`
+    if (rowKeys.has(rowKey)) errors.push('Полностью одинаковую группу КТК нельзя добавить дважды')
+    rowKeys.add(rowKey)
+  })
 }
 
 export function canAddWaybill(current: SelectedWaybill[], candidate: SelectedWaybill) {

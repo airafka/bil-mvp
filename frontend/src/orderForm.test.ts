@@ -368,18 +368,15 @@ describe('собственник КТК по умолчанию', () => {
   })
 })
 
-it('rejects every mode that replaces numbers with quantities', () => {
-  for (const fillingType of ['RAILWAY_CARRIAGE', 'CONTAINER', 'NONE', 'VEHICLE_UNNUMBERED'] as const) {
-    const state = { ...initialOrderFormState, fillingType }
-    expect(validateStep(state, 1, 'shipping')).toContain('В MVP доступны только заявки с номерами КТК и, для ЖД, вагонов')
-    expect(() => buildPayload({ ...state, transportType: 'VEHICLE' }, 'shipping')).toThrow('только заявки с номерами')
-  }
+it('builds an unnumbered vehicle shipment with a planned quantity', () => {
+  const state: OrderFormState = { ...initialOrderFormState, transportType: 'VEHICLE', fillingType: 'NONE_CONTAINER', containerQuantities: [{ key: 1, quantity: '2', type: 'STANDARD_20', empty: true, items: [] }] }
+  expect(buildPayload(state, 'shipping')).toMatchObject({ fillingType: 'NONE_CONTAINER', containers: [], containerQuantities: [{ quantity: 2 }] })
 })
 
-it('rejects quantities even when fillingType is ALL', () => {
+it('rejects a quantity plan on a numbered order', () => {
   const state: OrderFormState = { ...initialOrderFormState, transportType: 'RAILWAY', railwayCarriageQuantities: [{ key: 1, quantity: '1', typeId: '' }] }
   expect(validateStep(state, 1, 'shipping')).toHaveLength(1)
-  expect(() => buildPayload(state, 'shipping')).toThrow('только заявки с номерами')
+  expect(() => buildPayload(state, 'shipping')).toThrow('конкретный состав')
 })
 
 // Multiple cargo rows must survive submission in both vehicle order flows.

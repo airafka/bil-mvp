@@ -103,28 +103,38 @@ public class ContainerStockService {
     }
 
     /** Caller holds the document lock. The manual button delivers all outstanding row results. */
-    public boolean finishContainers(String resource,UUID order,UUID containerId){
+    public boolean finishContainers(String resource,UUID order,UUID containerId,java.time.OffsetDateTime eventTime){
         boolean receiving=resource.equals("receiving-orders");
         var rows=tasks.rows(order,receiving);
         if(containerId!=null && rows.stream().noneMatch(r->r.container().equals(containerId)))
             throw error("CONTAINER_NOT_IN_ORDER","КТК отсутствует в этой заявке");
         var outstanding=rows.stream().filter(r->!"FINISHED".equals(r.status())).toList();
         var selected=outstanding.stream().filter(r->containerId==null || r.container().equals(containerId)).toList();
-        lockContainers(selected.stream().map(ContainerTaskRows.Row::container).toList());
-        for(var row:selected) applyFinishedResult(order,receiving,row);
+        var selectedIds = selected.stream().map(ContainerTaskRows.Row::container).toList();
+        if (eventTime == null) lockContainers(selectedIds);
+        else ContainerLocks.lockCurrentOwners(jdbc,selectedIds);
+        for(var row:selected) applyFinishedResult(order,receiving,row,eventTime);
         // Read the persisted results while the order is locked. Empty legacy documents can be completed manually.
-        return tasks.rows(order,receiving).stream().allMatch(r->"FINISHED".equals(r.status()));
+        return allTasksFinished(order,receiving);
     }
 
-    private void applyFinishedResult(UUID order,boolean receiving,ContainerTaskRows.Row row){
+    public boolean allTasksFinished(UUID order, boolean receiving) {
+        return tasks.rows(order,receiving).stream().allMatch(row -> "FINISHED".equals(row.status()));
+    }
+
+    private void applyFinishedResult(UUID order,boolean receiving,ContainerTaskRows.Row row,java.time.OffsetDateTime eventTime){
         State old=state(row.container());
         if(receiving && (old==null || !"EXPECTED".equals(old.status()) || !order.equals(old.receiving())))
             throw error("RECEIVING_RESERVATION_REQUIRED",describe(row.container(),old,"КТК не зарезервирован этой поставкой"));
         if(!receiving && (old==null || !"RESERVED_OUT".equals(old.status()) || !order.equals(old.shipping())))
             throw error("SHIPPING_RESERVATION_REQUIRED",describe(row.container(),old,"КТК не зарезервирован этим вывозом"));
+        if (eventTime != null && Boolean.TRUE.equals(jdbc.queryForObject("""
+                select exists(select 1 from container_owner_history where container_id=? and occurred_at>?)
+                """,Boolean.class,row.container(),eventTime)))
+            throw error("TOS_EVENT_OUT_OF_SEQUENCE","Время операции раньше предыдущего события КТК");
         tasks.change(row,"UPLOADED","FINISHED");
-        if(receiving) transition(row.container(),old.client(),"ON_TERMINAL",order,null,order,"RECEIVING_ORDER");
-        else transition(row.container(),old.client(),"DEPARTED",old.receiving(),order,order,"SHIPPING_ORDER");
+        if(receiving) transition(row.container(),old.client(),"ON_TERMINAL",order,null,order,"RECEIVING_ORDER",eventTime);
+        else transition(row.container(),old.client(),"DEPARTED",old.receiving(),order,order,"SHIPPING_ORDER",eventTime);
     }
     private String containerName(UUID id) {
         return jdbc.queryForObject("select code from container where id=?",String.class,id);

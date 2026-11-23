@@ -1,6 +1,8 @@
 package ru.billing.app.order;
 
 import java.util.UUID;
+import ru.billing.app.containerstock.TosContainerTasks;
+import ru.billing.app.integration.TosEvent;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
@@ -14,7 +16,8 @@ public class OrderStatusService {
     private final JdbcTemplate jdbc;
     private final ru.billing.app.billing.BillingService billing;
     private final ru.billing.app.containerstock.ContainerStockService stock;
-    public OrderStatusService(JdbcTemplate jdbc, ru.billing.app.billing.BillingService billing, ru.billing.app.containerstock.ContainerStockService stock) { this.jdbc = jdbc; this.billing = billing; this.stock = stock; }
+    private final TosContainerTasks tos;
+    public OrderStatusService(JdbcTemplate jdbc, ru.billing.app.billing.BillingService billing, ru.billing.app.containerstock.ContainerStockService stock,TosContainerTasks tos) { this.tos=tos; this.jdbc = jdbc; this.billing = billing; this.stock = stock; }
 
     @Transactional
     public CreatedOrderResponse finish(String resource, UUID id, String eventCode) {
@@ -29,6 +32,37 @@ public class OrderStatusService {
         lockOrderRoute(resource,id);
         return changeInternal(resource,id,new ChangeStatusRequest(Status.CONFIRMED,Status.COMPLETED),containerId,true);
     }
+
+    @Transactional
+    public void finishTos(TosEvent event, boolean receiving) {
+        String resource = receiving ? "receiving-orders" : "shipping-orders";
+        String table = receiving ? "receiving_order" : "shipping_order";
+        String mode = receiving ? "'ALL'" : "o.filling_type";
+        UUID order = event.orderId();
+        lockOrderRoute(resource,order);
+        record Document(String status,FillingType mode) {}
+        var docs = jdbc.query("select o.order_status,"+mode+" from "+table+" o join terminal_area_catalog a on a.id=o.terminal_area_catalog_id where o.id=? and lower(a.name)=lower(?) for update of o",
+                (rs,n)->new Document(rs.getString(1),FillingType.valueOf(rs.getString(2))),order,event.site());
+        if (docs.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND,"TOS_ORDER_NOT_FOUND","Заявка или площадка пакета не найдена");
+        var doc=docs.getFirst();
+        if (Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from inbound_event where order_id=? and task_id=? and event_code=? and status='DONE')",Boolean.class,order,event.taskId(),event.eventCode()))) return;
+        if (!doc.status().equals("CONFIRMED") && !doc.status().equals("COMPLETED"))
+            throw new ApiException(HttpStatus.CONFLICT,"TOS_ORDER_STATUS","Заявка не подтверждена");
+        if (doc.status().equals("COMPLETED") && !receiving && doc.mode()!=FillingType.ALL && doc.mode()!=FillingType.CONTAINER)
+            throw new ApiException(HttpStatus.CONFLICT,"TOS_ORDER_COMPLETED","Новая строка для выполненной заявки недопустима");
+        validateSource(resource,order);
+        tos.process(event,receiving,doc.mode());
+        if (!doc.status().equals("COMPLETED") && stock.allTasksFinished(order,receiving) && (receiving || completeComposition(order,doc.mode())))
+            complete(resource,order,table,"order_status");
+    }
+
+    private boolean completeComposition(UUID order,FillingType mode) {
+        if (mode == FillingType.ALL) return true;
+        if (mode == FillingType.CONTAINER)
+            return !Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from shipping_order_container where shipping_order_id=? and shipping_order_railway_carriage_id is null)",Boolean.class,order));
+        return tos.plannedContainers(order) == jdbc.queryForObject("select count(*) from shipping_order_container where shipping_order_id=? and status='FINISHED'",Long.class,order);
+    }
+
     public enum Status { DRAFT, CONFIRMED, COMPLETED }
     public record ChangeStatusRequest(@NotNull Status expectedStatus, @NotNull Status status) {}
 
@@ -66,15 +100,7 @@ public class OrderStatusService {
                 || request.expectedStatus() == Status.CONFIRMED && request.status() == Status.COMPLETED;
         if (!allowed) throw new ApiException(HttpStatus.CONFLICT, "INVALID_STATUS_TRANSITION",
                 "Допустимы только переходы: Черновик → Подтверждено → Выполнено");
-        if ("receiving-orders".equals(resource)) {
-            var sourceCompleted = jdbc.query("""
-                    select sh.order_status = 'COMPLETED' from receiving_order r
-                    join shipping_order sh on sh.id = r.source_shipping_order_id
-                    where r.id = ? and r.service_role = 'RETURN_RECEIVING'
-                    """, (rs, row) -> rs.getBoolean(1), id);
-            if (!sourceCompleted.isEmpty() && Boolean.FALSE.equals(sourceCompleted.getFirst())) throw new ApiException(HttpStatus.CONFLICT,
-                    "SOURCE_SHIPPING_NOT_COMPLETED", "Сначала выполните исходный вывоз");
-        }
+        validateSource(resource,id);
         if ("comprehensive-service-orders".equals(resource) && request.status() == Status.COMPLETED) {
             Integer unfinishedReceiving = jdbc.queryForObject("select count(*) from receiving_order where comprehensive_service_order_id = ? and order_status <> 'COMPLETED'", Integer.class, id);
             Integer unfinishedShipping = jdbc.queryForObject("select count(*) from shipping_order where comprehensive_service_order_id = ? and order_status <> 'COMPLETED'", Integer.class, id);
@@ -98,10 +124,31 @@ public class OrderStatusService {
                     "SERVICE_CONTAINERS_UNASSIGNED", "Создайте заявки на вывоз для всех КТК перед выполнением услуги");
         }
         if(request.status()==Status.CONFIRMED) stock.reserve(resource,id);
-        else if(!stock.finishContainers(resource,id,containerId)) return current;
-        if (request.status() == Status.COMPLETED) billing.complete(resource, id);
-        jdbc.update("update " + table + " set " + statusColumn + " = ? where id = ?", request.status().name(), id);
-        if (!resource.equals("comprehensive-service-orders") && request.status() == Status.COMPLETED) {
+        else {
+            if ("shipping-orders".equals(resource) && !"ALL".equals(jdbc.queryForObject("select filling_type from shipping_order where id=?",String.class,id)))
+                throw new ApiException(HttpStatus.CONFLICT,"TOS_RESULT_REQUIRED","Для безномерного вывоза нужны фактические номера из пакета TOS");
+            if (!stock.finishContainers(resource,id,containerId,null)) return current;
+        }
+        if (request.status() == Status.COMPLETED) complete(resource,id,table,statusColumn);
+        else jdbc.update("update " + table + " set " + statusColumn + " = ? where id = ?", request.status().name(), id);
+        return new CreatedOrderResponse(id, current.code(), request.status().name());
+    }
+    private void validateSource(String resource,UUID id) {
+        if ("receiving-orders".equals(resource)) {
+            var sourceCompleted = jdbc.query("""
+                    select sh.order_status = 'COMPLETED' from receiving_order r
+                    join shipping_order sh on sh.id = r.source_shipping_order_id
+                    where r.id = ? and r.service_role = 'RETURN_RECEIVING'
+                    """, (rs, row) -> rs.getBoolean(1), id);
+            if (!sourceCompleted.isEmpty() && Boolean.FALSE.equals(sourceCompleted.getFirst())) throw new ApiException(HttpStatus.CONFLICT,
+                    "SOURCE_SHIPPING_NOT_COMPLETED", "Сначала выполните исходный вывоз");
+        }
+    }
+
+    private void complete(String resource,UUID id,String table,String statusColumn) {
+        billing.complete(resource, id);
+        jdbc.update("update " + table + " set " + statusColumn + " = ? where id = ?", Status.COMPLETED.name(), id);
+        if (!resource.equals("comprehensive-service-orders")) {
             jdbc.update("""
                 update route r set status='COMPLETED'
                 where r.id=(select route_id from %s where id=?) and r.status='CONFIRMED'
@@ -109,13 +156,13 @@ public class OrderStatusService {
                   and not exists (select 1 from shipping_order where route_id=r.id and order_status not in ('COMPLETED','CANCELLED'))
                 """.formatted(table), id);
         }
-        if (!resource.equals("comprehensive-service-orders") && request.status() == Status.COMPLETED) {
+        if (!resource.equals("comprehensive-service-orders")) {
             jdbc.query("select comprehensive_service_order_id from "+table+" where id=? union select source_service_order_id from comprehensive_service_order where id=(select comprehensive_service_order_id from "+table+" where id=?)",
                 (rs,n)->rs.getObject(1,UUID.class),id,id).stream().filter(java.util.Objects::nonNull)
                 .forEach(parent->ru.billing.app.comprehensiveserviceorder.ServiceCompletion.refresh(jdbc,parent));
         }
-        return new CreatedOrderResponse(id, current.code(), request.status().name());
     }
+
     // All lifecycle operations lock the route before its orders, including concurrent completions.
     private void lockOrderRoute(String resource, UUID id) {
         String table = switch(resource) {

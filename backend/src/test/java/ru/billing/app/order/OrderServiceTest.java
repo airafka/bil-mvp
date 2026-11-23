@@ -120,12 +120,12 @@ class OrderServiceTest {
                 List.of(),
                 List.of(),
                 List.of(),
-                FillingType.VEHICLE_UNNUMBERED,
+                FillingType.NONE_CONTAINER,
                 List.of(),
                 List.of(new ContainerQuantityRequest(1, ContainerType.STANDARD_40, true, List.of()))
         );
-        assertThatThrownBy(() -> service.create(request)).isInstanceOf(ApiException.class);
-        org.mockito.Mockito.verifyNoInteractions(store, references);
+        service.create(request);
+        verify(store).create(request);
     }
 
     @Test
