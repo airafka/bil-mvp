@@ -81,109 +81,187 @@ function activate(panel) {
   $('navigator-target').textContent = 'Выбор для панели ' + panel.number;
   renderTables();
 }
-let finishPanelResize;
+let finishPanelResize, finishPanelMove;
 const minimumPanelHeight = () => window.innerWidth <= 700 ? 360 : 280;
+const maximumPanelHeight = 5000;
+const panelScrollOffset = () => $('panels').scrollTop + window.scrollY;
+function scrollPanelWorkspace(y) {
+  const bounds = $('panels').getBoundingClientRect();
+  const top = Math.max(0, bounds.top), bottom = Math.min(window.innerHeight, bounds.bottom);
+  const delta = y < top + 48 ? -12 : y > bottom - 48 ? 12 : 0;
+  if (window.innerWidth <= 700) window.scrollBy(0, delta);
+  else $('panels').scrollTop += delta;
+}
 function updatePanelHeights() {
   const minimum = minimumPanelHeight();
   const tracks = [];
-  for (const [index, panel] of panels.entries()) {
+  for (const panel of panels) {
     if (panel.height !== undefined) panel.height = Math.max(minimum, panel.height);
-    tracks.push(panel.height === undefined ? (window.innerWidth <= 700 ? '520px' : 'minmax(320px,1fr)') : panel.height + 'px');
-    if (index < panels.length - 1) tracks.push('14px');
+    tracks.push(panel.height === undefined ? (window.innerWidth <= 700 ? '520px' : 'minmax(320px,1fr)') : panel.height + 'px', '14px');
   }
-  $('panels').style.gridTemplateRows = panels.length > 1 ? tracks.join(' ') : '';
+  $('panels').style.gridTemplateRows = tracks.join(' ');
+  $('reset-heights').hidden = panels.length < 2 && panels.every(panel => panel.height === undefined);
   for (const handle of $('panels').querySelectorAll('.panel-resize')) {
-    const above = handle.previousElementSibling.getBoundingClientRect().height;
-    const below = handle.nextElementSibling.getBoundingClientRect().height;
+    const height = handle.previousElementSibling.getBoundingClientRect().height;
     handle.setAttribute('aria-valuemin', String(minimum));
-    handle.setAttribute('aria-valuemax', String(Math.max(minimum, Math.round(above + below - minimum))));
-    handle.setAttribute('aria-valuenow', String(Math.round(above)));
-    handle.setAttribute('aria-valuetext', 'Высота верхней панели: ' + Math.round(above) + ' пикселей');
+    handle.setAttribute('aria-valuemax', String(maximumPanelHeight));
+    handle.setAttribute('aria-valuenow', String(Math.round(height)));
+    handle.setAttribute('aria-valuetext', 'Высота панели: ' + Math.round(height) + ' пикселей');
   }
 }
 function resetPanelHeights() {
-  finishPanelResize?.();
+  finishPanelResize?.(); finishPanelMove?.(true);
   for (const panel of panels) delete panel.height;
   updatePanelHeights();
 }
 function freezePanelHeights() {
   for (const panel of panels) panel.height = panel.root.getBoundingClientRect().height;
 }
-function resizePanelPair(above, below, height, total) {
-  const minimum = minimumPanelHeight();
-  above.height = Math.max(minimum, Math.min(total - minimum, height));
-  below.height = total - above.height;
+function resizePanel(panel, height) {
+  panel.height = Math.max(minimumPanelHeight(), Math.min(maximumPanelHeight, height));
   updatePanelHeights();
 }
-function createPanelResize(above, below) {
+function createPanelResize(panel) {
   const handle = element('div', undefined, 'panel-resize');
   handle.tabIndex = 0;
   handle.setAttribute('role', 'separator');
   handle.setAttribute('aria-orientation', 'horizontal');
-  handle.setAttribute('aria-controls', above.root.id + ' ' + below.root.id);
-  handle.setAttribute('aria-label', 'Изменить высоту панелей ' + above.number + ' и ' + below.number);
-  handle.title = 'Потяните вверх или вниз. Стрелки ↑/↓ — изменить высоту, двойной щелчок — выровнять панели.';
-  let drag;
-  function finish() {
+  handle.setAttribute('aria-controls', panel.root.id);
+  handle.setAttribute('aria-label', 'Изменить высоту панели ' + panel.number);
+  handle.title = 'Потяните нижний край вверх или вниз. ↑/↓ — высота, двойной щелчок — выровнять панели.';
+  let drag, frame;
+  function finish(cancel = false) {
     if (!drag) return;
-    const pointerId = drag.pointerId;
-    drag = undefined;
+    const previous = drag; drag = undefined;
+    cancelAnimationFrame(frame);
+    if (cancel) resizePanel(panel, previous.height);
     document.body.classList.remove('resizing-panels');
-    if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+    if (handle.hasPointerCapture(previous.pointerId)) handle.releasePointerCapture(previous.pointerId);
     if (finishPanelResize === finish) finishPanelResize = undefined;
+  }
+  function updateDrag() {
+    if (!drag) return;
+    scrollPanelWorkspace(drag.y);
+    resizePanel(panel, drag.height + drag.y - drag.startY + panelScrollOffset() - drag.scroll);
+    frame = requestAnimationFrame(updateDrag);
   }
   handle.onpointerdown = event => {
     if (event.button !== 0) return;
-    finishPanelResize?.();
-    event.preventDefault();
-    freezePanelHeights();
-    drag = { pointerId: event.pointerId, y: event.clientY, height: above.height, total: above.height + below.height };
-    handle.setPointerCapture(event.pointerId);
-    handle.focus({ preventScroll: true });
-    document.body.classList.add('resizing-panels');
-    finishPanelResize = finish;
-    updatePanelHeights();
+    finishPanelResize?.(); finishPanelMove?.(true);
+    event.preventDefault(); freezePanelHeights();
+    drag = { pointerId: event.pointerId, startY: event.clientY, y: event.clientY, height: panel.height, scroll: panelScrollOffset() };
+    handle.setPointerCapture(event.pointerId); handle.focus({ preventScroll: true });
+    document.body.classList.add('resizing-panels'); finishPanelResize = finish;
+    frame = requestAnimationFrame(updateDrag);
   };
   handle.onpointermove = event => {
-    if (drag && drag.pointerId === event.pointerId) resizePanelPair(above, below, drag.height + event.clientY - drag.y, drag.total);
+    if (drag && drag.pointerId === event.pointerId) {
+      drag.y = event.clientY;
+      resizePanel(panel, drag.height + drag.y - drag.startY + panelScrollOffset() - drag.scroll);
+    }
   };
-  handle.onpointerup = finish;
-  handle.onpointercancel = finish;
-  handle.onlostpointercapture = finish;
+  handle.onpointerup = () => finish();
+  handle.onpointercancel = handle.onlostpointercapture = () => finish(true);
   handle.ondblclick = resetPanelHeights;
   handle.onkeydown = event => {
-    if (event.key === 'Escape' && drag) {
-      event.preventDefault();
-      resizePanelPair(above, below, drag.height, drag.total);
-      finish(); return;
-    }
+    if (event.key === 'Escape' && drag) { event.preventDefault(); finish(true); return; }
     if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    finishPanelResize?.();
-    freezePanelHeights();
-    const total = above.height + below.height;
+    event.preventDefault(); finishPanelResize?.(); finishPanelMove?.(true); freezePanelHeights();
     const step = event.shiftKey ? 80 : 20;
-    const height = event.key === 'Home' ? minimumPanelHeight() : event.key === 'End' ? total - minimumPanelHeight()
-      : above.height + (event.key === 'ArrowUp' ? -step : step);
-    resizePanelPair(above, below, height, total);
+    resizePanel(panel, event.key === 'Home' ? minimumPanelHeight() : event.key === 'End' ? maximumPanelHeight
+      : panel.height + (event.key === 'ArrowUp' ? -step : step));
   };
   return handle;
 }
-window.addEventListener('resize', () => { finishPanelResize?.(); updatePanelHeights(); });
-window.addEventListener('blur', () => finishPanelResize?.());
+function movePanel(panel, index) {
+  const previous = panels.indexOf(panel);
+  index = Math.max(0, Math.min(panels.length - 1, index));
+  if (previous === index || previous < 0) return;
+  freezePanelHeights();
+  const scroll = panel.root.querySelector('[data-role="data-scroll"]');
+  const position = { top: scroll.scrollTop, left: scroll.scrollLeft };
+  panels.splice(previous, 1); panels.splice(index, 0, panel);
+  $('panels').insertBefore(panel.root, panels[index + 1]?.root || null);
+  layoutPanels();
+  scroll.scrollTop = position.top; scroll.scrollLeft = position.left;
+  panel.root.querySelector('[data-role="move"]').focus({ preventScroll: true });
+}
+function configurePanelMove(panel) {
+  const handle = panel.root.querySelector('[data-role="move"]');
+  handle.setAttribute('aria-label', 'Переместить панель ' + panel.number);
+  handle.title = 'Перетащите панель вверх или вниз. Клавиши ↑/↓ — переместить, Escape — отменить.';
+  let drag, frame;
+  const clearMarkers = () => {
+    for (const item of panels) item.root.classList.remove('drop-before', 'drop-after');
+  };
+  function markDestination() {
+    clearMarkers();
+    const bounds = $('panels').getBoundingClientRect();
+    if (drag.x < bounds.left || drag.x > bounds.right) { drag.index = null; return; }
+    const others = panels.filter(item => item !== panel);
+    const next = others.findIndex(item => {
+      const rect = item.root.getBoundingClientRect();
+      return drag.y < rect.top + rect.height / 2;
+    });
+    drag.index = next < 0 ? others.length : next;
+    if (next < 0) others.at(-1)?.root.classList.add('drop-after');
+    else others[next].root.classList.add('drop-before');
+  }
+  function updateDrag() {
+    if (!drag?.started) return;
+    scrollPanelWorkspace(drag.y); markDestination();
+    frame = requestAnimationFrame(updateDrag);
+  }
+  function finish(cancel = false) {
+    if (!drag) return;
+    const previous = drag; drag = undefined;
+    cancelAnimationFrame(frame); clearMarkers();
+    panel.root.classList.remove('moving-panel'); document.body.classList.remove('moving-panels');
+    if (handle.hasPointerCapture(previous.pointerId)) handle.releasePointerCapture(previous.pointerId);
+    finishPanelMove = undefined;
+    if (!cancel && previous.started && previous.index !== null) movePanel(panel, previous.index);
+  }
+  handle.onpointerdown = event => {
+    if (event.button !== 0 || panels.length < 2) return;
+    finishPanelResize?.(); finishPanelMove?.(true);
+    event.preventDefault(); activate(panel); handle.focus({ preventScroll: true });
+    drag = { pointerId: event.pointerId, startY: event.clientY, y: event.clientY, x: event.clientX, index: null, started: false };
+    handle.setPointerCapture(event.pointerId); finishPanelMove = finish;
+  };
+  handle.onpointermove = event => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    drag.y = event.clientY; drag.x = event.clientX;
+    if (!drag.started && Math.abs(drag.y - drag.startY) >= 4) {
+      drag.started = true; panel.root.classList.add('moving-panel'); document.body.classList.add('moving-panels');
+      frame = requestAnimationFrame(updateDrag);
+    }
+    if (drag.started) markDestination();
+  };
+  handle.onpointerup = () => finish();
+  handle.onpointercancel = handle.onlostpointercapture = () => finish(true);
+  handle.onkeydown = event => {
+    if (event.key === 'Escape') { event.preventDefault(); finish(true); return; }
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault(); finishPanelMove?.(true); activate(panel);
+    movePanel(panel, event.key === 'Home' ? 0 : event.key === 'End' ? panels.length - 1
+      : panels.indexOf(panel) + (event.key === 'ArrowUp' ? -1 : 1));
+  };
+}
+window.addEventListener('resize', () => { finishPanelResize?.(); finishPanelMove?.(true); updatePanelHeights(); });
+window.addEventListener('blur', () => { finishPanelResize?.(true); finishPanelMove?.(true); });
 function layoutPanels() {
-  finishPanelResize?.();
+  finishPanelResize?.(); finishPanelMove?.(true);
   $('panels').classList.toggle('multiple', panels.length > 1);
   $('panels').classList.toggle('many', panels.length > 2);
-  $('reset-heights').hidden = panels.length < 2;
   for (const handle of $('panels').querySelectorAll('.panel-resize')) handle.remove();
-  for (const [index, panel] of panels.entries()) {
+  for (const panel of panels) {
     panel.root.querySelector('[data-role="close"]').disabled = panels.length === 1;
-    if (panels.length === 1) delete panel.height;
-    if (index < panels.length - 1) $('panels').insertBefore(createPanelResize(panel, panels[index + 1]), panels[index + 1].root);
+    panel.root.querySelector('[data-role="move"]').disabled = panels.length === 1;
+    panel.root.after(createPanelResize(panel));
   }
   updatePanelHeights();
 }
+
 
 function addPanel({ after = null, table = null, filter = null } = {}) {
   const panel = createPanel(nextPanel++);
@@ -218,12 +296,14 @@ function createPanel(number) {
   $('table-select').setAttribute('aria-label', 'Таблица панели ' + number);
   $('close').setAttribute('aria-label', 'Закрыть панель ' + number);
   $('activate').textContent = 'Панель ' + number;
+  configurePanelMove(panel);
   root.addEventListener('pointerdown', () => activate(panel));
   root.addEventListener('focusin', () => activate(panel));
   $('activate').onclick = () => activate(panel);
   $('table-select').onchange = () => selectTable($('table-select').value);
   $('close').onclick = () => {
     if (panels.length === 1) return;
+    finishPanelResize?.(); finishPanelMove?.(true);
     disposed = true; clearTimeout(searchTimer);
     cancelColumnResize(); window.removeEventListener('blur', cancelColumnResize);
     const index = panels.indexOf(panel);
