@@ -273,7 +273,7 @@ public class ShippingOrderStore {
     private List<OrderContainerDetails> loadContainers(UUID orderId) {
         return OrderContainerDetails.merge(jdbcTemplate.query(
                 """
-                select oc.container_id, c.code as container_name, oc.empty,
+                select oc.id as task_id, c.container_type, oc.container_id, c.code as container_name, oc.empty,
                        case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end as owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
                        oc.seal_type_id, st.code as seal_type_name, oc.danger_class_id, hc.code as danger_class_name,
                        item.etsng_code_id, e.code as etsng_code_name, item.wight_net, coalesce(stock.status,'DEPARTED') as container_status
@@ -299,7 +299,7 @@ public class ShippingOrderStore {
                 """
                 select sorc.id as carriage_row_id, sorc.railway_carriage_id,
                        rc.code as railway_carriage_code,
-                       oc.container_id, c.code as container_name, oc.empty,
+                       oc.id as task_id, c.container_type, oc.container_id, c.code as container_name, oc.empty,
                        case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end as owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
                        oc.seal_type_id, st.code as seal_type_name, oc.danger_class_id, hc.code as danger_class_name,
                        item.etsng_code_id, e.code as etsng_code_name, item.wight_net, coalesce(stock.status,'DEPARTED') as container_status
@@ -309,7 +309,7 @@ public class ShippingOrderStore {
                     on oc.shipping_order_railway_carriage_id = sorc.id
                    and oc.shipping_order_id = sorc.shipping_order_id
                   left join container c on c.id = oc.container_id
-                  join shipping_order so on so.id = oc.shipping_order_id
+                  join shipping_order so on so.id = sorc.shipping_order_id
                   left join container_owner_current stock on stock.container_id = oc.container_id
                   left join client owner on owner.id = case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end
                   left join seal_type st on st.id = oc.seal_type_id

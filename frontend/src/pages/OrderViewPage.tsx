@@ -13,6 +13,7 @@ import { WaybillCompositionTable } from '../components/WaybillCompositionTable'
 import { useApplicationClock } from '../applicationClock'
 import { StatusBadge } from '../components/StatusBadge'
 import { OrderStatusAction } from '../components/OrderStatusAction'
+import { TosShipmentDialog } from '../components/TosShipmentDialog'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { updateOrderContainerAttributes, assignRouteOrders, getOrder, getRoutes, getReferenceOptions } from '../api'
@@ -104,6 +105,8 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
   const visibleTabs = [tabs[0], 'Рейс', ...tabs.slice(1)]
   const contentTab = activeTab === 2 ? 0 : activeTab > 2 ? activeTab - 1 : activeTab
   const [returnDialogOpen, setReturnDialogOpen] = useState(false)
+  const [tosDialogOpen, setTosDialogOpen] = useState(false)
+  const [refreshingPacket, setRefreshingPacket] = useState(false)
   const [returnNotice, setReturnNotice] = useState<import('../api').CreatedReturns | null>(null)
   const returnedContainerIds = new Set(order?.returnOrders?.filter(item => item.status !== 'CANCELLED').flatMap(item => item.containerIds) ?? [])
   const canCreateReturn = config.kind === 'shipping' && order?.transportType === 'VEHICLE' && order.comprehensiveServiceOrderId && order.containers.some(item => !returnedContainerIds.has(item.containerId))
@@ -118,6 +121,34 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
   const canEditRoute = order?.status === 'DRAFT' && !order.routeId
   const displayedRouteId = order?.routeId
   const assignedRoute = routes.find(route => route.id === displayedRouteId)
+  const packetAction = config.kind === 'shipping' && order?.fillingType && order.fillingType !== 'ALL'
+    ? <button type="button" className="primary-button" disabled={refreshingPacket} onClick={() => setTosDialogOpen(true)}>Отправить пакет TOS</button>
+    : undefined
+
+  function statusChanged(status: string) {
+    setOrder(value => value ? { ...value, status } : value)
+    getOrder(config.apiPath, orderId).then(setOrder).catch(e => setError(String(e)))
+    getRoutes().then(setRoutes).catch(e => setRouteError(String(e)))
+  }
+
+  async function packetSent(container: string) {
+    setTosDialogOpen(false)
+    setRefreshingPacket(true)
+    setSaveMessage('')
+    setError('')
+    try {
+      const updated = await getOrder(config.apiPath, orderId)
+      setOrder(updated)
+      setSaveMessage(updated.status === 'COMPLETED' ? `КТК ${container} вывезен. Заявка выполнена.` : `КТК ${container} вывезен. Можно отправить следующий пакет.`)
+      getRoutes().then(setRoutes).catch(e => setRouteError(String(e)))
+    } catch {
+      setError(`Пакет по КТК ${container} обработан. Обновите страницу, чтобы увидеть актуальный состав заявки.`)
+    } finally {
+      setRefreshingPacket(false)
+    }
+  }
+  const statusAction = order && <OrderStatusAction key={order.id} apiPath={config.apiPath} id={order.id}
+    status={order.status} onChanged={statusChanged} completionAction={packetAction} />
   function startEditing() {
     setContainerAdditions([])
     if(canAddContainers){setAdditionReferencesLoading(true);Promise.all([getReferenceOptions('containers'),getReferenceOptions('etsng-codes')])
@@ -200,11 +231,13 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
 
         </div>
         <div className="view-header-actions">{returnButton}{editing && order && <div className="header-actions">            <button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelectedRouteId(''); setSaveError('') }}>Отмена</button>
-            <button type="button" className="primary-button" disabled={saving} onClick={saveOrder}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && !editing && <button type="button" className="secondary-button icon-button" disabled={saving} onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}{order && !editing && !saving && <OrderStatusAction key={order.id} apiPath={config.apiPath} id={order.id} status={order.status} onChanged={status => { setOrder(value => value ? { ...value, status } : value); getOrder(config.apiPath, orderId).then(setOrder).catch(e => setError(String(e))); getRoutes().then(setRoutes).catch(e => setRouteError(String(e))) }} />}<Link className="close-button" to={config.listPath} aria-label="Вернуться в реестр" title="Закрыть"><ActionIcon name="close" /></Link></div>
+            <button type="button" className="primary-button" disabled={saving} onClick={saveOrder}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && !editing && <button type="button" className="secondary-button icon-button" disabled={saving} onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}{order && !editing && !saving && statusAction}<Link className="close-button" to={config.listPath} aria-label="Вернуться в реестр" title="Закрыть"><ActionIcon name="close" /></Link></div>
       </div>
 
       }
       {returnDialogOpen && order && <CreateReturnDialog order={order} onClose={() => setReturnDialogOpen(false)} onCreated={result => { setReturnDialogOpen(false); setReturnNotice(result); getOrder(config.apiPath, orderId).then(setOrder).catch(e => setError(String(e))) }} />}
+      {tosDialogOpen && order?.status === 'CONFIRMED' && <TosShipmentDialog order={order} vehicleNumber={assignedRoute?.vehicleNumber}
+        onClose={() => setTosDialogOpen(false)} onSent={packetSent} />}
       {returnNotice && <Notification kind="success">Созданы возвратные заявки: {returnNotice.returns.map((item, index) => <span key={item.receivingOrderId}>{index > 0 ? ', ' : ''}<Link to={`/receiving-orders/${item.receivingOrderId}`}>№{item.receivingOrderCode}</Link></span>)}. {returnNotice.createdService && <>Заявка на автоуслугу <Link to={`/comprehensive-service-orders/${returnNotice.serviceOrderId}`}>№{returnNotice.serviceOrderCode}</Link>.</>}</Notification>}
       <div className={embedded ? 'embedded-order' : 'form-workspace'}>
         {loading && <div className="view-loading">Загружаем заявку…</div>}
@@ -213,7 +246,7 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
         {order && !loading && <>
           {embedded && editing && order && <div className="header-actions">            <button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelectedRouteId(''); setSaveError('') }}>Отмена</button>
             <button type="button" className="primary-button" disabled={saving} onClick={saveOrder}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}
-          {embedded && !editing && <div className="view-header-actions">{returnButton}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && <button type="button" className="secondary-button icon-button" disabled={saving} onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}<OrderStatusAction key={order.id} apiPath={config.apiPath} id={order.id} status={order.status} onChanged={status => { setOrder(value => value ? { ...value, status } : value); getOrder(config.apiPath, orderId).then(setOrder).catch(e => setError(String(e))); getRoutes().then(setRoutes).catch(e => setRouteError(String(e))) }} /></div>}
+          {embedded && !editing && <div className="view-header-actions">{returnButton}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && <button type="button" className="secondary-button icon-button" disabled={saving} onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}{statusAction}</div>}
           <div className="order-tabs-toolbar">
           <div className="stepper view-tabs" aria-label="Разделы заявки">
             {visibleTabs.map((label, index) => <button type="button" className={`step ${activeTab === index + 1 ? 'current' : ''}`} key={label} onClick={() => setActiveTab(index + 1)}>{label}</button>)}

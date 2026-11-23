@@ -20,8 +20,13 @@ async function main() {
     }
     async function send(body,status='DONE') {
         const externalId=randomUUID();
-        const res=await fetch('http://127.0.0.1:8355/datareon/event',{method:'POST',headers:{'Content-Type':'application/json','External-ID':externalId},body:JSON.stringify(body)});
-        assert.equal(res.status,200,await res.text());
+        const headers={'Content-Type':'application/json','External-ID':externalId};
+        if (body.eventCode === 'LOAD_FINISH') headers.Prefer = 'return=representation';
+        const res=await fetch('http://127.0.0.1:8355/datareon/event',{method:'POST',headers,body:JSON.stringify(body)});
+        const response = await res.text();
+        assert.equal(res.status,200,response);
+        if (headers.Prefer) assert.equal(JSON.parse(response).status,status,response);
+        else assert.equal(response,'');
         const result=json("select row_to_json(r) from (select status,status_details from inbound_event where external_id='"+externalId+"') r");
         assert.equal(result.status,status,JSON.stringify(result));
     }
@@ -76,6 +81,8 @@ async function main() {
         const order=(await api('/shipping-orders','POST',body,201)).id;
         const detail=await api('/shipping-orders/'+order);
         assert.equal(detail.fillingType,mode);
+        if (mode==='CONTAINER') assert.equal(detail.containers.find(row=>row.containerId===a).taskId,task('shipping',order,a));
+        if (mode==='RAILWAY_CARRIAGE') assert.equal(detail.railwayCarriages[0].railwayCarriageCode,wagon.code);
         if (!known) assert.equal(detail.containerQuantities[0].quantity,2);
         if (rail) {
             const route=await api('/routes','POST',{routeType:'SHIPPING',departureAt:'2026-10-01T12:00:00+03:00',transportType:'RAILWAY',terminalAreaId:site.id,orderIds:[order]},201);

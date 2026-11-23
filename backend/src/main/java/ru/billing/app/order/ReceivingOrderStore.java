@@ -183,7 +183,7 @@ public class ReceivingOrderStore {
 
         List<OrderContainerDetails> containers = headers.getFirst().transportType() == TransportType.RAILWAY ? loadRailwayContainers(id) : jdbcTemplate.query(
                 """
-                select oc.container_id, c.code as container_name, oc.empty,
+                select oc.id as task_id, c.container_type, oc.container_id, c.code as container_name, oc.empty,
                        oc.owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
                        oc.seal_type_id, st.code as seal_type_name, oc.danger_class_id, hc.code as danger_class_name,
                        item.etsng_code_id, e.code as etsng_code_name, item.wight_net, coalesce(stock.status,'DEPARTED') as container_status
@@ -218,7 +218,7 @@ public class ReceivingOrderStore {
 
     private List<OrderContainerDetails> loadRailwayContainers(UUID id) {
         return jdbcTemplate.query("""
-            select distinct wc.container_id, c.code as container_name, wc.net_weight=0 as empty,
+            select distinct wc.id as task_id, c.container_type, wc.container_id, c.code as container_name, wc.net_weight=0 as empty,
               wc.owner_container_id as owner_container_id,
               owner.name as owner_container_name,wc.seal_numbers,wc.seal_type_id,wc.seal_type_name,
               hazard.danger_class_id,hc.code as danger_class_name,

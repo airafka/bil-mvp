@@ -178,6 +178,8 @@ export type ReceivingContainerAttributes = {
 }
 
 export type OrderContainerDetails = ReceivingContainerAttributes & {
+  taskId?: string
+  containerType?: ContainerType
   containerStatus?: string | null
   containerId: string
   containerName: string

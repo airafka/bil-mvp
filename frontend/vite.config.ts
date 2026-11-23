@@ -21,6 +21,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': backendProxy,
+      '/datareon/event': backendProxy,
       '/actuator': backendProxy,
     },
   },

@@ -44,7 +44,8 @@ final class OrderRowMapper {
                 row.getString("seal_numbers"),
                 row.getObject("seal_type_id", UUID.class), row.getString("seal_type_name"),
                 row.getObject("danger_class_id", UUID.class), row.getString("danger_class_name"),
-                cargo == null ? List.of() : List.of(cargo), row.getString("container_status")
+                cargo == null ? List.of() : List.of(cargo), row.getString("container_status"),
+                row.getObject("task_id", UUID.class), row.getString("container_type")
         );
     }
 

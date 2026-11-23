@@ -11,12 +11,12 @@ public record OrderContainerDetails(
         String sealNumbers,
         UUID sealTypeId, String sealTypeName,
         UUID hazardClassId, String hazardClassName,
-        java.util.List<OrderCargoDetails> cargoItems, String containerStatus
+        java.util.List<OrderCargoDetails> cargoItems, String containerStatus, UUID taskId, String containerType
 ) {
     public OrderContainerDetails(UUID containerId, String containerName, boolean empty, OrderCargoDetails cargo,
             UUID ownerClientId, String ownerClientName, String sealNumbers, UUID sealTypeId, String sealTypeName,
             UUID hazardClassId, String hazardClassName, java.util.List<OrderCargoDetails> cargoItems) {
-        this(containerId,containerName,empty,cargo,ownerClientId,ownerClientName,sealNumbers,sealTypeId,sealTypeName,hazardClassId,hazardClassName,cargoItems,null);
+        this(containerId,containerName,empty,cargo,ownerClientId,ownerClientName,sealNumbers,sealTypeId,sealTypeName,hazardClassId,hazardClassName,cargoItems,null,null,null);
     }
     public OrderContainerDetails(UUID containerId, String containerName, boolean empty, OrderCargoDetails cargo,
             UUID ownerClientId, String ownerClientName, String sealNumbers, UUID sealTypeId, String sealTypeName,
@@ -32,7 +32,8 @@ public record OrderContainerDetails(
             var items = values.stream().flatMap(v -> v.cargoItems().stream()).toList();
             return new OrderContainerDetails(first.containerId(), first.containerName(), first.empty(),
                     items.isEmpty() ? null : items.getFirst(), first.ownerClientId(), first.ownerClientName(), first.sealNumbers(),
-                    first.sealTypeId(), first.sealTypeName(), first.hazardClassId(), first.hazardClassName(), items, first.containerStatus());
+                    first.sealTypeId(), first.sealTypeName(), first.hazardClassId(), first.hazardClassName(), items,
+                    first.containerStatus(), first.taskId(), first.containerType());
         }).toList();
     }
     public OrderContainerDetails(UUID containerId, String containerName, boolean empty, OrderCargoDetails cargo) {

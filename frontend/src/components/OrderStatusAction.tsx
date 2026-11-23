@@ -1,13 +1,13 @@
 import { Notification } from './Notification'
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { changeOrderStatus, finishContainerOrder } from '../api'
 import { statusLabel } from '../domain'
 
 import { OrderCancellationDialog } from './OrderCancellationDialog'
 
 const statuses = ['DRAFT', 'CONFIRMED', 'COMPLETED']
-export function OrderStatusAction({ apiPath, id, status, onChanged }: {
-  apiPath: string; id: string; status: string; onChanged: (status: string) => void
+export function OrderStatusAction({ apiPath, id, status, onChanged, completionAction }: {
+  apiPath: string; id: string; status: string; onChanged: (status: string) => void; completionAction?: ReactNode
 }) {
   const lock = useRef(false)
   const [cancelling, setCancelling] = useState(false)
@@ -38,7 +38,7 @@ export function OrderStatusAction({ apiPath, id, status, onChanged }: {
   return <div className="order-status-control">
     {transport && status !== 'CANCELLED' && <button type="button" className="secondary-button" disabled={busy || cancelling} onClick={() => setCancelling(true)}>Отменить заявку</button>}
     {cancelling && <OrderCancellationDialog apiPath={apiPath} id={id} status={status} onChanged={onChanged} onClose={() => setCancelling(false)} />}
-    {next && <button type="button" className="primary-button" disabled={busy} onClick={advance}>{busy ? 'Сохраняем…' : next === 'CONFIRMED' ? 'Подтвердить' : 'Выполнить'}</button>}
+    {next === 'COMPLETED' && completionAction ? completionAction : next && <button type="button" className="primary-button" disabled={busy} onClick={advance}>{busy ? 'Сохраняем…' : next === 'CONFIRMED' ? 'Подтвердить' : 'Выполнить'}</button>}
     {error && <Notification kind="error">{error}</Notification>}
     {message && <Notification kind="success">{message}</Notification>}
   </div>
