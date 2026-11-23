@@ -115,8 +115,8 @@ Git не синхронизирует работающие PostgreSQL двух �
 Выполнять по одной команде; при ошибке остановиться:
 
 ```powershell
-git clone --branch main --single-branch https://github.com/airafka/bil.git bil-next
-cd bil-next
+git clone --branch main --single-branch https://github.com/airafka/bil-mvp.git bil-mvp
+cd bil-mvp
 Copy-Item .env.example .env
 powershell -NoProfile -ExecutionPolicy Bypass -File .\restore-snapshot.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
