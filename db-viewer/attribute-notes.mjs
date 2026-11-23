@@ -121,13 +121,11 @@ const specific = {
     shipping_order_id: 'Вывоз, с которым связано текущее состояние КТК в регистре.',
   },
   container_visit: {
-    receiving_order_id: 'Заявка receiving этого физического визита.',
-    receiving_order_container_id: 'Точная строка КТК автопоставки receiving; для ЖД используется waybill_container_id.',
-    waybill_container_id: 'Точная строка накладной ЖД-receiving.',
-    receiving_container_owner_history_id: 'Событие ARRIVAL, зафиксировавшее receiving.',
-    shipping_order_container_id: 'Точная строка выполненного shipping; плановый резерв находится в container_owner.',
-    shipping_container_owner_history_id: 'Событие DEPARTURE, завершившее визит.',
-    cancellation_container_owner_history_id: 'Событие отмены receiving этого визита.',
+    id: 'Идентификатор конкретного заезда КТК. Повторная поставка открывает новый заезд.',
+    container_id: 'Физический КТК. У него может быть только один действующий открытый заезд.',
+    receiving_container_owner_history_id: 'Событие ARRIVAL. Определяет заявку поставки и фактическое время приёмки.',
+    shipping_container_owner_history_id: 'Действующее событие DEPARTURE. Определяет заявку вывоза и время закрытия заезда.',
+    cancellation_container_owner_history_id: 'Событие CANCEL_ARRIVAL по исходной поставке. Аннулирует заезд.',
   },
   container_period: {
     id: 'Идентификатор фактического периода хранения.',

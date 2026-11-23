@@ -56,16 +56,36 @@ async function main() {
     const service=(await api('/comprehensive-service-orders/available-services'))[0];
     const tariff=json(`select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where complex_service_id='${service.id}' and active order by id limit 1)t`);
     const bill=await api('/waybills/generate','POST',{standard20:2,standard40:0},201);
-    const rail=await api('/comprehensive-service-orders','POST',{complexServiceId:service.id,clientId:tariff.client_id,contractId:tariff.contract_id,defaultContainerOwnerId:x.a,waybillIds:[bill.id]},201);
-    const section='/comprehensive-service-orders/'+rail.order.id;
-    await api(section+'/prepare-transport','POST',{section:'INITIAL_RECEIVING'});
-    await api(section+'/complete-section','POST',{section:'INITIAL_RECEIVING',action:'CONFIRM_ROUTES'});
+    const request={complexServiceId:service.id,clientId:tariff.client_id,contractId:tariff.contract_id,defaultContainerOwnerId:x.a,waybillIds:[bill.id]};
+    async function confirmedRail() {
+        const order=await api('/comprehensive-service-orders','POST',request,201);
+        const section='/comprehensive-service-orders/'+order.order.id;
+        await api(section+'/prepare-transport','POST',{section:'INITIAL_RECEIVING'});
+        await api(section+'/complete-section','POST',{section:'INITIAL_RECEIVING',action:'CONFIRM_ROUTES'});
+        return order;
+    }
+    const rail=await confirmedRail();
     const railK=rail.receivingOrder.containers[0].containerId;
     assert.equal((await event('receiving',rail.receivingOrder.id,railK)).status,'CONFIRMED');
-    assert.equal(sql(`select count(*) from waybill_container wc join container_visit v on v.waybill_container_id=wc.id where v.receiving_order_id='${rail.receivingOrder.id}' and wc.status='FINISHED'`),'1');
+    const visits=orderId=>json(`select coalesce(json_agg(json_build_object('id',v.id,'cancelled',v.is_cancelled,
+        'task',t.task_id,'status',t.status) order by v.container_id),'[]') from container_visit_facts v
+        left join visit_receiving_tasks t on t.receiving_order_id=v.receiving_order_id and t.container_id=v.container_id
+        where v.receiving_order_id='${orderId}'`);
+    const [original]=visits(rail.receivingOrder.id);
+    assert.equal(original.status,'FINISHED');
+    for(const shipping of rail.shippingOrders) await x.cancel('shipping',shipping.id);
+    await x.cancel('receiving',rail.receivingOrder.id);
+    const reused=await confirmedRail();
+    await event('receiving',reused.receivingOrder.id,railK);
+    const old=visits(rail.receivingOrder.id), current=visits(reused.receivingOrder.id);
+    assert.deepEqual(old,[{id:original.id,cancelled:true,task:null,status:null}]);
+    assert.equal(current.length,1);
+    assert.equal(current[0].task,original.task);
+    assert.equal(current[0].cancelled,false);
+    assert.notEqual(current[0].id,original.id);
     await x.transfer(railK,x.b,'2026-09-16');
-    await api(section+'/complete-section','POST',{section:'INITIAL_RECEIVING',action:'COMPLETE_ORDERS'});
-    assert.equal(sql(`select count(*) from container_visit where receiving_order_id='${rail.receivingOrder.id}'`),'2');
-    console.log('PASS row completion, retry, route completion, partial receipt/dispatch cancellation, transfer and railway delivery');
+    await api('/comprehensive-service-orders/'+reused.order.id+'/complete-section','POST',{section:'INITIAL_RECEIVING',action:'COMPLETE_ORDERS'});
+    assert.equal(visits(reused.receivingOrder.id).length,2);
+    console.log('PASS row completion, retry, route completion, partial receipt/dispatch cancellation, transfer, railway delivery and reuse of a cancelled waybill');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
