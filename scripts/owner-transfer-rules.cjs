@@ -6,6 +6,8 @@ async function main() {
     const day = '2026-09-15', next = '2026-09-17';
     await clock(day);
     const a = await x.arrival(undefined, x.a, false);
+    const receivingOf = k => sql(`select receiving_order_id from container_owner where container_id='${k}'`);
+    assert.equal(receivingOf(a.ktk), a.receiving);
     const b = await x.arrival(undefined, x.b);
     const idOf = k => sql(`select id from container_owner where container_id='${k}'`);
     const [aId, bId] = [idOf(a.ktk), idOf(b.ktk)];
@@ -16,6 +18,11 @@ async function main() {
     const post = (request, status) => api('/service-orders', 'POST', {service:'CHANGE_OWNER', clientId:x.c, effectiveDate:day, ...request}, status);
     assert.equal(await available(x.a, day), false, 'Expected receipt is ineligible');
     await x.finish('receiving', a.receiving);
+    assert.equal(receivingOf(a.ktk), a.receiving);
+    const duplicate = await x.transport('receiving',a.ktk,x.a);
+    const number = sql(`select number from receiving_order where id='${a.receiving}'`);
+    await assert.rejects(x.confirm('receiving',duplicate.id), error =>
+        error.message.includes('CONTAINER_RESERVATION_CONFLICT') && error.message.includes('поставка №'+number));
     assert.equal(await available(x.a, '2026-09-14'), false);
     assert.equal(await available(x.a, day), true, 'Receipt day is inclusive');
     assert.equal(await available(x.b, day), false);
@@ -67,6 +74,11 @@ async function main() {
     assert.equal(events(back), 1);
     assert.equal(current(), x.c);
     await x.ship(a.ktk);
+    assert.equal(receivingOf(a.ktk), a.receiving);
+    const repeat = await x.arrival(a.ktk,x.b);
+    assert.equal(receivingOf(a.ktk), repeat.receiving);
+    await x.cancel('receiving', repeat.receiving);
+    assert.equal(receivingOf(a.ktk), a.receiving, 'Cancelling a repeated receipt restores its predecessor');
     assert.equal(await available(x.b, next), false, 'Departed container is ineligible');
     console.log('PASS transfer eligibility, reservation, withdrawal, early shipping, dated history, calendar replay, backdating and storage days/CSV');
 }

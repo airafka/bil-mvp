@@ -45,7 +45,7 @@ public class ContainerStockService {
         ContainerLocks.refreshLockedOwners(jdbc,locked);
     }
     State state(UUID id) {
-        var rows=jdbc.query("select * from container_owner_current where container_id=?",(rs,n)->new State(
+        var rows=jdbc.query("select id,client_id,status,receiving_order_id,shipping_order_id from container_owner where container_id=?",(rs,n)->new State(
             rs.getObject("id",UUID.class),rs.getObject("client_id",UUID.class),rs.getString("status"),
             rs.getObject("receiving_order_id",UUID.class),rs.getObject("shipping_order_id",UUID.class)),id);
         return rows.isEmpty()?null:rows.getFirst();
@@ -110,7 +110,7 @@ public class ContainerStockService {
                     if(old!=null&&!old.status().equals("DEPARTED")) throw error("CONTAINER_ALREADY_IN_STOCK","КТК уже ожидается, находится на терминале или зарезервирован для вывоза");
                     transition(row.container(),row.owner(),"EXPECTED",order,old==null?null:old.shipping(),order,"RECEIVING_ORDER");
                 } else {
-                    if(old==null||!old.status().equals("EXPECTED")||!order.equals(old.receiving())) throw error("RECEIVING_RESERVATION_REQUIRED","КТК не зарезервирован этой поставкой");
+                    if(old==null||!old.status().equals("EXPECTED")||!order.equals(old.receiving())) throw error("RECEIVING_RESERVATION_REQUIRED",describe(row.container(),old,"КТК не зарезервирован этой поставкой"));
                     transition(row.container(),old.client(),"ON_TERMINAL",order,old.shipping(),order,"RECEIVING_ORDER");
                 }
             } else {
@@ -119,7 +119,7 @@ public class ContainerStockService {
                     jdbc.update("update shipping_order_container set owner_container_id=? where shipping_order_id=? and container_id=?",old.client(),order,row.container());
                     transition(row.container(),old.client(),"RESERVED_OUT",old.receiving(),order,order,"SHIPPING_ORDER");
                 } else {
-                    if(old==null||!old.status().equals("RESERVED_OUT")||!order.equals(old.shipping())) throw error("SHIPPING_RESERVATION_REQUIRED","КТК не зарезервирован этим вывозом");
+                    if(old==null||!old.status().equals("RESERVED_OUT")||!order.equals(old.shipping())) throw error("SHIPPING_RESERVATION_REQUIRED",describe(row.container(),old,"КТК не зарезервирован этим вывозом"));
                     transition(row.container(),old.client(),"DEPARTED",old.receiving(),order,order,"SHIPPING_ORDER");
                 }
             }

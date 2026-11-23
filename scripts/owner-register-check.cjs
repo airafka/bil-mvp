@@ -87,7 +87,13 @@ function compareMigration(before,after){
  for(const [table,rows] of Object.entries(before.tables)){
   if(table==='flyway_schema_history')continue;
   const actual=after.tables[table].map(row=>{
-   if(table==='container_owner'){const {client_id,...original}=row;return original;}
+   if(table==='container_owner'){
+    const {client_id,...original}=row;
+    const old=before.tables.container_owner.find(o=>o.id===row.id);
+    const visit=before.tables.container_visit.find(v=>v.id===old.container_visit_id);
+    assert.equal(row.receiving_order_id,old.receiving_order_id??visit?.receiving_order_id??null);
+    return {...original,receiving_order_id:old.receiving_order_id,container_visit_id:old.container_visit_id};
+   }
    if(table==='container_ownership_period'){
     const {plan_at,plan_order_id,...original}=row;
     if(plan_order_id)original.start_container_owner_history_id=originalPeriods.get(row.id).start_container_owner_history_id;
@@ -110,7 +116,7 @@ function compareMigration(before,after){
  assert.deepEqual(order(after.tables.flyway_schema_history.filter(r=>Number(r.version)<=59)),order(before.tables.flyway_schema_history),'Existing Flyway records unchanged');
  const owners=new Map(before.owners.map(o=>[o.id,o.client_id]));
  for(const o of after.tables.container_owner){assert(owners.has(o.id));assert.equal(o.client_id,owners.get(o.id),'Owner migrated before any API refresh');}
- for(const old of before.constraints)assert(after.constraints.some(c=>JSON.stringify(c)===JSON.stringify(old)),'Existing constraint preserved: '+old.name);
+ for(const old of before.constraints.filter(c=>c.name!=='container_owner_visit_fk'))assert(after.constraints.some(c=>JSON.stringify(c)===JSON.stringify(old)),'Existing constraint preserved: '+old.name);
  assert.deepEqual(after.triggers.filter(t=>t.name!=='actual_transfer_date'),before.triggers,'Existing triggers preserved');
  assert(after.triggers.some(t=>t.name==='actual_transfer_date'));
  assert.equal(sql("select attnotnull from pg_attribute where attrelid='container_owner'::regclass and attname='client_id'"),'t');
