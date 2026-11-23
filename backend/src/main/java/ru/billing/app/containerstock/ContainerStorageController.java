@@ -132,10 +132,10 @@ public class ContainerStorageController {
         var reportDate=date(asOf);
         var f=filter(query,"ACTIVE",null,periodId,null,null,reportDate);
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
-        String visitsFrom=FROM+" join container_period op on op.id=p.id join container_visit v on v.id=op.container_visit_id ";
+        String visitsFrom=FROM+" join container_period op on op.id=p.id join container_visit_facts v on v.id=op.container_visit_id ";
         long count=jdbc.queryForObject("select count(distinct v.id) "+visitsFrom+f.sql(),Long.class,f.args().toArray());
         var args=new ArrayList<>(f.args());args.add(size);args.add((long)page*size);
-        var ids=jdbc.query("select v.id "+visitsFrom+f.sql()+" group by v.id order by v.receiving_date desc,v.id limit ? offset ?",
+        var ids=jdbc.query("select v.id "+visitsFrom+f.sql()+" group by v.id,v.receiving_date order by v.receiving_date desc,v.id limit ? offset ?",
             (rs,n)->rs.getObject(1,UUID.class),args.toArray());
         if(ids.isEmpty())return PagedResponse.of(List.of(),page,size,count);
         // Page complete visits first, then load every visible ownership period for those visits.

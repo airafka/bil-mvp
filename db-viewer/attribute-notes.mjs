@@ -124,12 +124,9 @@ const specific = {
     receiving_order_id: 'Заявка receiving этого физического визита.',
     receiving_order_container_id: 'Точная строка КТК автопоставки receiving; для ЖД используется waybill_container_id.',
     waybill_container_id: 'Точная строка накладной ЖД-receiving.',
-    receiving_date: 'Фактическая дата receiving по московскому рабочему календарю.',
     receiving_container_owner_history_id: 'Событие ARRIVAL, зафиксировавшее receiving.',
     shipping_order_container_id: 'Точная строка выполненного shipping; плановый резерв находится в container_owner.',
-    shipping_date: 'Фактическая дата shipping, включается в хранение последнего собственника.',
     shipping_container_owner_history_id: 'Событие DEPARTURE, завершившее визит.',
-    is_cancelled: 'Receiving отменён; визит и его периоды сохраняются для истории.',
     cancellation_container_owner_history_id: 'Событие отмены receiving этого визита.',
   },
   container_period: {

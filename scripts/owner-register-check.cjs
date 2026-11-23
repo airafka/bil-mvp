@@ -100,7 +100,9 @@ function compareMigration(before,after){
  }
  for(const [table,rows] of Object.entries(before.tables)){
   if(table==='flyway_schema_history')continue;
-  const actual=after.tables[table].map(row=>{
+  const comparable=table==='container_visit'
+   ? json("select coalesce(json_agg(v),'[]') from container_visit_facts v") : after.tables[table];
+  const actual=comparable.map(row=>{
    if(table==='container_owner'){
     const {client_id,...original}=row;
     const old=before.tables.container_owner.find(o=>o.id===row.id);
@@ -130,7 +132,9 @@ function compareMigration(before,after){
  assert.deepEqual(order(after.tables.flyway_schema_history.filter(r=>Number(r.version)<=59)),order(before.tables.flyway_schema_history),'Existing Flyway records unchanged');
  const owners=new Map(before.owners.map(o=>[o.id,o.client_id]));
  for(const o of after.tables.container_owner){assert(owners.has(o.id));assert.equal(o.client_id,owners.get(o.id),'Owner migrated before any API refresh');}
- for(const old of before.constraints.filter(c=>c.name!=='container_owner_visit_fk'))assert(after.constraints.some(c=>JSON.stringify(c)===JSON.stringify(old)),'Existing constraint preserved: '+old.name);
+ const formerVisitChecks=new Set(['container_visit_check','container_visit_check1','container_visit_check2','container_visit_check4','container_visit_check5']);
+ for(const old of before.constraints.filter(c=>c.name!=='container_owner_visit_fk' && !(c.table_name==='container_visit' && formerVisitChecks.has(c.name))))assert(after.constraints.some(c=>JSON.stringify(c)===JSON.stringify(old)),'Existing constraint preserved: '+old.name);
+ assert(after.constraints.some(c=>c.name==='container_visit_receiving_source' && c.convalidated));
  assert.deepEqual(order(after.triggers.filter(t=>t.name!=='actual_transfer_date')),order(before.triggers),'Existing triggers preserved');
  assert(after.triggers.some(t=>t.name==='actual_transfer_date'));
  assert.equal(sql("select attnotnull from pg_attribute where attrelid='container_owner'::regclass and attname='client_id'"),'t');

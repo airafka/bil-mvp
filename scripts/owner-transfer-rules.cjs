@@ -83,13 +83,22 @@ async function main() {
     const back = await x.transfer(a.ktk,x.b,'2026-09-16');
     assert.equal(events(back), 1);
     assert.equal(current(), x.c);
-    await x.ship(a.ktk);
+    const departure = await x.ship(a.ktk);
+    const visitFacts = receiving => sql(`select concat_ws('|',receiving_date,coalesce(shipping_date::text,'open'),is_cancelled)
+        from container_visit_facts where container_id='${a.ktk}' and receiving_order_id='${receiving}'`);
+    assert.equal(visitFacts(a.receiving), '2026-09-15|2026-09-19|f');
     assert.equal(receivingOf(a.ktk), a.receiving);
     const repeat = await x.arrival(a.ktk,x.b);
     assert.equal(receivingOf(a.ktk), repeat.receiving);
     await x.cancel('receiving', repeat.receiving);
+    assert.equal(visitFacts(repeat.receiving), '2026-09-19|open|t');
     assert.equal(receivingOf(a.ktk), a.receiving, 'Cancelling a repeated receipt restores its predecessor');
     assert.equal(await available(x.b, next), false, 'Departed container is ineligible');
+    await x.cancel('shipping', departure);
+    assert.equal(visitFacts(a.receiving), '2026-09-15|open|f');
+    const visits = await api('/container-periods/visits?periodId='+firstChange.containerPeriodId);
+    assert.equal(visits.items.length, 1);
+    assert.equal(visits.items[0].shippingAt ?? null, null);
     console.log('PASS transfer eligibility, reservation, withdrawal, early shipping, dated history, calendar replay, backdating and storage days/CSV');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
