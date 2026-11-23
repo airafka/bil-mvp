@@ -11,7 +11,7 @@ const groups = [
   ['Заявки на поставку', 'receiving_order'], ['Заявки на вывоз', 'shipping_order'],
   ['Заявки на смену собственника', 'service_order'], ['Заявки на услугу', 'comprehensive_service_order'],
   ['Рейсы', 'route'], ['Накладные', 'waybill'], ['Визиты КТК', 'container_visit'],
-  ['Назначения собственников', 'container_ownership_period'], ['Остатки КТК', 'container_owner'],
+  ['Назначения собственников', 'container_period'], ['Остатки КТК', 'container_owner'],
   ['События истории КТК', 'container_owner_history'], ['Начисления', 'billing_charge'], ['Счета', 'payment_invoice'],
 ] as const
 

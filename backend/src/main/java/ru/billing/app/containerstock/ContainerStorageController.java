@@ -14,7 +14,7 @@ import ru.billing.app.error.ApiException;
 import ru.billing.app.order.PagedResponse;
 
 @RestController
-@RequestMapping("/api/container-storage-periods")
+@RequestMapping({"/api/container-periods", "/api/container-storage-periods"})
 @Transactional(readOnly=true)
 public class ContainerStorageController {
     private final JdbcTemplate jdbc;
@@ -46,7 +46,7 @@ public class ContainerStorageController {
         join container_owner_history h on h.id=p.start_history_id
         join container c on c.id=p.container_id
         left join container_owner_history e on e.id=p.end_history_id
-        left join client ow on ow.id=(select client_id from container_ownership_period where id=p.id)
+        left join client ow on ow.id=(select client_id from container_period where id=p.id)
         join container_owner_history origin on origin.id=storage_arrival_history(p.id)
         join receiving_order r on r.id=origin.order_id
         left join service_order so on so.id=h.order_id and h.order_type='SERVICE_ORDER'
@@ -132,7 +132,7 @@ public class ContainerStorageController {
         var reportDate=date(asOf);
         var f=filter(query,"ACTIVE",null,periodId,null,null,reportDate);
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
-        String visitsFrom=FROM+" join container_ownership_period op on op.id=p.id join container_visit v on v.id=op.container_visit_id ";
+        String visitsFrom=FROM+" join container_period op on op.id=p.id join container_visit v on v.id=op.container_visit_id ";
         long count=jdbc.queryForObject("select count(distinct v.id) "+visitsFrom+f.sql(),Long.class,f.args().toArray());
         var args=new ArrayList<>(f.args());args.add(size);args.add((long)page*size);
         var ids=jdbc.query("select v.id "+visitsFrom+f.sql()+" group by v.id order by v.receiving_date desc,v.id limit ? offset ?",
@@ -143,7 +143,7 @@ public class ContainerStorageController {
         var periodsByVisit=new LinkedHashMap<UUID,List<Row>>();ids.forEach(id->periodsByVisit.put(id,new ArrayList<>()));
         var periodsArgs=new ArrayList<Object>();periodsArgs.add(reportDate);periodsArgs.addAll(ids);
         String sql="with report_periods as materialized (select p.*,op.container_visit_id from container_storage_period_at(?::date) p "
-            +"join container_ownership_period op on op.id=p.id where p.status in ('OPEN','CLOSED') and op.container_visit_id in ("
+            +"join container_period op on op.id=p.id where p.status in ('OPEN','CLOSED') and op.container_visit_id in ("
             +String.join(",",Collections.nCopies(ids.size(),"?"))+")) "
             +SELECT.replace("select p.id,","select p.container_visit_id,p.id,")+" order by h.occurred_at,h.created_at,h.id";
         jdbc.query(sql,(org.springframework.jdbc.core.RowCallbackHandler)rs->periodsByVisit.get(rs.getObject("container_visit_id",UUID.class)).add(row(rs,reportDate)),periodsArgs.toArray());

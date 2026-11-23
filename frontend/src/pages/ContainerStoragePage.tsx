@@ -57,7 +57,7 @@ export default function ContainerStoragePage() {
   const pageSize = 20
   const filter = new URLSearchParams({ query, status: params.has('periodId') ? 'ALL' : 'ACTIVE' })
   if(params.get('periodId')) filter.set('periodId',params.get('periodId')!)
-  const url = '/api/container-storage-periods/visits?' + filter + '&page=' + page + '&size=' + pageSize
+  const url = '/api/container-periods/visits?' + filter + '&page=' + page + '&size=' + pageSize
   const requestKey = url + ':' + attempt + ':' + clock.date + ':' + clock.version
   const [result, setResult] = useState<{ key: string; data: PagedResponse<StorageVisit>; containers: ReferenceOption[] } | null>(null)
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null)
@@ -66,7 +66,7 @@ export default function ContainerStoragePage() {
   const data = result?.key === requestKey ? result.data : null
   useEffect(() => {
     let active = true
-    Promise.all([request<PagedResponse<StorageVisit>>(url), request<ReferenceOption[]>('/api/container-storage-periods/containers')])
+    Promise.all([request<PagedResponse<StorageVisit>>(url), request<ReferenceOption[]>('/api/container-periods/containers')])
       .then(([data, containers]) => { if (active) { setResult({ key: requestKey, data, containers }); setFailure(null) } })
       .catch((cause: unknown) => { if (active) setFailure({ key: requestKey, message: cause instanceof Error ? cause.message : 'Не удалось загрузить хранение' }) })
     return () => { active = false }
@@ -86,7 +86,7 @@ export default function ContainerStoragePage() {
   }
   return <section className="registry-page storage-page">
     <div className="page-header"><h1>Хранение КТК</h1><div className="storage-actions"><button className="secondary-button" onClick={() => setAttempt(a => a + 1)}>Обновить</button>
-      <a className="secondary-button" href={'/api/container-storage-periods/export?' + filter}>Выгрузить CSV</a></div></div>
+      <a className="secondary-button" href={'/api/container-periods/export?' + filter}>Выгрузить CSV</a></div></div>
     <form className="storage-filters" onSubmit={e => { e.preventDefault(); change('query', search) }}>
       <label className="field horizontal-field"><span>Номер КТК</span><UiSelect value={search} disabled={loading || !!error} onChange={e => setDraftSearch({ query, value: e.target.value })}>
         <option value="">{loading ? 'Загрузка…' : 'Все КТК'}</option>

@@ -4,7 +4,7 @@ import { attributeNote } from '../attribute-notes.mjs';
 
 test('attribute explanations distinguish document clients, owners, tare and gross weight', () => {
   assert.match(attributeNote('receiving_order', {name:'client_id'}), /Клиент/);
-  assert.match(attributeNote('container_ownership_period', {name:'client_id'}), /Собственник КТК/);
+  assert.match(attributeNote('container_period', {name:'client_id'}), /Собственник КТК/);
   assert.match(attributeNote('service_order', {name:'client_id'}), /Новый собственник/);
   assert.match(attributeNote('container', {name:'weight'}), /Масса тары/);
   assert.match(attributeNote('waybill_container', {name:'weight'}), /масса брутто/);

@@ -72,11 +72,25 @@ function snapshot(){
    'triggers',(select coalesce(json_agg(t order by table_name,name),'[]') from (select tgrelid::regclass::text table_name,tgname name,tgenabled,tgdeferrable,tginitdeferred,pg_get_triggerdef(oid) definition from pg_trigger where tgrelid in(select oid from pg_class where relnamespace='public'::regnamespace) and not tgisinternal)t));commit;`);
 }
 function compareMigration(before,after){
- assert.deepEqual(Object.keys(after.tables),Object.keys(before.tables),'No business tables added/dropped');
+ // Compare the V59 snapshot using V65's identifiers, preserving every stored value.
+ before.tables.container_period=before.tables.container_ownership_period;
+ delete before.tables.container_ownership_period;
+ for(const [table,oldColumn] of [['container_owner_history','storage_period_id'],['service_order_container','container_ownership_period_id']]){
+  for(const row of before.tables[table]){
+   row.container_period_id=row[oldColumn];
+   delete row[oldColumn];
+  }
+ }
+ const renameIdentifier=value=>value.replaceAll('container_ownership_period','container_period')
+   .replaceAll('history_storage_period_fk','history_container_period_fk').replaceAll('storage_period_id','container_period_id');
+ for(const metadata of [...before.constraints,...before.triggers]){
+  for(const field of ['table_name','name','definition'])metadata[field]=renameIdentifier(metadata[field]);
+ }
+ assert.deepEqual(Object.keys(after.tables).sort(),Object.keys(before.tables).sort(),'No business tables added/dropped');
  const order=rows=>rows.map(r=>JSON.stringify(Object.fromEntries(Object.entries(r).sort(([a],[b])=>a.localeCompare(b))))).sort();
  const eventsMovedToPlans=new Set();
- const originalPeriods=new Map(before.tables.container_ownership_period.map(p=>[p.id,p]));
- for(const plan of after.tables.container_ownership_period.filter(p=>p.plan_order_id)){
+ const originalPeriods=new Map(before.tables.container_period.map(p=>[p.id,p]));
+ for(const plan of after.tables.container_period.filter(p=>p.plan_order_id)){
   const event=before.tables.container_owner_history.find(e=>e.id===originalPeriods.get(plan.id).start_container_owner_history_id);
   assert(event && event.order_type==='SERVICE_ORDER');
   assert.equal(plan.start_container_owner_history_id,null);
@@ -94,7 +108,7 @@ function compareMigration(before,after){
     assert.equal(row.receiving_order_id,old.receiving_order_id??visit?.receiving_order_id??null);
     return {...original,receiving_order_id:old.receiving_order_id,container_visit_id:old.container_visit_id};
    }
-   if(table==='container_ownership_period'){
+   if(table==='container_period'){
     const {plan_at,plan_order_id,...original}=row;
     if(plan_order_id)original.start_container_owner_history_id=originalPeriods.get(row.id).start_container_owner_history_id;
     return original;
@@ -117,7 +131,7 @@ function compareMigration(before,after){
  const owners=new Map(before.owners.map(o=>[o.id,o.client_id]));
  for(const o of after.tables.container_owner){assert(owners.has(o.id));assert.equal(o.client_id,owners.get(o.id),'Owner migrated before any API refresh');}
  for(const old of before.constraints.filter(c=>c.name!=='container_owner_visit_fk'))assert(after.constraints.some(c=>JSON.stringify(c)===JSON.stringify(old)),'Existing constraint preserved: '+old.name);
- assert.deepEqual(after.triggers.filter(t=>t.name!=='actual_transfer_date'),before.triggers,'Existing triggers preserved');
+ assert.deepEqual(order(after.triggers.filter(t=>t.name!=='actual_transfer_date')),order(before.triggers),'Existing triggers preserved');
  assert(after.triggers.some(t=>t.name==='actual_transfer_date'));
  assert.equal(sql("select attnotnull from pg_attribute where attrelid='container_owner'::regclass and attname='client_id'"),'t');
  assert(after.constraints.some(c=>c.table_name==='container_owner'&&c.contype==='f'&&c.convalidated&&c.definition==='FOREIGN KEY (client_id) REFERENCES client(id)'),'Validated owner FK');
@@ -237,7 +251,7 @@ const owner=k=>sql(`select client_id from container_owner_current where containe
 
 // init() verifies the whole isolated stack before its first API access.
 const physical=k=>sql(`select client_id from container_owner where container_id='${k}'`);
-const stable=()=>json("select json_build_object('visits',(select json_agg(t order by id) from container_visit t),'periods',(select json_agg(t order by id) from container_ownership_period t),'history',(select json_agg(t order by id) from container_owner_history t))");
+const stable=()=>json("select json_build_object('visits',(select json_agg(t order by id) from container_visit t),'periods',(select json_agg(t order by id) from container_period t),'history',(select json_agg(t order by id) from container_owner_history t))");
 async function expectOwner(k,id){
  const code=sql(`select code from container where id=${quote(k)}`),name=sql(`select name from client where id=${quote(id)}`);
  const response=await api('/container-owners?size=100&query='+encodeURIComponent(code)),rows=response.items.filter(r=>r.containerId===k);
@@ -256,10 +270,10 @@ function parseCsv(text){
  }
  assert.equal(quoted,false);if(row.length||cell){row.push(cell);rows.push(row);}return rows;
 }
-async function expectStorage(k,expected){
+async function expectStorage(k,expected,periodTable='container_period'){
  const code=sql(`select code from container where id=${quote(k)}`);
  const report=await api('/container-storage-periods?size=100&query='+encodeURIComponent(code));
- const assignments=json(`select coalesce(json_agg(t),'[]') from (select p.id,p.client_id,c.name from container_ownership_period p join client c on c.id=p.client_id where p.container_id=${quote(k)})t`);
+ const assignments=json(`select coalesce(json_agg(t),'[]') from (select p.id,p.client_id,c.name from ${identifier(periodTable)} p join client c on c.id=p.client_id where p.container_id=${quote(k)})t`);
  const byId=new Map(assignments.map(p=>[p.id,p]));
  const actual=report.items.map(r=>{const p=byId.get(r.id);assert(p);assert.equal(r.containerId,k);assert.equal(r.ownerName,p.name);return {ownerClientId:p.client_id,storageDays:r.storageDays};});
  const sort=rows=>rows.slice().sort((a,b)=>a.ownerClientId.localeCompare(b.ownerClientId)||a.storageDays-b.storageDays);
@@ -281,8 +295,8 @@ const repeat=await x.arrival();repeat.shipping=await x.ship(repeat.ktk);repeat.p
 const open=await x.arrival();open.future=await x.transfer(open.ktk,x.b,'2026-09-25');open.shipping=await x.ship(open.ktk,false);
 const terminal=await x.arrival();
 assert.deepEqual(json('select json_agg(status order by status) from (select distinct status from container_owner)t'),['DEPARTED','EXPECTED','ON_TERMINAL','RESERVED_OUT']);
-await expectStorage(closed.ktk,[{ownerClientId:x.a,storageDays:2},{ownerClientId:x.b,storageDays:4}]);
-await expectStorage(exactBack.ktk,[{ownerClientId:x.a,storageDays:1},{ownerClientId:x.c,storageDays:1},{ownerClientId:x.b,storageDays:3}]);
+await expectStorage(closed.ktk,[{ownerClientId:x.a,storageDays:2},{ownerClientId:x.b,storageDays:4}],'container_ownership_period');
+await expectStorage(exactBack.ktk,[{ownerClientId:x.a,storageDays:1},{ownerClientId:x.c,storageDays:1},{ownerClientId:x.b,storageDays:3}],'container_ownership_period');
 fs.writeFileSync('owner-fixture.json',JSON.stringify({closed,pending,cancelled,repeat,open,terminal,exactBack}));
 fs.writeFileSync('owner-before-api.json',JSON.stringify(await capture()));
 fs.writeFileSync('owner-before-data.json',JSON.stringify(snapshot()));
@@ -303,7 +317,7 @@ async function check(){
  assert.equal(history.find(h=>h.orderId===f.exactBack.transferB).oldClientId,x.c,'Timeline predecessor after backdated insertion');
  assert.equal(sql(`select old_client_id from container_owner_history where order_id=${quote(f.exactBack.transferB)}`),x.a,'Original history owner snapshot retained');
  console.log('PASS all JSON report pages and both CSV exports byte-identical; owner mappings, registry and lookup verified');
-await expectOwner(f.pending.ktk,x.b);assert.equal(count('container_visit',f.pending.ktk),0);assert.equal(count('container_ownership_period',f.pending.ktk),0);await x.cancel('receiving',f.pending.receiving);await expectOwner(f.pending.ktk,x.b);await expectOwner(f.cancelled.ktk,x.c);
+await expectOwner(f.pending.ktk,x.b);assert.equal(count('container_visit',f.pending.ktk),0);assert.equal(count('container_period',f.pending.ktk),0);await x.cancel('receiving',f.pending.receiving);await expectOwner(f.pending.ktk,x.b);await expectOwner(f.cancelled.ktk,x.c);
 await expectOwner(f.repeat.ktk,x.b);await x.cancel('receiving',f.repeat.pending.receiving);await expectOwner(f.repeat.ktk,x.a);assert.equal(count('container_visit',f.repeat.ktk),1);
 const again=await x.arrival(f.repeat.ktk,x.c,false);await expectOwner(f.repeat.ktk,x.c);assert.equal(count('container_visit',f.repeat.ktk),1);await x.finish('receiving',again.receiving);assert.equal(count('container_visit',f.repeat.ktk),2);await x.cancel('receiving',again.receiving);await expectOwner(f.repeat.ktk,x.a);
 console.log('PASS receiving: selected owner in EXPECTED; no premature visit; both cancellations restore owner; repeated visit isolated');
@@ -337,13 +351,13 @@ const service=(await api('/comprehensive-service-orders/available-services'))[0]
 const bill=await api('/waybills/generate','POST',{standard20:1,standard40:0},201);const req={complexServiceId:service.id,clientId:tariff.client_id,contractId:tariff.contract_id,defaultContainerOwnerId:x.a,waybillIds:[bill.id]};
 async function section(root,action){return api('/comprehensive-service-orders/'+root+'/'+(action==='PREPARE_TRANSPORT'?'prepare-transport':'complete-section'),'POST',{section:'INITIAL_RECEIVING',...(action==='PREPARE_TRANSPORT'?{}:{action})});}
 let rail=await api('/comprehensive-service-orders','POST',req,201);const railK=rail.receivingOrder.containers[0].containerId;
-await section(rail.order.id,'PREPARE_TRANSPORT');await section(rail.order.id,'CONFIRM_ROUTES');assert.equal(count('container_visit',railK),0);assert.equal(count('container_ownership_period',railK),0);
+await section(rail.order.id,'PREPARE_TRANSPORT');await section(rail.order.id,'CONFIRM_ROUTES');assert.equal(count('container_visit',railK),0);assert.equal(count('container_period',railK),0);
 for(const shipping of rail.shippingOrders)await x.cancel('shipping',shipping.id);await x.cancel('receiving',rail.receivingOrder.id);assert.equal(count('container_visit',railK),0);
-rail=await api('/comprehensive-service-orders','POST',{...req,defaultContainerOwnerId:x.b},201);await section(rail.order.id,'PREPARE_TRANSPORT');await section(rail.order.id,'CONFIRM_ROUTES');await section(rail.order.id,'COMPLETE_ORDERS');assert.equal(count('container_visit',railK),1);assert.equal(count('container_ownership_period',railK),1);assert.equal(owner(railK),x.b);assert.equal(sql(`select count(*) from container_visit where container_id='${railK}' and waybill_container_id is not null`),'1');
+rail=await api('/comprehensive-service-orders','POST',{...req,defaultContainerOwnerId:x.b},201);await section(rail.order.id,'PREPARE_TRANSPORT');await section(rail.order.id,'CONFIRM_ROUTES');await section(rail.order.id,'COMPLETE_ORDERS');assert.equal(count('container_visit',railK),1);assert.equal(count('container_period',railK),1);assert.equal(owner(railK),x.b);assert.equal(sql(`select count(*) from container_visit where container_id='${railK}' and waybill_container_id is not null`),'1');
 console.log('PASS: railway confirmation has no physical visit, cancellation/reused waybill, actual rail receipt with one ownership assignment');
 
 await expectOwner(railK,x.b);
-const completed=await x.arrival();const sent=await x.ship(completed.ktk);const periodCount=count('container_ownership_period',completed.ktk);await x.cancel('shipping',sent);await expectOwner(completed.ktk,x.a);assert.equal(count('container_ownership_period',completed.ktk),periodCount);assert.equal(sql("select status from container_owner where container_id='"+completed.ktk+"'"),'ON_TERMINAL');
+const completed=await x.arrival();const sent=await x.ship(completed.ktk);const periodCount=count('container_period',completed.ktk);await x.cancel('shipping',sent);await expectOwner(completed.ktk,x.a);assert.equal(count('container_period',completed.ktk),periodCount);assert.equal(sql("select status from container_owner where container_id='"+completed.ktk+"'"),'ON_TERMINAL');
 console.log('PASS actual shipping cancellation preserves owner and assignments');
 console.log('ALL OWNER REGISTER CHECKS PASSED');}
 module.exports={init,api,sql,json,clock,guard,snapshot,expectOwner,expectStorage,repair};

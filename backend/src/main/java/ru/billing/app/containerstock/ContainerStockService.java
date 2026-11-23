@@ -32,7 +32,7 @@ public class ContainerStockService {
     public record History(UUID id, UUID containerId, UUID oldClientId, String oldClientName,
             UUID newClientId, String newClientName, String oldStatus, String newStatus,
             UUID orderId, String orderType, Long orderNumber, LocalDateTime createdAt, boolean cancellation, String operationType, java.time.OffsetDateTime occurredAt,
-            UUID storagePeriodId, UUID previousStoragePeriodId) {}
+            UUID containerPeriodId, UUID previousContainerPeriodId) {}
     record State(UUID id, UUID client, String status, UUID receiving, UUID shipping) {}
     record Reservation(UUID container, UUID previousOwner) {}
 
@@ -199,20 +199,20 @@ public class ContainerStockService {
             select h.*,old.name as old_name,new.name as new_name,
                 coalesce(r.number,s.number,so.number) as order_number,
                 (select p.id from container_storage_period p where p.end_history_id=h.id
-                  and h.operation_type='OWNER_CHANGE') as previous_storage_period_id
+                  and h.operation_type='OWNER_CHANGE') as previous_container_period_id
             from container_owner_history_timeline h left join client old on old.id=h.timeline_old_client_id
             left join client new on new.id=h.new_client_id
             left join receiving_order r on h.order_type='RECEIVING_ORDER' and r.id=h.order_id
             left join shipping_order s on h.order_type='SHIPPING_ORDER' and s.id=h.order_id
             left join service_order_current so on h.order_type='SERVICE_ORDER' and so.id=h.order_id
             where h.container_id=? and (? or ((h.occurred_at at time zone 'Europe/Moscow')::date<=billing_today()
-              and not exists(select 1 from container_ownership_period op where op.start_container_owner_history_id=h.id and op.is_withdrawn))) and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
+              and not exists(select 1 from container_period op where op.start_container_owner_history_id=h.id and op.is_withdrawn))) and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
                 and (r.order_status in ('COMPLETED','CANCELLED') or s.order_status in ('COMPLETED','CANCELLED') or so.status in ('DONE','PARTIAL'))))
             order by h.created_at desc,h.id desc
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("timeline_old_client_id",UUID.class),rs.getString("old_name"),
                 rs.getObject("new_client_id",UUID.class),rs.getString("new_name"),rs.getString("old_status"),rs.getString("new_status"),
                 rs.getObject("order_id",UUID.class),rs.getString("order_type"),rs.getObject("order_number",Long.class),rs.getObject("created_at",LocalDateTime.class),rs.getBoolean("cancellation"),rs.getString("operation_type"),rs.getObject("occurred_at",java.time.OffsetDateTime.class),
-                rs.getObject("storage_period_id",UUID.class),rs.getObject("previous_storage_period_id",UUID.class)),container,all,all);
+                rs.getObject("container_period_id",UUID.class),rs.getObject("previous_container_period_id",UUID.class)),container,all,all);
     }
     ApiException error(String code,String message){return new ApiException(HttpStatus.CONFLICT,code,message);}
 }

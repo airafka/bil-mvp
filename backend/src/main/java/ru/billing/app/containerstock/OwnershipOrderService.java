@@ -110,7 +110,7 @@ public class OwnershipOrderService {
     }
     @Transactional public void delete(UUID id){
         draft(locked(id));
-        if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from container_owner_history where order_type='SERVICE_ORDER' and order_id=?) or exists(select 1 from container_ownership_period where plan_order_id=?)",Boolean.class,id,id)))
+        if(Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from container_owner_history where order_type='SERVICE_ORDER' and order_id=?) or exists(select 1 from container_period where plan_order_id=?)",Boolean.class,id,id)))
             throw error(HttpStatus.CONFLICT,"SERVICE_ORDER_HAS_HISTORY","Ранее подтверждённая заявка сохраняется для истории; её можно изменить и подтвердить повторно");
         jdbc.update("delete from service_order_container where service_order_id=?",id);jdbc.update("delete from service_order where id=?",id);
     }
@@ -199,7 +199,7 @@ public class OwnershipOrderService {
             var effectiveAt=candidate.instant();
             UUID period=jdbc.queryForObject("select confirm_ownership_assignment(?,?,?,?,?,?,?)",UUID.class,
                     h.id(),l.containerId(),candidate.visit(),candidate.previousClient(),h.clientId(),state.status(),effectiveAt);
-            jdbc.update("update service_order_container set container_visit_id=?,expected_client_id=?,expected_status=?,result_status='CONFIRMED',result_reason=null,container_ownership_period_id=? where service_order_id=? and container_id=?",
+            jdbc.update("update service_order_container set container_visit_id=?,expected_client_id=?,expected_status=?,result_status='CONFIRMED',result_reason=null,container_period_id=? where service_order_id=? and container_id=?",
                     candidate.visit(),candidate.previousClient(),state.status(),period,id,l.containerId());
         }
         jdbc.update("update service_order set status='CONFIRMED',effective_date=?,completion_at=?::timestamptz at time zone 'UTC',updated_at=?::timestamptz at time zone 'UTC',updated_by='local' where id=?",effective,confirmedAt,confirmedAt,id);
@@ -209,9 +209,9 @@ public class OwnershipOrderService {
         Header h=locked(id);
         if(!h.status().equals("SCHEDULED")) throw error(HttpStatus.CONFLICT,"SERVICE_ORDER_NOT_SCHEDULED","Вернуть в черновик можно только ожидающую заявку");
         stock.lockContainers(links(id).stream().map(Link::containerId).toList());
-        var periods=jdbc.query("select container_ownership_period_id from service_order_container where service_order_id=? and container_ownership_period_id is not null",(rs,n)->rs.getObject(1,UUID.class),id);
+        var periods=jdbc.query("select container_period_id from service_order_container where service_order_id=? and container_period_id is not null",(rs,n)->rs.getObject(1,UUID.class),id);
         for(UUID period:periods) jdbc.queryForObject("select withdraw_ownership_period(?,?)",Object.class,period,"Заявка возвращена в черновик");
-        jdbc.update("update service_order_container set container_ownership_period_id=null,container_visit_id=null,expected_client_id=null,expected_status=null,result_status='DRAFT',result_reason=null where service_order_id=?",id);
+        jdbc.update("update service_order_container set container_period_id=null,container_visit_id=null,expected_client_id=null,expected_status=null,result_status='DRAFT',result_reason=null where service_order_id=?",id);
         jdbc.update("update service_order set status='DRAFT',completion_at=null,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",id);
         return details(id);
     }

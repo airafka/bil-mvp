@@ -56,10 +56,20 @@ async function main() {
     assert.equal(events(second), 0);
     await clock('2026-09-19');
     assert.equal(current(), x.c);
+    const history = await api('/containers/'+a.ktk+'/owner-history');
+    const firstChange = history.find(event => event.orderId === draft.id);
+    const secondChange = history.find(event => event.orderId === second);
+    assert.ok(firstChange?.containerPeriodId);
+    assert.equal(secondChange?.previousContainerPeriodId, firstChange.containerPeriodId);
+    assert.equal(sql(`select container_period_id from service_order_container where service_order_id='${draft.id}'`),firstChange.containerPeriodId);
+    const periodQuery = '?periodId='+firstChange.containerPeriodId+'&status=ALL';
+    const report = await api('/container-periods'+periodQuery);
+    assert.deepEqual(report.items.map(period => period.id), [firstChange.containerPeriodId]);
+    assert.deepEqual(await api('/container-storage-periods'+periodQuery), report);
     for (const [id,date,from,to] of [[draft.id,next,x.a,x.b],[second,'2026-09-18',x.b,x.c]]) {
         assert.equal(events(id), 1);
-        assert.equal(sql(`select count(*) from container_owner_history h join container_ownership_period p
-          on p.start_container_owner_history_id=h.id where h.order_id='${id}' and h.storage_period_id=p.id
+        assert.equal(sql(`select count(*) from container_owner_history h join container_period p
+          on p.start_container_owner_history_id=h.id where h.order_id='${id}' and h.container_period_id=p.id
           and (h.occurred_at at time zone 'Europe/Moscow')::date='${date}' and h.old_client_id='${from}' and h.new_client_id='${to}'`),'1');
     }
     assert.equal(events(revoked), 0);
