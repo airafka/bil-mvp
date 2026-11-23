@@ -16,8 +16,10 @@ public class TosContainerTasks {
     private final JdbcTemplate jdbc;
     private final ContainerTaskRows tasks;
     private final ContainerStockService stock;
+    private final RailwayCarriageStock wagons;
 
-    public TosContainerTasks(JdbcTemplate jdbc, ContainerTaskRows tasks, ContainerStockService stock) {
+    public TosContainerTasks(JdbcTemplate jdbc, ContainerTaskRows tasks, ContainerStockService stock, RailwayCarriageStock wagons) {
+        this.wagons = wagons;
         this.jdbc = jdbc;
         this.tasks = tasks;
         this.stock = stock;
@@ -37,7 +39,7 @@ public class TosContainerTasks {
                 if (cargo.size() != 1) throw invalid("Для задания КТК требуется один результат");
                 var result = cargo.getFirst();
                 requireContainer(row.container(), result.cargoNumber());
-                var wagon = wagon(event.orderId(), result, false);
+                var wagon = wagon(event.orderId(), result, false, event.eventDateTime());
                 jdbc.update("update shipping_order_container set shipping_order_railway_carriage_id=?,seal_numbers=? where id=?",
                         wagon, seals(result), row.id());
             }
@@ -65,7 +67,7 @@ public class TosContainerTasks {
             String conflict = ContainerStockPolicy.reservationConflict(false, state == null ? null : state.status());
             if (conflict != null) throw invalid(result.cargoNumber()+": "+conflict);
             boolean vehicle = mode == FillingType.NONE_CONTAINER;
-            UUID carriage = vehicle ? null : wagon(order,result,mode == FillingType.RAILWAY_CARRIAGE);
+            UUID carriage = vehicle ? null : wagon(order,result,mode == FillingType.RAILWAY_CARRIAGE,event.eventDateTime());
             jdbc.update("""
                     insert into shipping_order_container(id,shipping_order_id,container_id,shipping_order_railway_carriage_id,
                         owner_container_id,empty,seal_numbers,status,actual_quantity) values(?,?,?,?,?,?,?,'UPLOADED',?)
@@ -84,7 +86,7 @@ public class TosContainerTasks {
         return jdbc.queryForObject("select coalesce(sum(quantity),0) from shipping_order_container_qty where shipping_order_id=?",Long.class,order);
     }
 
-    private UUID wagon(UUID order, TosEvent.Cargo cargo, boolean mustExist) {
+    private UUID wagon(UUID order, TosEvent.Cargo cargo, boolean mustExist, java.time.OffsetDateTime at) {
         if (!"ЖД".equals(cargo.transportType())) throw invalid("В ЖД-результате требуется вагон");
         UUID carriage = reference("railway_carriage",cargo.transportNumber());
         var rows = jdbc.query("select id from shipping_order_railway_carriage where shipping_order_id=? and railway_carriage_id=?",
@@ -95,8 +97,9 @@ public class TosContainerTasks {
         }
         if (mustExist) throw invalid("Вагон отсутствует в составе заявки");
         var id = UUID.randomUUID();
-        jdbc.update("insert into shipping_order_railway_carriage(id,shipping_order_id,railway_carriage_id,status) values(?,?,?,'FINISHED')",
-                id,order,carriage);
+        var owner = wagons.shipUnnumbered(order,carriage,at);
+        jdbc.update("insert into shipping_order_railway_carriage(id,shipping_order_id,railway_carriage_id,owner_railway_carriage_id,status) values(?,?,?,?,'FINISHED')",
+                id,order,carriage,owner);
         return id;
     }
 

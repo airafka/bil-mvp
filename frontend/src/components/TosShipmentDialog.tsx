@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { getContainerStock, getReferenceOptions } from '../api'
+import { getContainerStock } from '../api'
 import { businessDateTimeToInstant, useApplicationClock, businessDateTime } from '../applicationClock'
 import { containerTypeLabel, type OrderDetails } from '../domain'
 import { request } from '../http'
@@ -50,23 +50,23 @@ export function TosShipmentDialog({ order, vehicleNumber, onClose, onSent }: Pro
     if (knownContainers) return
     let active = true
     const timer = window.setTimeout(() => {
-      getContainerStock(number, '', 'ON_TERMINAL').then(page => {
+      getContainerStock(number, group?.ownerClientId ?? '', 'ON_TERMINAL').then(page => {
         if (active) setStock(page.items.filter(row => row.containerType === group?.type).map(row => row.containerName))
       }).catch(() => { if (active) setStock([]) })
     }, 150)
     return () => { active = false; window.clearTimeout(timer) }
-  }, [number, knownContainers, group?.type])
+  }, [number, knownContainers, group?.type, group?.ownerClientId])
 
   useEffect(() => {
     if (!railway || knownWagons) return
     let active = true
     const timer = window.setTimeout(() => {
-      getReferenceOptions('railway-carriages', transport).then(rows => {
+      request<{name: string}[]>('/api/shipping-orders/' + order.id + '/available-wagons?q=' + encodeURIComponent(transport)).then(rows => {
         if (active) setWagons(rows.map(row => row.name))
       }).catch(() => { if (active) setWagons([]) })
     }, 150)
     return () => { active = false; window.clearTimeout(timer) }
-  }, [railway, knownWagons, transport])
+  }, [order.id, railway, knownWagons, transport])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -80,7 +80,7 @@ export function TosShipmentDialog({ order, vehicleNumber, onClose, onSent }: Pro
       const type = knownContainers ? known?.containerType : group?.type
       if (!type || (knownContainers && !taskId)) throw new Error('Выберите КТК из заявки')
       if (!taskId) {
-        const page = await getContainerStock(cargoNumber, '', 'ON_TERMINAL')
+        const page = await getContainerStock(cargoNumber, group?.ownerClientId ?? '', 'ON_TERMINAL')
         if (!page.items.some(row => row.containerName.toUpperCase() === cargoNumber && row.containerType === type))
           throw new Error('Выберите свободный КТК указанного типоразмера из остатков')
         taskId = crypto.randomUUID()
@@ -125,7 +125,7 @@ export function TosShipmentDialog({ order, vehicleNumber, onClose, onSent }: Pro
       <div className="route-drawer-body">
         <p>Пакет зафиксирует вывоз одного КТК по заявке №{order.code}.</p>
         {!knownContainers && <label>Плановая группа КТК<UiSelect required disabled={busy} value={groupId} onChange={e => { setGroupId(e.target.value); setNumber('') }}>
-          {groups.map(row => <option key={row.id} value={row.id}>{containerTypeLabel(row.type)} · {row.empty ? 'Порожние' : 'Гружёные'} · осталось {row.remaining} шт.{row.items.map(item => ' · ' + item.etsngCode + ' (' + item.weight + ' кг)').join('')}</option>)}
+          {groups.map(row => <option key={row.id} value={row.id}>{row.ownerName && row.ownerName + ' · '}{containerTypeLabel(row.type)} · {row.empty ? 'Порожние' : 'Гружёные'} · осталось {row.remaining} шт.{row.items.map(item => ' · ' + item.etsngCode + ' (' + item.weight + ' кг)').join('')}</option>)}
         </UiSelect></label>}
         <label>Номер КТК{knownContainers
           ? <UiSelect required disabled={busy} value={number} onChange={e => {

@@ -8,6 +8,6 @@ public record ContainerQuantityDetails(
         int quantity,
         ContainerType type,
         boolean empty,
-        List<ContainerQuantityItemDetails> items
+        List<ContainerQuantityItemDetails> items, UUID ownerClientId, String ownerName
 ) {
 }

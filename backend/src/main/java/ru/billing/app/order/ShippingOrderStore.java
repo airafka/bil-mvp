@@ -216,9 +216,9 @@ public class ShippingOrderStore {
     private void insertRailwayCarriageQuantities(UUID orderId, List<RailwayCarriageQuantityRequest> rows) {
         for (RailwayCarriageQuantityRequest row : rows) {
             jdbcTemplate.update(
-                    "insert into shipping_order_railway_carriage_qty (id, shipping_order_id, quantity, type_id) "
-                            + "values (?, ?, ?, ?)",
-                    UUID.randomUUID(), orderId, row.quantity(), row.typeId()
+                    "insert into shipping_order_railway_carriage_qty (id, shipping_order_id, quantity, type_id, owner_railway_carriage_id) "
+                            + "values (?, ?, ?, ?, ?)",
+                    UUID.randomUUID(), orderId, row.quantity(), row.typeId(), row.ownerRailwayCarriageId()
             );
         }
     }
@@ -227,9 +227,9 @@ public class ShippingOrderStore {
         for (ContainerQuantityRequest row : rows) {
             UUID rowId = UUID.randomUUID();
             jdbcTemplate.update(
-                    "insert into shipping_order_container_qty (id, shipping_order_id, quantity, type, empty) "
-                            + "values (?, ?, ?, ?, ?)",
-                    rowId, orderId, row.quantity(), row.type().name(), row.empty()
+                    "insert into shipping_order_container_qty (id, shipping_order_id, quantity, type, empty, owner_client_id) "
+                            + "values (?, ?, ?, ?, ?, ?)",
+                    rowId, orderId, row.quantity(), row.type().name(), row.empty(), row.ownerClientId()
             );
             List<CargoRequest> items = row.items() == null ? List.of() : row.items();
             for (CargoRequest item : items) {
@@ -298,13 +298,15 @@ public class ShippingOrderStore {
         List<RailwayContainerRow> rows = jdbcTemplate.query(
                 """
                 select sorc.id as carriage_row_id, sorc.railway_carriage_id,
-                       rc.code as railway_carriage_code,
+                       rc.code as railway_carriage_code, wagon_owner.name as wagon_owner_name,
                        oc.id as task_id, c.container_type, oc.container_id, c.code as container_name, oc.empty,
                        case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end as owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
                        oc.seal_type_id, st.code as seal_type_name, oc.danger_class_id, hc.code as danger_class_name,
                        item.etsng_code_id, e.code as etsng_code_name, item.wight_net, coalesce(stock.status,'DEPARTED') as container_status
                   from shipping_order_railway_carriage sorc
                   join railway_carriage rc on rc.id = sorc.railway_carriage_id
+                  left join railway_carriage_owner current_wagon on current_wagon.railway_carriage_id=rc.id
+                  left join client wagon_owner on wagon_owner.id=coalesce(sorc.owner_railway_carriage_id,current_wagon.client_owner_id)
                   left join shipping_order_container oc
                     on oc.shipping_order_railway_carriage_id = sorc.id
                    and oc.shipping_order_id = sorc.shipping_order_id
@@ -322,7 +324,7 @@ public class ShippingOrderStore {
                 (resultSet, rowNumber) -> new RailwayContainerRow(
                         resultSet.getObject("carriage_row_id", UUID.class),
                         resultSet.getObject("railway_carriage_id", UUID.class),
-                        resultSet.getString("railway_carriage_code"),
+                        resultSet.getString("railway_carriage_code"),resultSet.getString("wagon_owner_name"),
                         resultSet.getObject("container_id", UUID.class) == null ? null : container(resultSet)
                 ),
                 orderId
@@ -332,22 +334,23 @@ public class ShippingOrderStore {
             RailwayCarriageBuilder builder = grouped.computeIfAbsent(
                     row.carriageRowId(),
                     ignored -> new RailwayCarriageBuilder(
-                            row.railwayCarriageId(), row.railwayCarriageCode(), new ArrayList<>()
+                            row.railwayCarriageId(), row.railwayCarriageCode(), row.ownerName(), new ArrayList<>()
                     )
             );
             if (row.container() != null) builder.containers().add(row.container());
         });
         return grouped.values().stream().map(builder -> new ShippingOrderRailwayCarriageDetails(
-                builder.railwayCarriageId(), builder.railwayCarriageCode(), OrderContainerDetails.merge(builder.containers())
+                builder.railwayCarriageId(), builder.railwayCarriageCode(), builder.ownerName(), OrderContainerDetails.merge(builder.containers())
         )).toList();
     }
 
     private List<RailwayCarriageQuantityDetails> loadRailwayCarriageQuantities(UUID orderId) {
         return jdbcTemplate.query(
                 """
-                select qty.id, qty.quantity, qty.type_id, type.code as type_code, type.name as type_name
+                select qty.id, qty.quantity, qty.type_id, type.code as type_code, type.name as type_name, qty.owner_railway_carriage_id, owner.name as owner_name
                   from shipping_order_railway_carriage_qty qty
                   left join railway_carriage_type type on type.id = qty.type_id
+                  left join client owner on owner.id=qty.owner_railway_carriage_id
                  where qty.shipping_order_id = ?
                  order by type.code nulls first, qty.id
                 """,
@@ -356,7 +359,7 @@ public class ShippingOrderStore {
                         resultSet.getInt("quantity"),
                         resultSet.getObject("type_id", UUID.class),
                         resultSet.getString("type_code"),
-                        resultSet.getString("type_name")
+                        resultSet.getString("type_name"), resultSet.getObject("owner_railway_carriage_id",UUID.class), resultSet.getString("owner_name")
                 ),
                 orderId
         );
@@ -365,21 +368,21 @@ public class ShippingOrderStore {
     private List<ContainerQuantityDetails> loadContainerQuantities(UUID orderId) {
         List<ContainerQuantityHeader> headers = jdbcTemplate.query(
                 """
-                select id, quantity, type, empty
-                  from shipping_order_container_qty
+                select q.id, q.quantity, q.type, q.empty, q.owner_client_id, owner.name as owner_name
+                  from shipping_order_container_qty q left join client owner on owner.id=q.owner_client_id
                  where shipping_order_id = ?
-                 order by type, empty desc, id
+                 order by q.type, q.empty desc, q.id
                 """,
                 (resultSet, rowNumber) -> new ContainerQuantityHeader(
                         resultSet.getObject("id", UUID.class),
                         resultSet.getInt("quantity"),
                         ContainerType.valueOf(resultSet.getString("type")),
-                        resultSet.getBoolean("empty")
+                        resultSet.getBoolean("empty"), resultSet.getObject("owner_client_id",UUID.class), resultSet.getString("owner_name")
                 ),
                 orderId
         );
         return headers.stream().map(header -> new ContainerQuantityDetails(
-                header.id(), header.quantity(), header.type(), header.empty(), loadContainerQuantityItems(header.id())
+                header.id(), header.quantity(), header.type(), header.empty(), loadContainerQuantityItems(header.id()), header.ownerId(), header.ownerName()
         )).toList();
     }
 
@@ -428,14 +431,14 @@ public class ShippingOrderStore {
     private record RailwayContainerRow(
             UUID carriageRowId,
             UUID railwayCarriageId,
-            String railwayCarriageCode,
+            String railwayCarriageCode, String ownerName,
             OrderContainerDetails container
     ) {
     }
 
     private record RailwayCarriageBuilder(
             UUID railwayCarriageId,
-            String railwayCarriageCode,
+            String railwayCarriageCode, String ownerName,
             List<OrderContainerDetails> containers
     ) {
     }
@@ -445,7 +448,7 @@ public class ShippingOrderStore {
             UUID id,
             int quantity,
             ContainerType type,
-            boolean empty
+            boolean empty, UUID ownerId, String ownerName
     ) {
     }
 }

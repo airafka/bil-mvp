@@ -61,6 +61,7 @@ export type SelectedRailwayCarriage = {
 }
 
 export type SelectedRailwayCarriageQuantity = {
+  ownerRailwayCarriageId?: string
   key: number
   quantity: string
   typeId: string
@@ -73,6 +74,7 @@ export type SelectedQuantityCargo = {
 }
 
 export type SelectedContainerQuantity = {
+  ownerClientId?: string
   key: number
   quantity: string
   type: ContainerType | ''
@@ -81,6 +83,7 @@ export type SelectedContainerQuantity = {
 }
 
 export type OrderFormState = {
+  defaultRailwayCarriageOwnerId?: string
   defaultContainerOwnerId?: string
   arrivalAt: string
   authorizedRepresentative: string
@@ -106,6 +109,7 @@ export type OrderFormState = {
 
 export type CreateOrderPayload = {
   containerOwners?: Array<{ containerId: string; ownerClientId: string }>
+  defaultRailwayCarriageOwnerId?: string
   defaultContainerOwnerId?: string
   arrivalAt?: string
   authorizedRepresentative?: string
@@ -143,8 +147,9 @@ export type CreateOrderPayload = {
     }>
   }>
   fillingType: FillingType
-  railwayCarriageQuantities: Array<{ quantity: number; typeId: string | null }>
+  railwayCarriageQuantities: Array<{ quantity: number; typeId: string | null; ownerRailwayCarriageId?: string }>
   containerQuantities: Array<{
+    ownerClientId?: string
     quantity: number
     type: ContainerType
     empty: boolean
@@ -301,6 +306,7 @@ export function buildPayload(
 
     ...(kind === 'receiving' ? {
       defaultContainerOwnerId: state.defaultContainerOwnerId,
+      ...(state.transportType === 'RAILWAY' && { defaultRailwayCarriageOwnerId: state.defaultRailwayCarriageOwnerId || state.clientId }),
       ...(state.arrivalAt ? { arrivalAt: state.arrivalAt } : {}),
       ...(state.consignor.trim() ? { consignor: state.consignor.trim() } : {}),
     } : {
@@ -332,6 +338,7 @@ export function buildPayload(
       ? state.railwayCarriageQuantities.map((row) => ({
           quantity: Number(row.quantity),
           typeId: row.typeId || null,
+          ownerRailwayCarriageId: row.ownerRailwayCarriageId,
         }))
       : [],
     containerQuantities: isUnnumberedVehicleShipping
@@ -340,6 +347,7 @@ export function buildPayload(
       ? state.containerQuantities.map((row) => ({
           quantity: Number(row.quantity),
           type: row.type as ContainerType,
+          ...(row.ownerClientId && { ownerClientId: row.ownerClientId }),
           empty: row.empty,
           items: row.empty ? [] : row.items.map((item) => ({
             etsngCodeId: item.etsngCodeId,
@@ -397,9 +405,8 @@ function validateUnnumberedVehicleShipping(state: OrderFormState, errors: string
     return
   }
   const row = state.containerQuantities[0]
-  if (!/^\d+$/.test(row.quantity) || Number(row.quantity) <= 0) {
-    errors.push('Укажите целое количество КТК больше нуля')
-  }
+  if (Number(row.quantity) !== 1) errors.push('Для автовывоза допустим один КТК')
+  if (!row.ownerClientId) errors.push('Выберите собственника КТК')
   if (!row.type) errors.push('Выберите типоразмер КТК')
   if (!row.empty) errors.push('Безномерный вывоз разрешён только для порожнего КТК')
   if (row.items.length > 0) errors.push('Для безномерного вывоза сведения о грузе не указываются')
@@ -487,6 +494,7 @@ function validateRailwayCarriageQuantities(state: OrderFormState, errors: string
     if (!/^\d+$/.test(row.quantity) || Number(row.quantity) <= 0) {
       errors.push(`Укажите целое количество вагонов больше нуля в строке ${index + 1}`)
     }
+    if (!row.typeId || !row.ownerRailwayCarriageId) errors.push('Выберите собственника и тип вагона')
     const typeKey = row.typeId || '__UNKNOWN__'
     if (typeIds.has(typeKey)) errors.push('Один тип вагона нельзя добавить дважды')
     typeIds.add(typeKey)
@@ -518,11 +526,12 @@ function validateContainerQuantityCargo(state: OrderFormState, errors: string[])
         errors.push(`Укажите положительную массу на один КТК для груза ${itemIndex + 1} в группе ${rowIndex + 1}`)
       }
     })
+    if (row.empty) return
     const itemKey = row.items
-      .map((item) => `${item.etsngCodeId}:${item.weight.replace(',', '.')}`)
+      .map((item) => `${item.etsngCodeId}:${Number(item.weight.replace(',', '.'))}`)
       .sort()
       .join('|')
-    const rowKey = `${row.quantity}:${row.type}:${row.empty}:${itemKey}`
+    const rowKey = `${row.type}:${itemKey}`
     if (rowKeys.has(rowKey)) errors.push('Полностью одинаковую группу КТК нельзя добавить дважды')
     rowKeys.add(rowKey)
   })

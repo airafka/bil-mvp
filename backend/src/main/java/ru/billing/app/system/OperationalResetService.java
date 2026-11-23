@@ -22,7 +22,7 @@ public class OperationalResetService {
     static final List<String> CLEARED = List.of(
         "billing_charge", "comprehensive_service_order", "comprehensive_service_order_tariff",
         "container_owner", "container_owner_history", "container_period", "container_visit",
-        "inbound_event", "shipping_order_container_qty", "shipping_order_railway_carriage_qty", "shipping_order_etsng_code",
+        "railway_carriage_owner_history", "inbound_event", "shipping_order_container_qty", "shipping_order_railway_carriage_qty", "shipping_order_etsng_code",
         "payment_invoice", "payment_invoice_line", "receiving_order", "receiving_order_container",
         "receiving_order_container_item", "route", "service_execution", "service_order", "service_order_container",
         "shipping_order", "shipping_order_container", "shipping_order_container_item", "shipping_order_railway_carriage",

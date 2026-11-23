@@ -33,7 +33,7 @@ class OrderMetadataStoreTest {
         new ReceivingOrderStore(jdbc).createVehicle(request.withDefaultContainerOwner(request.clientId()));
         verify(jdbc).queryForObject(contains("order_status, plan_receiving_date_time, consignor"), eq(Integer.class),
                 any(UUID.class), eq(request.clientId()), eq(request.terminalAreaId()), eq("VEHICLE"),
-                eq(request.contractId()), eq(arrival), eq("Отправитель"), eq(request.clientId()), isNull(), isNull(), isNull(), isNull(), isNull());
+                eq(request.contractId()), eq(arrival), eq("Отправитель"), eq(request.clientId()), isNull(), isNull(), isNull(), isNull(), isNull(), isNull());
     }
 
     @Test

@@ -441,7 +441,7 @@ class OrderRequestValidatorTest {
         ), "CARGO_FOR_EMPTY_CONTAINER");
 
         ContainerQuantityRequest duplicate = new ContainerQuantityRequest(
-                2, ContainerType.STANDARD_20, true, List.of()
+                2, ContainerType.STANDARD_20, false, List.of(new CargoRequest(ETSNG_ID, BigDecimal.ONE))
         );
         assertShippingError(shippingRequest(
                 FillingType.NONE,
@@ -456,7 +456,7 @@ class OrderRequestValidatorTest {
     void acceptsUnnumberedVehicleShipping() {
         CreateOrderRequest request = unnumberedVehicleRequest(
                 List.of(),
-                List.of(new ContainerQuantityRequest(3, ContainerType.STANDARD_40, true, List.of()))
+                List.of(new ContainerQuantityRequest(1, ContainerType.STANDARD_40, true, List.of()))
         );
 
         assertThatCode(() -> validator.validateShipping(request)).doesNotThrowAnyException();
@@ -477,6 +477,7 @@ class OrderRequestValidatorTest {
 
     @Test
     void rejectsLoadedCargoAndMissingTypeForUnnumberedVehicleShipping() {
+        assertShippingError(unnumberedVehicleRequest(List.of(),List.of(new ContainerQuantityRequest(2,ContainerType.STANDARD_40,true,List.of()))),"INVALID_QUANTITY");
         assertShippingError(unnumberedVehicleRequest(
                 List.of(),
                 List.of(new ContainerQuantityRequest(1, ContainerType.STANDARD_40, false, List.of()))

@@ -220,6 +220,11 @@ public class ReferenceDataService {
     public void validateCommonReferences(CreateOrderRequest request) {
         ensureExists("client", request.clientId(), "CLIENT_NOT_FOUND", "Клиент не найден");
 
+        if (request.defaultRailwayCarriageOwnerId()!=null) ensureExists("client",request.defaultRailwayCarriageOwnerId(),"CLIENT_NOT_FOUND","Собственник вагонов не найден");
+        for (var row:values(request.containerQuantities())) if (row.ownerClientId()!=null)
+            ensureExists("client",row.ownerClientId(),"CLIENT_NOT_FOUND","Собственник КТК не найден");
+        for (var row:values(request.railwayCarriageQuantities())) if (row.ownerRailwayCarriageId()!=null)
+            ensureExists("client",row.ownerRailwayCarriageId(),"CLIENT_NOT_FOUND","Собственник вагонов не найден");
         validateContract(request.clientId(), request.contractId());
         String terminalAreaCode = findTerminalAreaCode(request.terminalAreaId());
         orderScenarioPolicy.validate(terminalAreaCode, request.transportType());

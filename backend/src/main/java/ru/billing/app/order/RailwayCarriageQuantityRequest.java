@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 public record RailwayCarriageQuantityRequest(
         @NotNull(message = "Количество вагонов обязательно")
         Integer quantity,
-        UUID typeId
+        UUID typeId, UUID ownerRailwayCarriageId
 ) {
+    public RailwayCarriageQuantityRequest(Integer quantity, UUID typeId) { this(quantity, typeId, null); }
 }

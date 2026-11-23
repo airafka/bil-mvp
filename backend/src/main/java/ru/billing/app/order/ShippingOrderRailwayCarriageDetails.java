@@ -5,7 +5,7 @@ import java.util.UUID;
 
 public record ShippingOrderRailwayCarriageDetails(
         UUID railwayCarriageId,
-        String railwayCarriageCode,
+        String railwayCarriageCode, String ownerName,
         List<OrderContainerDetails> containers
 ) {
 }

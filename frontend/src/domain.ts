@@ -218,10 +218,13 @@ export type OrderWaybillDetails = {
 export type ShippingOrderRailwayCarriageDetails = {
   railwayCarriageId: string
   railwayCarriageCode: string
+  ownerName?: string | null
   containers: OrderContainerDetails[]
 }
 
 export type RailwayCarriageQuantityDetails = {
+  ownerRailwayCarriageId?: string | null
+  ownerName?: string | null
   id: string
   quantity: number
   typeId: string | null
@@ -230,6 +233,8 @@ export type RailwayCarriageQuantityDetails = {
 }
 
 export type ContainerQuantityDetails = {
+  ownerClientId?: string | null
+  ownerName?: string | null
   id: string
   quantity: number
   type: ContainerType

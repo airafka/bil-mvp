@@ -209,6 +209,7 @@ describe('order form state', () => {
       transportType: 'RAILWAY',
       containers: [],
       waybillIds: ['waybill-1'],
+      defaultRailwayCarriageOwnerId: 'client-1',
       railwayCarriages: [],
       fillingType: 'ALL',
       railwayCarriageQuantities: [],

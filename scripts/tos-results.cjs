@@ -7,7 +7,7 @@ async function main() {
     const site = (await api('/references/terminal-areas')).find(area => area.code==='CONTAINER');
     const contract = sql("select contract_id from complex_service_tariff where active and client_id='"+x.a+"' limit 1");
     const party = (await api('/references/clients')).find(c=>c.id===x.a).name;
-    const wagon = json("select row_to_json(w) from (select id,code from railway_carriage order by id limit 1) w");
+    let wagon = {code:'00000000'};
     const codeOf = id => sql("select code from container where id='"+id+"'");
     const task = (kind,order,id) => sql("select id from "+kind+"_order_container where "+kind+"_order_id='"+order+"' and container_id='"+id+"'");
     const audit = (id,operation) => sql("select occurred_at at time zone 'Europe/Moscow' from container_owner_history_view where container_id='"+id+"' and operation_type='"+operation+"' order by created_at desc limit 1");
@@ -55,7 +55,9 @@ async function main() {
     const tariff = json("select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where complex_service_id='"+service.id+"' and active limit 1)t");
     const bill = await api('/waybills/generate','POST',{standard20:1,standard40:0},201);
     const railOrder = await api('/comprehensive-service-orders','POST',{complexServiceId:service.id,clientId:tariff.client_id,
-        contractId:tariff.contract_id,defaultContainerOwnerId:x.a,waybillIds:[bill.id]},201);
+        contractId:tariff.contract_id,defaultContainerOwnerId:x.a,defaultRailwayCarriageOwnerId:x.b,waybillIds:[bill.id]},201);
+    wagon=json("select row_to_json(w) from (select c.id,c.code,c.type_id from waybill_railway_carriage wr join railway_carriage c on c.id=wr.railway_carriage_id where wr.waybill_id='"+bill.id+"' limit 1)w");
+    const wagonStatus=()=>sql("select status from railway_carriage_owner where railway_carriage_id='"+wagon.id+"'");
     const section = '/comprehensive-service-orders/'+railOrder.order.id;
     await api(section+'/prepare-transport','POST',{section:'INITIAL_RECEIVING'});
     await api(section+'/complete-section','POST',{section:'INITIAL_RECEIVING',action:'CONFIRM_ROUTES'});
@@ -65,6 +67,8 @@ async function main() {
     assert.equal(sql("select status from waybill_container where id='"+railRow.id+"'"),'FINISHED');
     assert.equal(sql("select receiving_date from container_visit_facts where receiving_order_id='"+railOrder.receivingOrder.id+"'"),'2026-09-20');
 
+    assert.equal(wagonStatus(),'ON_TERMINAL');
+    assert.equal(sql("select client_owner_id from railway_carriage_owner where railway_carriage_id='"+wagon.id+"'"),x.b);
     for (const mode of ['ALL','CONTAINER','RAILWAY_CARRIAGE','NONE','NONE_CONTAINER']) {
         await clock('2026-10-01');
         const [a,b]=[await x.generated(),await x.generated()];
@@ -76,17 +80,26 @@ async function main() {
             fillingType:mode,departureAt:'2026-10-01T12:00:00',consignee:party,
             containers:mode==='CONTAINER'?rows:[],
             railwayCarriages:mode==='ALL'||mode==='RAILWAY_CARRIAGE'?[{railwayCarriageId:wagon.id,containers:mode==='ALL'?rows:[]}]:[],
-            railwayCarriageQuantities:['CONTAINER','NONE'].includes(mode)?[{quantity:1}]:[],
-            containerQuantities:known?[]:[{quantity:2,type:'STANDARD_40',empty:true,items:[]}]};
+            railwayCarriageQuantities:['CONTAINER','NONE'].includes(mode)?[{quantity:1,typeId:wagon.type_id,ownerRailwayCarriageId:x.b}]:[],
+            containerQuantities:known?[]:[{quantity:rail?2:1,type:'STANDARD_40',empty:true,items:[],ownerClientId:x.a}]};
+        if (!rail) {
+            await api('/shipping-orders','POST',{...body,containerQuantities:[{...body.containerQuantities[0],quantity:2}]},400);
+        }
         const order=(await api('/shipping-orders','POST',body,201)).id;
         const detail=await api('/shipping-orders/'+order);
         assert.equal(detail.fillingType,mode);
         if (mode==='CONTAINER') assert.equal(detail.containers.find(row=>row.containerId===a).taskId,task('shipping',order,a));
         if (mode==='RAILWAY_CARRIAGE') assert.equal(detail.railwayCarriages[0].railwayCarriageCode,wagon.code);
-        if (!known) assert.equal(detail.containerQuantities[0].quantity,2);
+        if (!known) assert.equal(detail.containerQuantities[0].quantity,rail?2:1);
         if (rail) {
             const route=await api('/routes','POST',{routeType:'SHIPPING',departureAt:'2026-10-01T12:00:00+03:00',transportType:'RAILWAY',terminalAreaId:site.id,orderIds:[order]},201);
+            if (mode==='CONTAINER') {
+                sql("update shipping_order_railway_carriage_qty set quantity=10000 where shipping_order_id='"+order+"'");
+                await api('/routes/'+route.route.id+'/confirm','POST',{},409);
+                sql("update shipping_order_railway_carriage_qty set quantity=1 where shipping_order_id='"+order+"'");
+            }
             await api('/routes/'+route.route.id+'/confirm','POST',{});
+            assert.equal(wagonStatus(),['ALL','RAILWAY_CARRIAGE'].includes(mode)?'RESERVED_OUT':'ON_TERMINAL');
         } else await x.confirm('shipping',order);
         await clock('2026-10-04');
         if (mode!=='ALL') await x.finish('shipping',order,409);
@@ -101,13 +114,26 @@ async function main() {
             const etsng = sql('select code from etsng_code order by id limit 1');
             pa.cargoResult[0].cargoSpec=[{code:etsng,qty:125}];
         }
+        if (mode==='NONE') {
+            const other = sql("select code from railway_carriage c where not exists(select 1 from railway_carriage_owner o where o.railway_carriage_id=c.id) limit 1");
+            await send({...pa,cargoResult:[{...pa.cargoResult[0],transportNumber:other}]},'INVALID');
+        }
         await send(pa);
+        if (!rail) {
+            await send(pa);
+            assert.equal(sql("select order_status from shipping_order where id='"+order+"'"),'COMPLETED');
+            assert.equal(audit(a,'DEPARTURE'),'2026-10-02 10:11:12');
+            await x.cancel('shipping',order);
+            console.log('PASS NONE_CONTAINER: one empty container, planned owner, duplicate and cancellation');
+            continue;
+        }
         assert.equal(audit(a,'DEPARTURE'),'2026-10-02 10:11:12');
         assert.equal(sql("select order_status from shipping_order where id='"+order+"'"),'CONFIRMED');
         await Promise.all([send(pb),send(pb)]);
         assert.equal(sql("select order_status from shipping_order where id='"+order+"'"),'COMPLETED');
         assert.equal(audit(b,'DEPARTURE'),'2026-10-03 10:11:12');
         assert.equal(sql("select count(*) from container_owner_history_view where order_id='"+order+"' and operation_type='DEPARTURE'"),'2');
+        if (rail) assert.equal(wagonStatus(),'DEPARTED');
         if (rail) assert.equal(sql("select count(*) from shipping_order_railway_carriage where shipping_order_id='"+order+"'"),'1');
         if (mode==='NONE') {
             assert.equal(sql("select wight_net=125 from shipping_order_container_item where shipping_order_container_id='"+pa._id+"'"),'t');
@@ -115,6 +141,7 @@ async function main() {
         }
         await x.cancel('shipping',order);
         assert.equal(sql("select status from container_owner where container_id='"+a+"'"),'ON_TERMINAL');
+        assert.equal(wagonStatus(),'ON_TERMINAL');
         console.log('PASS '+mode+' creation, per-container time, partial result, duplicate, completion and cancellation');
     }
     assert.equal(sql("select to_regclass('container_movement') is null"),'t');

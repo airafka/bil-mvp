@@ -48,6 +48,7 @@ public class ComprehensiveServiceOrderService {
         CreatedOrderResponse delivery = receiving.create(new CreateOrderRequest(
                 request.clientId(), request.contractId(), areaId, TransportType.RAILWAY,
                 List.of(), request.waybillIds(), List.of(), FillingType.ALL, List.of(), List.of()).withDefaultContainerOwner(request.defaultContainerOwnerId()));
+        if (request.defaultRailwayCarriageOwnerId()!=null) jdbc.update("update receiving_order set default_railway_carriage_owner_id=? where id=?",request.defaultRailwayCarriageOwnerId(),delivery.id());
         if (!request.containerOwners().isEmpty()) {
             receiving.updateContainerAttributes(delivery.id(), new UpdateOrderContainersRequest(request.containerOwners().stream()
                     .map(owner -> new UpdateOrderContainersRequest.Attributes(owner.containerId(), owner.ownerClientId(), null, null, null)).toList()));

@@ -12,6 +12,9 @@ public record ContainerQuantityRequest(
         ContainerType type,
         @NotNull(message = "Признак порожнего КТК обязателен")
         Boolean empty,
-        List<@NotNull(message = "Данные груза обязательны") @Valid CargoRequest> items
+        List<@NotNull(message = "Данные груза обязательны") @Valid CargoRequest> items, java.util.UUID ownerClientId
 ) {
+    public ContainerQuantityRequest(Integer quantity, ContainerType type, Boolean empty, List<CargoRequest> items) {
+        this(quantity, type, empty, items, null);
+    }
 }

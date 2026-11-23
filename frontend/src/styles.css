@@ -373,11 +373,11 @@ tbody tr:hover { background: #fbfcff; }
 .quantity-table-section { min-width: 0; }
 .quantity-table { width: 100%; min-width: 680px; border: 1px solid #edf0f4; border-radius: 2px; overflow: hidden; }
 .quantity-table-header, .quantity-table-row { display: grid; align-items: center; }
-.quantity-table-header.carriage-quantity-grid, .quantity-table-row.carriage-quantity-grid { grid-template-columns: 58px minmax(190px, .55fr) minmax(300px, 1fr) 44px; }
-.quantity-table-header.container-quantity-grid, .quantity-table-row.container-quantity-grid { grid-template-columns: 58px minmax(180px, .55fr) minmax(300px, 1fr) 150px 44px; }
+.quantity-table-header.carriage-quantity-grid, .quantity-table-row.carriage-quantity-grid { grid-template-columns: 44px minmax(110px, .5fr) minmax(160px, 1fr) minmax(220px, 1fr) 44px; }
+.quantity-table-header.container-quantity-grid, .quantity-table-row.container-quantity-grid { grid-template-columns: 44px minmax(90px, .5fr) minmax(135px, 1fr) minmax(205px, 1fr) 90px 44px; }
 .quantity-table-header { min-height: 36px; color: #3f444d; background: #edf3ff; font-size: 12px; font-weight: 500; }
 .quantity-table-header > span { height: 100%; display: flex; align-items: center; padding: 0 10px; border-right: 1px solid #e3e9f4; }
-.quantity-table-header > span:first-child, .quantity-table-header > span:last-child, .quantity-table-header.container-quantity-grid > span:nth-child(4) { justify-content: center; }
+.quantity-table-header > span:first-child, .quantity-table-header > span:last-child, .quantity-table-header.container-quantity-grid > span:nth-child(5) { justify-content: center; }
 .quantity-table-header b { margin-left: 3px; color: #e05160; }
 .quantity-table-row { min-height: 44px; background: #fff; border-top: 1px solid #edf0f4; }
 .quantity-table-row:nth-child(odd) { background: #fcfdff; }

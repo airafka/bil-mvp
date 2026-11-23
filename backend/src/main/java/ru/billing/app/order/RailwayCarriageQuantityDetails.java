@@ -7,6 +7,6 @@ public record RailwayCarriageQuantityDetails(
         int quantity,
         UUID typeId,
         String typeCode,
-        String typeName
+        String typeName, UUID ownerRailwayCarriageId, String ownerName
 ) {
 }

@@ -16,6 +16,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { UiInput, UiSelect } from '../components/FormControls'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { StockOwnerSelect } from '../components/StockOwnerSelect'
 import { getAvailableOrderServices, createOrder, createComprehensiveServiceOrder, getContracts, getTariffClients, getRoutes, getReferenceOptions, getTerminalAreas, getTransportTypes } from '../api'
 import { WaybillSelectionTable } from '../components/WaybillSelectionTable'
 import type {
@@ -223,7 +224,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
     setRequestError('')
     try {
       if (serviceMode) {
-        const created = await createComprehensiveServiceOrder({ complexServiceId, clientId: form.clientId, contractId: form.contractId, waybillIds: form.waybills.map(item => item.id), defaultContainerOwnerId: form.defaultContainerOwnerId || '', containerOwners: receivingWaybillRows(form.waybills, form.defaultContainerOwnerId, clients, containerOwners).filter(row => containerOwners[row.containerId]).map(row => ({ containerId: row.containerId, ownerClientId: containerOwners[row.containerId] })) })
+        const created = await createComprehensiveServiceOrder({ complexServiceId, clientId: form.clientId, contractId: form.contractId, waybillIds: form.waybills.map(item => item.id), defaultContainerOwnerId: form.defaultContainerOwnerId || '', defaultRailwayCarriageOwnerId: form.defaultRailwayCarriageOwnerId || form.clientId, containerOwners: receivingWaybillRows(form.waybills, form.defaultContainerOwnerId, clients, containerOwners).filter(row => containerOwners[row.containerId]).map(row => ({ containerId: row.containerId, ownerClientId: containerOwners[row.containerId] })) })
         navigate('/comprehensive-service-orders/' + created.order.id)
         return
       }
@@ -391,6 +392,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
 
               </div>
             </div>
+            {isRailwayReceiving && <label className="field horizontal-field"><span>Собственник вагонов по умолчанию</span><UiSelect value={form.defaultRailwayCarriageOwnerId || form.clientId} onChange={e => setForm(state => ({ ...state, defaultRailwayCarriageOwnerId: e.target.value }))}><option value="">Выберите собственника</option>{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</UiSelect></label>}
             {isRailwayReceiving && <WaybillFilterFields title={serviceMode ? 'Накладные ЭТРАН' : undefined} value={waybillFilter} disabled={submitting} onChange={value => {
               setWaybillFilter(value)
               setForm(state => ({ ...state, waybills: [] }))
@@ -452,8 +454,8 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
                 <span>Количество КТК <b>*</b></span>
                 <span className="field-control">
                   <UiInput
-                    type="number"
-                    min="1"
+                    type="number" readOnly
+                    min="1" max="1"
                     step="1"
                     value={form.containerQuantities[0]?.quantity ?? ''}
                     placeholder="Введите количество"
@@ -486,7 +488,8 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
                 </span>
               </label>
               <label className="field horizontal-field">
-                <span>Состояние КТК <b>*</b></span>
+                <span>Собственник КТК <b>*</b></span><StockOwnerSelect type={form.containerQuantities[0]?.type} value={form.containerQuantities[0]?.ownerClientId} onChange={ownerClientId => setForm(state => ({ ...state, containerQuantities: state.containerQuantities.map(row => ({ ...row, ownerClientId })) }))} />
+              </label><label className="field horizontal-field"><span>Состояние КТК <b>*</b></span>
                 <span className="field-control"><UiInput value="Порожний" readOnly aria-readonly="true" /></span>
               </label>
             </div>
@@ -555,7 +558,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
                   <div className="quantity-table-header carriage-quantity-grid" role="row">
                     <span role="columnheader">№</span>
                     <span role="columnheader">Количество вагонов <b>*</b></span>
-                    <span role="columnheader">Род/тип вагона</span>
+                    <span role="columnheader">Род/тип вагона *</span><span role="columnheader">Собственник вагона *</span>
                     <span role="columnheader" aria-label="Действия" />
                   </div>
                   {form.railwayCarriageQuantities.map((row, index) => (
@@ -566,6 +569,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
                         <option value="">Тип не указан</option>
                         {railwayCarriageTypes.map((option) => <option key={option.id} value={option.id} disabled={row.typeId !== option.id && form.railwayCarriageQuantities.some((item) => item.typeId === option.id)}>{option.name}</option>)}
                       </UiSelect></label>
+                      <label className="field" role="cell"><StockOwnerSelect wagon type={row.typeId} value={row.ownerRailwayCarriageId} onChange={ownerRailwayCarriageId => setForm(state => ({ ...state, railwayCarriageQuantities: state.railwayCarriageQuantities.map(item => item.key === row.key ? { ...item, ownerRailwayCarriageId } : item) }))} /></label>
                       <button type="button" className="row-clear-button" aria-label={`Удалить строку вагонов ${index + 1}`} onClick={() => setForm((state) => ({ ...state, railwayCarriageQuantities: state.railwayCarriageQuantities.filter((item) => item.key !== row.key) }))}>×</button>
                     </div>
                   ))}
@@ -586,7 +590,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
                   <div className="quantity-table-header container-quantity-grid" role="row">
                     <span role="columnheader">№</span>
                     <span role="columnheader">Количество КТК <b>*</b></span>
-                    <span role="columnheader">Тип КТК <b>*</b></span>
+                    <span role="columnheader">Тип КТК <b>*</b></span><span role="columnheader">Собственник КТК</span>
                     <span role="columnheader">Порожний</span>
                     <span role="columnheader" aria-label="Действия" />
                   </div>
@@ -595,6 +599,7 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
                       <span className="ktk-row-number" role="cell">{rowIndex + 1}</span>
                       <label className="field" role="cell"><span className="sr-only">Количество КТК в строке {rowIndex + 1}</span><UiInput type="number" min="1" step="1" value={row.quantity} onChange={(event) => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.map((item) => item.key === row.key ? { ...item, quantity: event.target.value } : item) }))} /></label>
                       <label className="field" role="cell"><span className="sr-only">Тип КТК в строке {rowIndex + 1}</span><UiSelect value={row.type} onChange={(event) => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.map((item) => item.key === row.key ? { ...item, type: event.target.value as typeof row.type } : item) }))}><option value="">Выберите тип</option>{containerTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.name}</option>)}</UiSelect></label>
+                      <label className="field" role="cell"><StockOwnerSelect required={false} type={row.type} value={row.ownerClientId} onChange={ownerClientId => setForm(state => ({ ...state, containerQuantities: state.containerQuantities.map(item => item.key === row.key ? { ...item, ownerClientId } : item) }))} /></label>
                       <label className="table-checkbox" role="cell"><UiInput type="checkbox" checked={row.empty} onChange={(event) => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.map((item) => item.key === row.key ? { ...item, empty: event.target.checked, items: event.target.checked ? [] : item.items } : item) }))} /><span aria-hidden="true">{row.empty ? '✓' : ''}</span><span className="sr-only">Порожний</span></label>
                       <button type="button" className="row-clear-button" aria-label={`Удалить строку КТК ${rowIndex + 1}`} onClick={() => setForm((state) => ({ ...state, containerQuantities: state.containerQuantities.filter((item) => item.key !== row.key) }))}>×</button>
                     </div>

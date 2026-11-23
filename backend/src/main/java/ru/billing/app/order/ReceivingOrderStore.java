@@ -302,8 +302,8 @@ public class ReceivingOrderStore {
         return jdbcTemplate.queryForObject(
                 "insert into receiving_order "
                         + "(id, client_id, terminal_area_catalog_id, transport_type, contract_id, "
-                        + "order_status, plan_receiving_date_time, consignor, default_container_owner_id, authorized_representative, phone, email, comment, transport_waybill_number) "
-                        + "values (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?) returning number",
+                        + "order_status, plan_receiving_date_time, consignor, default_container_owner_id, authorized_representative, phone, email, comment, transport_waybill_number, default_railway_carriage_owner_id) "
+                        + "values (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?) returning number",
                 Integer.class,
                 orderId,
                 request.clientId(),
@@ -312,7 +312,8 @@ public class ReceivingOrderStore {
                 request.contractId(),
                 request.arrivalAt(),
                 ru.billing.app.reference.PartyReferences.clientName(jdbcTemplate, request.consignor()), request.effectiveDefaultContainerOwnerId(),
-                request.authorizedRepresentative(), request.phone(), request.email(), request.comment(), request.transportWaybillNumber()
+                request.authorizedRepresentative(), request.phone(), request.email(), request.comment(), request.transportWaybillNumber(),
+                request.transportType()==TransportType.RAILWAY ? java.util.Objects.requireNonNullElse(request.defaultRailwayCarriageOwnerId(),request.clientId()) : null
         );
     }
 

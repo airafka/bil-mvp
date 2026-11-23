@@ -16,8 +16,10 @@ public class OrderCancellationService {
     public record Request(@NotBlank String expectedStatus) {}
     private final JdbcTemplate jdbc;
     private final ContainerStockService stock;
+    private final ru.billing.app.containerstock.RailwayCarriageStock wagons;
     private final BillingCancellationService billing;
-    public OrderCancellationService(JdbcTemplate jdbc,ContainerStockService stock,BillingCancellationService billing) {
+    public OrderCancellationService(JdbcTemplate jdbc,ContainerStockService stock,BillingCancellationService billing,ru.billing.app.containerstock.RailwayCarriageStock wagons) {
+        this.wagons=wagons;
         this.jdbc=jdbc;this.stock=stock;this.billing=billing;
     }
     @Transactional
@@ -45,6 +47,7 @@ public class OrderCancellationService {
             (rs,n)->rs.getString(1),id);
         if(!dependent.isEmpty())throw conflict("CANCELLATION_DEPENDENT_ORDERS","Сначала отмените связанные "+(incoming?"вывозы":"возвраты")+" №"+String.join(", ",dependent));
         stock.cancel(resource,id,current.status());
+        wagons.checkCancellation(incoming,id);
         billing.cancel(resource,id);
         jdbc.update("update "+table+" set order_status='CANCELLED' where id=?",id);
         if(incoming) {

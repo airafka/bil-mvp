@@ -41,7 +41,7 @@ class ShippingOrderStoreTest {
         assertThat(response.code()).isEqualTo(101);
         verify(jdbcTemplate).update(
                 startsWith("insert into shipping_order_container_qty"),
-                any(), any(), eq(1), eq("STANDARD_40"), eq(true)
+                any(), any(), eq(1), eq("STANDARD_40"), eq(true), eq(request.containerQuantities().getFirst().ownerClientId())
         );
         verify(jdbcTemplate, never()).update(
                 startsWith("insert into shipping_order_container "),

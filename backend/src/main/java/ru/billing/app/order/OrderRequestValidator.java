@@ -113,10 +113,10 @@ public class OrderRequestValidator {
         if (row == null) {
             throw badRequest("CONTAINER_QUANTITY_REQUIRED", "Данные КТК обязательны");
         }
-        if (row.quantity() == null || row.quantity() <= 0) {
+        if (row.quantity() == null || row.quantity() != 1) {
             throw badRequest(
                     "INVALID_QUANTITY",
-                    "Количество КТК должно быть целым числом больше нуля"
+                    "В безномерном автовывозе допустим один КТК"
             );
         }
         if (row.type() == null) {
@@ -267,7 +267,6 @@ public class OrderRequestValidator {
     }
 
     private void validateContainerQuantities(List<ContainerQuantityRequest> quantities) {
-        Set<ContainerType> emptyTypes = new HashSet<>();
         Set<String> loadedRows = new HashSet<>();
         for (ContainerQuantityRequest row : quantities) {
             if (row == null) {
@@ -284,11 +283,7 @@ public class OrderRequestValidator {
             }
             List<CargoRequest> items = row.items() == null ? List.of() : row.items();
             validateCargo(row.empty(), items);
-            if (Boolean.TRUE.equals(row.empty())) {
-                if (!emptyTypes.add(row.type())) {
-                    throw badRequest("DUPLICATE_CONTAINER_QUANTITY_ROW", "Порожняя группа этого типа уже добавлена");
-                }
-            } else {
+            if (!row.empty()) {
                 List<String> itemKeys = new ArrayList<>();
                 Set<String> uniqueItems = new HashSet<>();
                 for (CargoRequest item : items) {
@@ -299,7 +294,7 @@ public class OrderRequestValidator {
                     itemKeys.add(key);
                 }
                 itemKeys.sort(String::compareTo);
-                String rowKey = row.quantity() + ":" + row.type() + ":" + String.join("|", itemKeys);
+                String rowKey = row.type() + ":" + String.join("|", itemKeys);
                 if (!loadedRows.add(rowKey)) {
                     throw badRequest("DUPLICATE_CONTAINER_QUANTITY_ROW", "Полностью одинаковая группа КТК уже добавлена");
                 }

@@ -17,7 +17,8 @@ public class OrderStatusService {
     private final ru.billing.app.billing.BillingService billing;
     private final ru.billing.app.containerstock.ContainerStockService stock;
     private final TosContainerTasks tos;
-    public OrderStatusService(JdbcTemplate jdbc, ru.billing.app.billing.BillingService billing, ru.billing.app.containerstock.ContainerStockService stock,TosContainerTasks tos) { this.tos=tos; this.jdbc = jdbc; this.billing = billing; this.stock = stock; }
+    private final ru.billing.app.containerstock.RailwayCarriageStock wagons;
+    public OrderStatusService(JdbcTemplate jdbc, ru.billing.app.billing.BillingService billing, ru.billing.app.containerstock.ContainerStockService stock,TosContainerTasks tos, ru.billing.app.containerstock.RailwayCarriageStock wagons) { this.wagons=wagons; this.tos=tos; this.jdbc = jdbc; this.billing = billing; this.stock = stock; }
 
     @Transactional
     public CreatedOrderResponse finish(String resource, UUID id, String eventCode) {
@@ -123,7 +124,10 @@ public class OrderStatusService {
             if (remaining != null && remaining > 0) throw new ApiException(HttpStatus.CONFLICT,
                     "SERVICE_CONTAINERS_UNASSIGNED", "Создайте заявки на вывоз для всех КТК перед выполнением услуги");
         }
-        if(request.status()==Status.CONFIRMED) stock.reserve(resource,id);
+        if(request.status()==Status.CONFIRMED) {
+            stock.reserve(resource,id);
+            wagons.confirm(resource.equals("receiving-orders"),id);
+        }
         else {
             if ("shipping-orders".equals(resource) && !"ALL".equals(jdbc.queryForObject("select filling_type from shipping_order where id=?",String.class,id)))
                 throw new ApiException(HttpStatus.CONFLICT,"TOS_RESULT_REQUIRED","Для безномерного вывоза нужны фактические номера из пакета TOS");
@@ -146,6 +150,7 @@ public class OrderStatusService {
     }
 
     private void complete(String resource,UUID id,String table,String statusColumn) {
+        if (!resource.equals("comprehensive-service-orders")) wagons.complete(resource.equals("receiving-orders"),id);
         billing.complete(resource, id);
         jdbc.update("update " + table + " set " + statusColumn + " = ? where id = ?", Status.COMPLETED.name(), id);
         if (!resource.equals("comprehensive-service-orders")) {
