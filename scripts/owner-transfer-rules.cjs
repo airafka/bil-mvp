@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { init, api, sql, clock } = require('./owner-register-check.cjs');
+const { init, api, sql, clock, expectStorage } = require('./owner-register-check.cjs');
 
 async function main() {
     const x = await init('billing-register-owner-new');
@@ -38,10 +38,36 @@ async function main() {
     await api(endpoint + '/accept', 'POST');
     const current = () => sql(`select client_id from container_owner where container_id='${a.ktk}'`);
     assert.equal(current(), x.a, 'Future transfer waits for the calendar');
-    await clock(next);
-    assert.equal(current(), x.b);
+    const events = id => Number(sql(`select count(*) from container_owner_history where order_id='${id}'`));
+    assert.equal(events(draft.id), 0);
+    const second = await x.transfer(a.ktk,x.c,'2026-09-18');
+    const revoked = await x.transfer(b.ktk,x.c,'2026-09-18');
+    await api('/service-orders/'+revoked+'/withdraw','POST');
+    const early = await x.arrival();
+    const shipped = await x.transfer(early.ktk,x.b,'2026-09-18');
+    await x.ship(early.ktk);
+    assert.equal(events(second), 0);
+    await clock('2026-09-19');
+    assert.equal(current(), x.c);
+    for (const [id,date,from,to] of [[draft.id,next,x.a,x.b],[second,'2026-09-18',x.b,x.c]]) {
+        assert.equal(events(id), 1);
+        assert.equal(sql(`select count(*) from container_owner_history h join container_ownership_period p
+          on p.start_container_owner_history_id=h.id where h.order_id='${id}' and h.storage_period_id=p.id
+          and (h.occurred_at at time zone 'Europe/Moscow')::date='${date}' and h.old_client_id='${from}' and h.new_client_id='${to}'`),'1');
+    }
+    assert.equal(events(revoked), 0);
+    assert.equal(events(shipped), 0);
+    await expectStorage(a.ktk,[{ownerClientId:x.a,storageDays:2},{ownerClientId:x.b,storageDays:1},{ownerClientId:x.c,storageDays:2}]);
+    await clock(day);
+    assert.equal(current(), x.a);
+    await clock('2026-09-19');
+    assert.equal(events(draft.id), 1);
+    assert.equal(events(second), 1);
+    const back = await x.transfer(a.ktk,x.b,'2026-09-16');
+    assert.equal(events(back), 1);
+    assert.equal(current(), x.c);
     await x.ship(a.ktk);
     assert.equal(await available(x.b, next), false, 'Departed container is ineligible');
-    console.log('PASS receipt/date boundary, single source, atomic draft edit, shipping reservation, future and departed ownership');
+    console.log('PASS transfer eligibility, reservation, withdrawal, early shipping, dated history, calendar replay, backdating and storage days/CSV');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

@@ -74,10 +74,25 @@ function snapshot(){
 function compareMigration(before,after){
  assert.deepEqual(Object.keys(after.tables),Object.keys(before.tables),'No business tables added/dropped');
  const order=rows=>rows.map(r=>JSON.stringify(Object.fromEntries(Object.entries(r).sort(([a],[b])=>a.localeCompare(b))))).sort();
+ const eventsMovedToPlans=new Set();
+ const originalPeriods=new Map(before.tables.container_ownership_period.map(p=>[p.id,p]));
+ for(const plan of after.tables.container_ownership_period.filter(p=>p.plan_order_id)){
+  const event=before.tables.container_owner_history.find(e=>e.id===originalPeriods.get(plan.id).start_container_owner_history_id);
+  assert(event && event.order_type==='SERVICE_ORDER');
+  assert.equal(plan.start_container_owner_history_id,null);
+  assert.equal(plan.plan_order_id,event.order_id);
+  assert.equal(plan.plan_at,event.occurred_at);
+  eventsMovedToPlans.add(event.id);
+ }
  for(const [table,rows] of Object.entries(before.tables)){
   if(table==='flyway_schema_history')continue;
   const actual=after.tables[table].map(row=>{
    if(table==='container_owner'){const {client_id,...original}=row;return original;}
+   if(table==='container_ownership_period'){
+    const {plan_at,plan_order_id,...original}=row;
+    if(plan_order_id)original.start_container_owner_history_id=originalPeriods.get(row.id).start_container_owner_history_id;
+    return original;
+   }
    if(table==='service_order'){
     const {source_client_id,...original}=row;
     const owners=new Set(before.tables.service_order_container.filter(link=>link.service_order_id===row.id).map(link=>link.expected_client_id));
@@ -88,14 +103,16 @@ function compareMigration(before,after){
    }
    return row;
   });
-  assert.deepEqual(order(actual),order(rows),'Unchanged contents and identifiers: '+table);
+  const expected=table==='container_owner_history'?rows.filter(e=>!eventsMovedToPlans.has(e.id)):rows;
+  assert.deepEqual(order(actual),order(expected),'Preserved contents and identifiers: '+table);
  }
  assert.deepEqual(after.sequences,before.sequences,'All sequence values and is_called unchanged');
  assert.deepEqual(order(after.tables.flyway_schema_history.filter(r=>Number(r.version)<=59)),order(before.tables.flyway_schema_history),'Existing Flyway records unchanged');
  const owners=new Map(before.owners.map(o=>[o.id,o.client_id]));
  for(const o of after.tables.container_owner){assert(owners.has(o.id));assert.equal(o.client_id,owners.get(o.id),'Owner migrated before any API refresh');}
  for(const old of before.constraints)assert(after.constraints.some(c=>JSON.stringify(c)===JSON.stringify(old)),'Existing constraint preserved: '+old.name);
- assert.deepEqual(after.triggers,before.triggers,'Existing triggers preserved');
+ assert.deepEqual(after.triggers.filter(t=>t.name!=='actual_transfer_date'),before.triggers,'Existing triggers preserved');
+ assert(after.triggers.some(t=>t.name==='actual_transfer_date'));
  assert.equal(sql("select attnotnull from pg_attribute where attrelid='container_owner'::regclass and attname='client_id'"),'t');
  assert(after.constraints.some(c=>c.table_name==='container_owner'&&c.contype==='f'&&c.convalidated&&c.definition==='FOREIGN KEY (client_id) REFERENCES client(id)'),'Validated owner FK');
  assert.equal(sql('select count(*) from container_owner o join container_owner_effective e using(id) where o.client_id is distinct from e.client_id'),'0');
@@ -284,10 +301,10 @@ await expectOwner(f.pending.ktk,x.b);assert.equal(count('container_visit',f.pend
 await expectOwner(f.repeat.ktk,x.b);await x.cancel('receiving',f.repeat.pending.receiving);await expectOwner(f.repeat.ktk,x.a);assert.equal(count('container_visit',f.repeat.ktk),1);
 const again=await x.arrival(f.repeat.ktk,x.c,false);await expectOwner(f.repeat.ktk,x.c);assert.equal(count('container_visit',f.repeat.ktk),1);await x.finish('receiving',again.receiving);assert.equal(count('container_visit',f.repeat.ktk),2);await x.cancel('receiving',again.receiving);await expectOwner(f.repeat.ktk,x.a);
 console.log('PASS receiving: selected owner in EXPECTED; no premature visit; both cancellations restore owner; repeated visit isolated');
-const draft=await x.transport('shipping',f.open.ktk,x.a),initial=stable();await expectOwner(f.open.ktk,x.a);await clock('2026-09-24');await expectOwner(f.open.ktk,x.a);await clock('2026-09-25');await expectOwner(f.open.ktk,x.b);
+const draft=await x.transport('shipping',f.open.ktk,x.a);await expectOwner(f.open.ktk,x.a);await clock('2026-09-24');await expectOwner(f.open.ktk,x.a);assert.equal(sql(`select count(*) from container_owner_history where order_id='${f.open.future}'`),'0');await clock('2026-09-25');await expectOwner(f.open.ktk,x.b);assert.equal(sql(`select count(*) from container_owner_history where order_id='${f.open.future}'`),'1');const effective=stable();
 assert.equal(sql(`select owner_container_id from shipping_order_container where shipping_order_id='${draft.id}'`),x.b);assert.equal(sql(`select owner_container_id from shipping_order_container where shipping_order_id='${f.open.shipping}'`),x.a);
-await clock('2026-09-24');await expectOwner(f.open.ktk,x.a);await clock('2026-09-27');await expectOwner(f.open.ktk,x.b);assert.deepEqual(stable(),initial);await x.cancel('shipping',f.open.shipping);await expectOwner(f.open.ktk,x.b);await x.cancel('shipping',draft.id);
-console.log('PASS dated transfer: calendar forward/back; only draft shipping follows owner; confirmed shipping frozen; no new audit events');
+await clock('2026-09-24');await expectOwner(f.open.ktk,x.a);await clock('2026-09-27');await expectOwner(f.open.ktk,x.b);assert.deepEqual(stable(),effective);await x.cancel('shipping',f.open.shipping);await expectOwner(f.open.ktk,x.b);await x.cancel('shipping',draft.id);
+console.log('PASS dated transfer: calendar forward/back; only draft shipping follows owner; confirmed shipping frozen; one effective transfer recorded');
 // Insert a historical owner between two existing assignments; latest owner stays B.
 const back=await x.arrival();await clock('2026-09-30');await x.transfer(back.ktk,x.b,'2026-09-29');await x.transfer(back.ktk,x.c,'2026-09-28');await expectOwner(back.ktk,x.b);await expectStorage(back.ktk,[{ownerClientId:x.a,storageDays:1},{ownerClientId:x.c,storageDays:1},{ownerClientId:x.b,storageDays:2}]);
 await clock('2026-09-28');await expectOwner(back.ktk,x.c);await clock('2026-09-27');await expectOwner(back.ktk,x.a);await clock('2026-09-30');await expectOwner(back.ktk,x.b);
@@ -303,12 +320,12 @@ const statuses=await Promise.all([1,2].map(()=>fetch(base+'/service-orders/'+id+
 const version=sql(`select version from container_owner where container_id='${race.ktk}'`),audit=stable();await Promise.all(Array.from({length:8},()=>api('/container-owners?size=100')));assert.equal(sql(`select version from container_owner where container_id='${race.ktk}'`),version);assert.deepEqual(stable(),audit);
 console.log('PASS concurrent confirmation: exactly one operation; repeated reads do not write unchanged register/history');
 // Stop only this test backend and simulate time passing; first API access catches up.
-const restart=await x.arrival();await x.transfer(restart.ktk,x.b,'2026-10-12');const beforeRestart=stable();run(['stop','billing-register-owner-new']);sql("update application_clock set business_date='2026-10-12',version=version+1 where id=1");assert.equal(physical(restart.ktk),x.a);run(['start','billing-register-owner-new']);
+const restart=await x.arrival();const restartOrder=await x.transfer(restart.ktk,x.b,'2026-10-12');assert.equal(sql(`select count(*) from container_owner_history where order_id='${restartOrder}'`),'0');run(['stop','billing-register-owner-new']);sql("update application_clock set business_date='2026-10-12',version=version+1 where id=1");assert.equal(physical(restart.ktk),x.a);run(['start','billing-register-owner-new']);
 for(let n=0;n<45;n++){try{if((await fetch('http://127.0.0.1:8355/actuator/health')).ok)break;}catch{}await new Promise(r=>setTimeout(r,1000));}
-await expectOwner(restart.ktk,x.b);assert.deepEqual(stable(),beforeRestart);
+await expectOwner(restart.ktk,x.b);assert.equal(sql(`select count(*) from container_owner_history where order_id='${restartOrder}'`),'1');
 // System clock mode must refresh a stale stored snapshot on access, too.
 await clock(null);const systemDate=(await api('/application-clock')).date;const yesterday=new Date(systemDate+'T12:00:00Z');yesterday.setUTCDate(yesterday.getUTCDate()-1);await clock(yesterday.toISOString().slice(0,10));const sys=await x.arrival();await x.transfer(sys.ktk,x.b,systemDate);sql('update application_clock set business_date=null,version=version+1 where id=1');assert.equal(physical(sys.ktk),x.a);await expectOwner(sys.ktk,x.b);
-console.log('PASS downtime/restart and system-date access: owner refreshed without scheduler or added history');
+console.log('PASS downtime/restart and system-date access: owner refreshed without scheduler; due history recorded once');
 // Rail receiving: no visit at confirmation; cancellation releases the bill for reuse.
 const service=(await api('/comprehensive-service-orders/available-services'))[0];const tariff=json(`select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where complex_service_id='${service.id}' and active order by id limit 1)t`);
 const bill=await api('/waybills/generate','POST',{standard20:1,standard40:0},201);const req={complexServiceId:service.id,clientId:tariff.client_id,contractId:tariff.contract_id,defaultContainerOwnerId:x.a,waybillIds:[bill.id]};
