@@ -19,6 +19,7 @@ const navigationGroups = [
   { title: 'Заявки', icon: 'documents', items: [
     { path: '/receiving-orders', title: 'Заявки на поставку', icon: 'paper' },
     { path: '/shipping-orders', title: 'Заявки на вывоз', icon: 'paper' },
+    { path: '/service-orders', title: 'Смена собственника', icon: 'paper' },
   ] },
 ]
 const navigation = navigationGroups.flatMap(group => group.items)
@@ -26,7 +27,6 @@ const navigation = navigationGroups.flatMap(group => group.items)
 export function AppLayout({ children }: { children: ReactNode }) {
   useResponsiveTables()
   const { pathname } = useLocation()
-  const sectionPath = pathname.startsWith('/service-orders') ? '/container-owners' : pathname
   const [expanded, setExpanded] = useState(false)
   const [menuClosing, setMenuClosing] = useState(false)
   const collapseForNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -40,7 +40,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(() => setMenuClosing(false), 350)
     return () => window.clearTimeout(timer)
   }, [menuClosing])
-  useEffect(() => { document.title = (navigation.find(item => sectionPath.startsWith(item.path))?.title ?? 'Контейнерная площадка') + ' · Контейнерная площадка'; window.scrollTo(0, 0) }, [pathname, sectionPath])
+  useEffect(() => { document.title = (navigation.find(item => pathname.startsWith(item.path))?.title ?? 'Контейнерная площадка') + ' · Контейнерная площадка'; window.scrollTo(0, 0) }, [pathname])
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   const toggleGroup = (title: string) => {
     setMenuClosing(false)
@@ -51,7 +51,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       return next
     })
   }
-  const current = navigation.find(item => sectionPath.startsWith(item.path))
+  const current = navigation.find(item => pathname.startsWith(item.path))
   const isCreating = pathname.endsWith('/new') || pathname.endsWith('/create') || pathname === '/waybills/generate'
   const isViewing = !isCreating && pathname.split('/').filter(Boolean).length > 1
   return <div className="app-shell" data-menu-expanded={expanded} data-menu-closing={menuClosing}>
@@ -61,7 +61,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <nav id="main-navigation" className="main-nav navigation-tree" aria-label="Основная навигация">
         {navigationGroups.map((group, index) => {
           const open = expanded && openGroups.has(group.title)
-          const active = group.items.some(item => sectionPath.startsWith(item.path))
+          const active = group.items.some(item => pathname.startsWith(item.path))
           return <section className="nav-section" key={group.title} aria-labelledby={`nav-group-${index}`}>
             <h2 className="nav-section-heading" id={`nav-group-${index}`}>
               {group.items.length ? <button type="button" className={`nav-section-toggle ${active ? 'highlighted' : ''}`} aria-label={group.title} title={group.title} aria-expanded={open} aria-controls={`nav-children-${index}`} onClick={() => toggleGroup(group.title)}>
@@ -71,7 +71,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </button> : <div className="nav-section-label" title={group.title}><span className="nav-section-icon" aria-hidden="true" style={{ maskImage: `url(/icons/figma/${group.icon}.svg)` }} /><span className="nav-label">{group.title}</span></div>}
             </h2>
             {group.items.length > 0 && <div className="nav-children" id={`nav-children-${index}`} data-open={open} inert={!open} aria-hidden={!open}><div className="nav-children-inner">
-              {group.items.map(item => <div className="nav-entry" key={item.path}><NavLink to={item.path} onPointerEnter={() => preloadNavigation(item.path)} onFocus={() => preloadNavigation(item.path)} onPointerDown={() => preloadNavigation(item.path)} onClick={collapseForNavigation} className={({ isActive }) => isActive || (item.path === '/container-owners' && sectionPath === item.path) ? 'active' : ''} title={item.title} aria-label={item.title}><span className="nav-label">{item.title}</span></NavLink></div>)}
+              {group.items.map(item => <div className="nav-entry" key={item.path}><NavLink to={item.path} onPointerEnter={() => preloadNavigation(item.path)} onFocus={() => preloadNavigation(item.path)} onPointerDown={() => preloadNavigation(item.path)} onClick={collapseForNavigation} className={({ isActive }) => isActive ? 'active' : ''} title={item.title} aria-label={item.title}><span className="nav-label">{item.title}</span></NavLink></div>)}
             </div></div>}
           </section>
         })}
