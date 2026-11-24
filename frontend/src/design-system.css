@@ -38,8 +38,6 @@ tbody tr:hover, .service-compact-table tbody tr:hover { background: #f2f7ff; }
 .order-code { color: var(--blue); }
 .table-wrap td a { color: var(--blue); }
 .table-wrap td a:hover { text-decoration: underline; text-underline-offset: 3px; }
-.service-dashboard > .billing-charges-panel > .service-charge-totals { padding: 16px; margin: 0; }
-.billing-charges-panel td:nth-child(7), .billing-charges-panel td:nth-child(8) { text-align: left; font-variant-numeric: tabular-nums; }
 .status-badge { align-items: center; justify-content: center; min-width: 0; min-height: 24px; padding: 3px 8px; font-size: 12px; font-weight: 400; line-height: 18px; border-radius: 5px; white-space: nowrap; }
 .status-badge[data-status="DRAFT"] { color: #191a1f; background: #f2f4f7; }
 .status-badge[data-status="CONFIRMED"] { color: #175cd3; background: #eff8ff; }
@@ -69,7 +67,7 @@ tbody tr:hover, .service-compact-table tbody tr:hover { background: #f2f7ff; }
 .view-data-row:nth-child(odd) { background: var(--app-background); }
 .view-data-table, .ktk-table, .cargo-table { border-color: var(--app-border); border-radius: 5px; }
 .form-footer { justify-content: flex-end; }
-.form-footer, .complex-service-actions { position: sticky; bottom: 0; z-index: 3; padding: 16px 0; background: white; }
+.form-footer { position: sticky; bottom: 0; z-index: 3; padding: 16px 0; background: white; }
 .breadcrumbs { min-width: 0; overflow: hidden; white-space: nowrap; }
 .breadcrumbs a { color: #9ca3b1; text-overflow: ellipsis; overflow: hidden; }
 .breadcrumbs a:hover { color: var(--blue); }
@@ -141,7 +139,7 @@ tbody th { position: static; }
 .app-shell .ui-control:not(:disabled):hover { border-color: #acbcd4; }
 .app-shell .ui-control::placeholder { color: #7b879a; }
 .field:has(> .ui-control:disabled) > span:first-child { color: #667085; }
-.form-footer, .complex-service-actions { border-top: 1px solid #e8ecf2; margin-top: 20px; gap: 12px; }
+.form-footer { border-top: 1px solid #e8ecf2; margin-top: 20px; gap: 12px; }
 .section-shortcuts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; padding: 6px; background: #eef2f7; border-radius: 6px; width: fit-content; }
 .section-shortcuts a { padding: 8px 12px; color: #475467; font-size: 13px; border-radius: 4px; }
 .section-shortcuts a:hover { color: var(--blue); background: white; }
@@ -171,7 +169,7 @@ tbody th { position: static; }
  .main-nav a { width: 110px; height: 58px; flex-direction: column; justify-content: center; gap: 4px; padding: 4px; }
  .app-shell .main-nav .nav-label { display: block; font-size: 10px; max-width: 106px; }
  .workspace { padding-bottom: 84px; }
- .form-footer, .complex-service-actions { bottom: 78px; }
+ .form-footer { bottom: 78px; }
  .section-shortcuts { width: 100%; }
  .section-shortcuts a { padding: 8px; }
  .details-grid > div { grid-template-columns: minmax(100px, .8fr) minmax(0,1fr); }
@@ -236,16 +234,6 @@ tbody th { position: static; }
 .bulk-return-heading h2 { margin: 0; padding: 0; }
 .bulk-return-actions { border-top: 1px solid var(--line); }
 .bulk-return-actions span { flex: 1 1 100%; font-size: 13px; color: var(--muted); }
-.invoice-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: 20px; }
-.app-shell .invoice-filter-panel .invoice-filters .field { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 8px; }
-.invoice-filters .field > span:first-child { padding-top: 0; }
-.invoice-pagination button { width: auto; min-width: 64px; }
-.invoice-help { margin: 0; padding: 12px 16px; color: var(--muted); font-size: 13px; line-height: 1.5; }
-.invoice-selection-footer { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 16px; border-top: 1px solid var(--line); background: white; box-shadow: 0 -4px 12px #10182808; }
-.invoice-selection-footer > div { display: grid; gap: 6px; font-size: 14px; }
-.invoice-selection-footer span { color: var(--muted); font-size: 13px; }
-@media (max-width: 900px) { .invoice-filters { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 640px) { .invoice-selection-footer { bottom: 78px; } .invoice-selection-footer .primary-button { width: 100%; } }
 /* Three transport stages share the same metric-card presentation. */
 .service-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 12px; margin: 20px 0 0; }
 .service-progress > section { min-width: 0; padding: 16px; border: 1px solid #e4e7ec; border-radius: 6px; background: var(--app-surface); }
@@ -323,7 +311,7 @@ tbody th { position: static; }
 
 .row-actions-button { display: flex; margin: 0 auto; }
 .page-header .close-button { width: 40px; height: 40px; }
-.route-form-actions :is(.primary-button, .secondary-button), .complex-service-actions :is(.primary-button, .secondary-button) { min-height: 40px; padding: 8px 16px; font-size: 16px; line-height: 24px; font-weight: 400; border-radius: 3px; }
+.route-form-actions :is(.primary-button, .secondary-button) { min-height: 40px; padding: 8px 16px; font-size: 16px; line-height: 24px; font-weight: 400; border-radius: 3px; }
 
 .receiving-container-attributes { margin-top: 20px; }
 .receiving-container-attributes table { width: 100%; min-width: 850px; border-collapse: collapse; }
@@ -452,21 +440,6 @@ tbody th { position: static; }
   box-shadow: none;
 }
 
-/* Invoice creation follows the common vertical form and table layout. */
-.invoice-create-page .invoice-filter-panel { min-height: 0; overflow: visible; }
-.invoice-create-page .invoice-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 536px)); gap: 12px 48px; margin-top: 16px; max-width: 1172px; }
-.app-shell .invoice-create-page .invoice-filter-panel .invoice-filters .field { display: grid; grid-template-columns: 180px minmax(0, 1fr); align-items: start; gap: 8px; max-width: none; margin: 0; grid-column: 1; }
-.invoice-create-page .invoice-filters .field > span:first-child { padding-top: 11px; }
-.invoice-create-page .invoice-selection { margin-top: 28px; }
-.invoice-create-page .invoice-selection > .form-section-heading { margin-bottom: 16px; }
-.invoice-create-page .invoice-selection-footer { position: static; padding: 16px 0 0; box-shadow: none; }
-@media (max-width: 640px) {
-  .app-shell .invoice-create-page .invoice-filter-panel .invoice-filters .field { grid-template-columns: 1fr; gap: 6px; }
-  .invoice-create-page .invoice-filters .field > span:first-child { padding-top: 0; }
-}
-
-@media (max-width: 1150px) { .invoice-create-page .invoice-filters { grid-template-columns: 1fr; max-width: 650px; } }
-
 .status-badge[data-status="PAID"] { background: #e8f6ed; color: #23834d; }
 
 .bulk-return-actions { justify-content:flex-end; }
@@ -488,8 +461,6 @@ tbody th { position: static; }
 .service-table-page .form-workspace :is(.service-order-section, .service-main-panel) > h2 { padding:0; margin-bottom:16px; }
 .service-table-page .form-workspace .bulk-return-heading { padding:0 0 16px; }
 
-
-
 /* Full navigation labels remain on a single line. */
 .navigation-tree .nav-children .nav-label { white-space: nowrap; overflow: visible; text-overflow: clip; max-width: none; }
 @media (min-width: 641px) {
@@ -504,20 +475,7 @@ tbody th { position: static; }
 .service-pending-intro { min-width: 0; }
 .service-pending-intro h3 { line-height: 20px; }
 .service-pending-containers .service-pending-intro p { margin: 4px 0 0; line-height: 20px; }
-.service-table-page .form-workspace #service-panel-charges .billing-charges-panel { margin-top: 0; }
-#service-panel-charges .billing-charges-panel > .details-grid { margin: 0 0 16px; }
 
-/* Service charge totals stay together instead of occupying the full details grid. */
-.service-charge-totals { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin: 0 0 12px; padding: 0; }
-.service-charge-totals > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; }
-.service-charge-totals > div + div { padding-left: 20px; border-left: 1px solid var(--app-border); }
-.service-charge-totals dt, .service-charge-totals dd { margin: 0; padding: 0; font-size: 14px; line-height: 20px; }
-.service-charge-totals dt { color: var(--ui-field-label); }
-.service-charge-totals dd { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
-@media (max-width: 640px) {
-  .service-charge-totals { align-items: flex-start; flex-direction: column; }
-  .service-charge-totals > div + div { padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--app-border); }
-}
 
 .service-main-columns { display: grid; grid-template-columns: minmax(0, 728px) minmax(0, 536px); gap: 48px; max-width: 1312px; }
 .service-main-columns > .details-grid { grid-template-columns: minmax(0, 1fr); align-content: start; margin: 0; }
@@ -525,15 +483,6 @@ tbody th { position: static; }
   .service-main-columns { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 }
 
-/* Charge totals share the tab toolbar, with one aligned amount column. */
-.service-tab-charge-totals { margin-left: auto; min-width: 0; max-width: 100%; }
-.service-tab-charge-totals .service-charge-totals { display: grid; gap: 4px; margin: 0; }
-.service-tab-charge-totals .service-charge-totals > div { display: grid; grid-template-columns: 150px minmax(110px, 1fr); gap: 12px; padding: 0; border: 0; }
-.service-tab-charge-totals .service-charge-totals :is(dt,dd) { font-size: 13px; line-height: 20px; }
-@media (max-width: 640px) {
-  .service-tab-charge-totals { width: 100%; margin-left: 0; }
-  .service-tab-charge-totals .service-charge-totals > div { grid-template-columns: minmax(0, 150px) minmax(0, 1fr); }
-}
 
 /* Keep menu and workspace movement synchronized; collapsed links are inert. */
 .sidebar { transition: width 240ms ease-out; }
@@ -563,8 +512,6 @@ tbody th { position: static; }
 /* Reserve one common toolbar slot so service tables start at the same position. */
 .service-tab-context { display: grid; margin-left: auto; min-width: 0; max-width: 100%; }
 .service-tab-context > * { grid-area: 1 / 1; align-self: center; justify-self: end; }
-.service-tab-context .service-tab-charge-totals { visibility: hidden; }
-.service-tab-context[data-charges="true"] .service-tab-charge-totals { visibility: visible; }
 @media (max-width: 640px) { .service-tab-context { width: 100%; margin-left: 0; } }
 
 

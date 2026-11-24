@@ -23,7 +23,7 @@ export function ComprehensiveServiceOrderRegistryPage() {
     return () => { active = false }
   }, [page, attempt])
   return <section className="registry-page">
-    <div className="page-header"><h1>Заявки на услугу</h1><Link className="primary-button" to="/comprehensive-service-orders/new"><ActionIcon name="plus" /> Создать</Link></div>
+    <div className="page-header"><h1>Комплексные заявки</h1><Link className="primary-button" to="/comprehensive-service-orders/new"><ActionIcon name="plus" /> Создать</Link></div>
     {error && <Notification kind="error">{error}<button type="button" className="secondary-button" onClick={() => { setError(''); setAttempt(value => value + 1) }}>Повторить</button></Notification>}
     <TableReveal loading={!data && !error}>
       <div className="table-wrap"><table><thead><tr><th className="registry-index" scope="col">№</th><th>Номер заявки</th><th>Клиент</th><th>Договор</th><th>Статус</th><th className="registry-actions" scope="col" aria-label="Действия" /></tr></thead><tbody>

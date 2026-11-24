@@ -9,10 +9,10 @@ type Result = { cleared: boolean; backupFile?: string }
 const endpoint = '/api/system/operational-reset'
 const groups = [
   ['Заявки на поставку', 'receiving_order'], ['Заявки на вывоз', 'shipping_order'],
-  ['Заявки на смену собственника', 'service_order'], ['Заявки на услугу', 'comprehensive_service_order'],
+  ['Заявки на смену собственника', 'service_order'], ['Комплексные заявки', 'comprehensive_service_order'],
   ['Рейсы', 'route'], ['Накладные', 'waybill'], ['Визиты КТК', 'container_visit'],
   ['Назначения собственников', 'container_period'], ['Остатки КТК', 'container_owner'],
-  ['События истории КТК', 'container_owner_history'], ['Начисления', 'billing_charge'], ['Счета', 'payment_invoice'],
+  ['События истории КТК', 'container_owner_history'],
 ] as const
 
 export function OperationalReset() {
@@ -65,8 +65,8 @@ function ResetDialog({ onClose }: { onClose: () => void }) {
         {result ? <div role="status"><p>{result.cleared ? 'Заявки и хранение очищены. Справочники и настройки сохранены.' : 'Данных для удаления уже нет.'}</p>
           {result.backupFile && <><p>Резервная копия сохранена в папке backups/ui-resets проекта. Для восстановления обратитесь к разработчику.</p><p className="operational-reset-backup">{result.backupFile}</p></>}
         </div> : <>
-          <p>Будут удалены все заявки и их состав, рейсы, накладные, остатки КТК, визиты, смены собственника, история, начисления и счета. Отчёт хранения станет пустым.</p>
-          <p>Клиенты, договоры, тарифы, справочники КТК и вагонов, транспорт, рабочая дата и нумерация документов сохранятся.</p>
+          <p>Будут удалены все заявки и их состав, рейсы, накладные, остатки КТК, визиты, смены собственника и история. Отчёт хранения станет пустым.</p>
+          <p>Клиенты, договоры, справочники КТК и вагонов, транспорт, рабочая дата и нумерация документов сохранятся.</p>
           <p>Перед удалением автоматически сохраняется резервная копия. Если сохранить её не удастся, очистка не начнётся.</p>
           {loading && <p role="status">Проверяем данные…</p>}
           {preview && <><dl className="operational-reset-counts">{groups.map(([label, table]) => <div key={table}><dt>{label}</dt><dd>{preview.counts[table]?.toLocaleString('ru-RU') ?? 0}</dd></div>)}</dl>

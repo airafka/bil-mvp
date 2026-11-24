@@ -25,3 +25,8 @@
 .ownership-page .ownership-comment { width: 100%; max-width: none; }
 .ownership-page .ownership-comment textarea { width: 100%; max-width: none; }
 .ownership-page .ownership-service-field { grid-column: 1; }
+
+.ownership-delete-dialog { width: min(440px, 100%); padding: 24px; border-radius: 8px; background: #fff; box-shadow: 0 18px 48px rgba(20, 25, 34, .24); }
+.ownership-delete-dialog h2 { margin: 0 0 12px; font-size: 18px; font-weight: 600; }
+.ownership-delete-dialog p { margin: 0 0 24px; color: var(--ui-field-label); font-size: 14px; line-height: 1.5; }
+.ownership-delete-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }

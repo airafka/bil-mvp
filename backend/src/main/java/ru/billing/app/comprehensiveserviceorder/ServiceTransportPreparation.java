@@ -38,7 +38,7 @@ public class ServiceTransportPreparation {
         ServiceOrderLock.lock(jdbc,id);
         var parents=jdbc.query("select c.name from comprehensive_service_order s join client c on c.id=s.client_id where s.id=? for update of s",
                 (rs,n)->rs.getString(1),id);
-        if(parents.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND,"COMPREHENSIVE_SERVICE_ORDER_NOT_FOUND","Заявка на услугу не найдена");
+        if(parents.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND,"COMPREHENSIVE_SERVICE_ORDER_NOT_FOUND","Комплексная заявка не найдена");
         boolean shipping=section==Section.SHIPPING;
         String table=shipping?"shipping_order":"receiving_order";
         String party=shipping?"(select name from client_related_entity where id=o.consignee_id)":"o.consignor";

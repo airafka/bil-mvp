@@ -5,7 +5,7 @@ const {init,api,clock,sql,json} = require('./owner-register-check.cjs');
 async function main() {
     const x = await init('billing-register-owner-new');
     const site = (await api('/references/terminal-areas')).find(area => area.code==='CONTAINER');
-    const contract = sql("select contract_id from complex_service_tariff where active and client_id='"+x.a+"' limit 1");
+    const contract = sql("select id from contract where client_id='"+x.a+"' order by id limit 1");
     const party = (await api('/references/clients')).find(c=>c.id===x.a).name;
     let wagon = {code:'00000000'};
     const codeOf = id => sql("select code from container where id='"+id+"'");
@@ -51,11 +51,9 @@ async function main() {
     const noTime={...first}; delete noTime.eventDateTime;
     assert.equal((await fetch('http://127.0.0.1:8355/datareon/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(noTime)})).status,400);
 
-    const service = (await api('/comprehensive-service-orders/available-services'))[0];
-    const tariff = json("select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where complex_service_id='"+service.id+"' and active limit 1)t");
     const bill = await api('/waybills/generate','POST',{standard20:1,standard40:0},201);
-    const railOrder = await api('/comprehensive-service-orders','POST',{complexServiceId:service.id,clientId:tariff.client_id,
-        contractId:tariff.contract_id,defaultContainerOwnerId:x.a,defaultRailwayCarriageOwnerId:x.b,waybillIds:[bill.id]},201);
+    const railOrder = await api('/comprehensive-service-orders','POST',{clientId:x.a,
+        contractId:contract,defaultContainerOwnerId:x.a,defaultRailwayCarriageOwnerId:x.b,waybillIds:[bill.id]},201);
     wagon=json("select row_to_json(w) from (select c.id,c.code,c.type_id from waybill_railway_carriage wr join railway_carriage c on c.id=wr.railway_carriage_id where wr.waybill_id='"+bill.id+"' limit 1)w");
     const wagonStatus=()=>sql("select status from railway_carriage_owner where railway_carriage_id='"+wagon.id+"'");
     const section = '/comprehensive-service-orders/'+railOrder.order.id;

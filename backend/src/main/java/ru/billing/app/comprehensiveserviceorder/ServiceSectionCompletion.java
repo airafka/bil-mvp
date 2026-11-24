@@ -27,7 +27,7 @@ public class ServiceSectionCompletion {
     public ComprehensiveServiceOrderDetails complete(UUID id,ServiceTransportPreparation.Section section,Action action) {
         ServiceOrderLock.lock(jdbc,id);
         if(jdbc.queryForList("select id from comprehensive_service_order where id=? for update",id).isEmpty())
-            throw new ApiException(HttpStatus.NOT_FOUND,"COMPREHENSIVE_SERVICE_ORDER_NOT_FOUND","Заявка на услугу не найдена");
+            throw new ApiException(HttpStatus.NOT_FOUND,"COMPREHENSIVE_SERVICE_ORDER_NOT_FOUND","Комплексная заявка не найдена");
         boolean shipping=section==ServiceTransportPreparation.Section.SHIPPING;
         String table=shipping?"shipping_order":"receiving_order";
         String query="select id,number,order_status,route_id from "+table+" where comprehensive_service_order_id=? and order_status<>'CANCELLED'"
@@ -58,7 +58,7 @@ public class ServiceSectionCompletion {
             var members=jdbc.query("select id from receiving_order where route_id=? and order_status<>'CANCELLED' union all select id from shipping_order where route_id=? and order_status<>'CANCELLED'",
                     (rs,n)->rs.getObject(1,UUID.class),route,route);
             if(!selected.containsAll(members)) throw error("SHARED_ROUTE_OUTSIDE_SECTION",
-                    "В рейсе есть заявки другого раздела или услуги. Подтвердите такой рейс отдельно в его карточке");
+                    "В рейсе есть заявки другого раздела или комплексной заявки. Подтвердите такой рейс отдельно в его карточке");
             statuses.confirmRoute(route);
         }
         // Each phase is atomic; completing requires a separate explicit request.

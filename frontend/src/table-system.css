@@ -104,13 +104,13 @@ html { scrollbar-gutter: stable; }
 .app-shell table tbody tr.composition-data, .app-shell table tbody tr.composition-group, .app-shell table tbody tr.composition-subgroup { background:#fff; }
 
 /* Service creation and cards follow the receiving-order table layout. */
-.app-shell :is(.service-table-page, .complex-service-page) :is(.table-wrap, .order-container-scroll) {
+.app-shell .service-table-page :is(.table-wrap, .order-container-scroll) {
   border:1px solid var(--table-border); border-radius:var(--app-radius); overflow-x:auto;
 }
-.app-shell :is(.service-table-page, .complex-service-page) table tbody :is(th, td) {
+.app-shell .service-table-page table tbody :is(th, td) {
   border-right:1px solid var(--table-border); border-bottom:1px solid var(--table-border);
 }
-.app-shell :is(.service-table-page, .complex-service-page) table tbody tr > :last-child { border-right:0; }
+.app-shell .service-table-page table tbody tr > :last-child { border-right:0; }
 .app-shell .service-table-page .service-compact-table table { min-width:760px; }
 .app-shell .service-table-page .service-receiving-table table { min-width:940px; }
 .app-shell .service-table-page .service-cargo-item { display:block; margin:0; line-height:20px; white-space:normal; overflow-wrap:anywhere; }

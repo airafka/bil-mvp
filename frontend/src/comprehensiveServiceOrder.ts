@@ -7,13 +7,11 @@ export type ComprehensiveServiceOrderSummary = {
 }
 export type ComprehensiveServiceOrderDetails = {
   transportOrders: ServiceTransportOrder[]
-  totalWithoutVat: number; totalWithVat: number
   progress: ServiceProgress
   order: ComprehensiveServiceOrderSummary; receivingOrder: OrderDetails; shippingOrders: Array<CreatedOrder & { containerNames: string[]; noReturnContainerNames: string[]; plannedAt?: string | null; consignee?: string | null }>; selectableContainers: Array<{ containerId: string; containerName: string; type: string }>; returnOrders: ReturnReceivingOrder[]
 }
 
 export type ServiceProgress = {
-  serviceName: string
   accepted: number; shippingCreated: number; shippingCompleted: number
   returnCreated: number; returnCompleted: number
   total: number; shippingMissing: number

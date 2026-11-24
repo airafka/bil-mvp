@@ -4,8 +4,6 @@ import { businessDateLabel, useApplicationClock, useBusinessDateTime } from '../
 import { catalogDate } from '../transportCatalogs'
 import { WaybillFilterFields } from '../components/WaybillFilterFields'
 import { validateWaybillSelection } from '../waybillSelection'
-import { validateServiceSelection, type AvailableOrderService } from '../serviceWaybillValidation'
-import { WrappingSelect } from '../components/WrappingSelect'
 import { Notification } from '../components/Notification'
 import { VehicleCargoEditor } from '../components/VehicleCargoEditor'
 import { RoutePicker } from '../components/RoutePicker'
@@ -17,7 +15,7 @@ import { UiInput, UiSelect } from '../components/FormControls'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { StockOwnerSelect } from '../components/StockOwnerSelect'
-import { getAvailableOrderServices, createOrder, createComprehensiveServiceOrder, getContracts, getTariffClients, getRoutes, getReferenceOptions, getTerminalAreas, getTransportTypes } from '../api'
+import { createOrder, createComprehensiveServiceOrder, getContracts, getRoutes, getReferenceOptions, getTerminalAreas, getTransportTypes } from '../api'
 import { WaybillSelectionTable } from '../components/WaybillSelectionTable'
 import type {
   GroupedWaybillFilter,
@@ -50,8 +48,6 @@ const shippingRailwaySteps = ['Основное', 'Вагоны', 'КТК', 'Г�
 export function CreateOrderPage({ config, serviceMode = false }: { config: OrderConfig; serviceMode?: boolean }) {
   const { clock } = useApplicationClock()
   const creationDate = businessDateLabel(clock.date)
-  const [serviceOptions,setServiceOptions] = useState<AvailableOrderService[]>([])
-  const [complexServiceId,setComplexServiceId] = useState('')
   const [containerOwners, setContainerOwners] = useState<Record<string, string>>({})
   const [waybillFilter, setWaybillFilter] = useState<GroupedWaybillFilter>({})
   const [ownerActionTarget, setOwnerActionTarget] = useState<HTMLDivElement | null>(null)
@@ -63,7 +59,6 @@ export function CreateOrderPage({ config, serviceMode = false }: { config: Order
   const [routeLoadError, setRouteLoadError] = useState('')
   const [routesLoading,setRoutesLoading]=useState(true)
   const [contracts, setContracts] = useState<import('../comprehensiveServiceOrder').ContractOption[]>([])
-  const [tariffClients, setTariffClients] = useState<ReferenceOption[]>([])
   const [clients, setClients] = useState<ReferenceOption[]>([])
   const [containers, setContainers] = useState<ReferenceOption[]>([])
   const [cargoOptions, setCargoOptions] = useState<ReferenceOption[]>([])
@@ -89,15 +84,11 @@ const navigate = useNavigate()
       getReferenceOptions('railway-carriages'),
       getTerminalAreas(),
       getTransportTypes(),
-      getContracts(serviceMode),
-      serviceMode ? getTariffClients() : Promise.resolve([]),
-      serviceMode ? getAvailableOrderServices() : Promise.resolve([]),
+      getContracts(),
     ])
-      .then(([clientOptions, containerOptions, etsngOptions, carriageOptions, terminalAreas, transportOptions, contractOptions, tariffClientOptions, availableServices]) => {
+      .then(([clientOptions, containerOptions, etsngOptions, carriageOptions, terminalAreas, transportOptions, contractOptions]) => {
         const containerArea = findContainerArea(terminalAreas)
-        setServiceOptions(availableServices)
         setContracts(contractOptions)
-        setTariffClients(tariffClientOptions)
         setClients(clientOptions)
         setContainers(containerOptions)
         setCargoOptions(etsngOptions)
@@ -117,7 +108,7 @@ const navigate = useNavigate()
         error instanceof Error ? error.message : 'Не удалось загрузить справочники',
       ))
       .finally(() => setLoadingReferences(false))
-  }, [serviceMode])
+  }, [])
 
   useEffect(() => {
     if (serviceMode) return
@@ -149,7 +140,6 @@ const navigate = useNavigate()
   const selectedContract = contracts.find(item => item.id === form.contractId)
 
   const mainStepInvalid = loadingReferences
-    || (serviceMode && !complexServiceId)
     || (isRailwayReceiving && validateWaybillSelection(waybillFilter).length > 0)
     || !form.clientId
     || !form.contractId
@@ -161,7 +151,6 @@ const navigate = useNavigate()
     const validationErrors = [
       ...validateStep(form, contentStep, config.kind),
       ...(isRailwayReceiving && contentStep === 1 ? validateWaybillSelection(waybillFilter) : []),
-      ...(serviceMode && contentStep === 2 ? validateServiceSelection(serviceOptions, complexServiceId) : []),
     ]
     setErrors(validationErrors)
     if (validationErrors.length === 0) setStep((current) => Math.min(lastStep, current + 1))
@@ -205,7 +194,6 @@ const navigate = useNavigate()
     if (submitLock.current) return
     const validationErrors = [
       ...validateStep(form, serviceMode ? lastStep : lastStep - 1, config.kind),
-      ...(serviceMode ? validateServiceSelection(serviceOptions, complexServiceId) : []),
     ]
     setErrors(validationErrors)
     if (validationErrors.length > 0) return
@@ -215,7 +203,7 @@ const navigate = useNavigate()
     setRequestError('')
     try {
       if (serviceMode) {
-        const created = await createComprehensiveServiceOrder({ complexServiceId, clientId: form.clientId, contractId: form.contractId, waybillIds: form.waybills.map(item => item.id), defaultContainerOwnerId: form.defaultContainerOwnerId || '', defaultRailwayCarriageOwnerId: form.defaultRailwayCarriageOwnerId || form.clientId, containerOwners: receivingWaybillRows(form.waybills, form.defaultContainerOwnerId, clients, containerOwners).filter(row => containerOwners[row.containerId]).map(row => ({ containerId: row.containerId, ownerClientId: containerOwners[row.containerId] })) })
+        const created = await createComprehensiveServiceOrder({ clientId: form.clientId, contractId: form.contractId, waybillIds: form.waybills.map(item => item.id), defaultContainerOwnerId: form.defaultContainerOwnerId || '', defaultRailwayCarriageOwnerId: form.defaultRailwayCarriageOwnerId || form.clientId, containerOwners: receivingWaybillRows(form.waybills, form.defaultContainerOwnerId, clients, containerOwners).filter(row => containerOwners[row.containerId]).map(row => ({ containerId: row.containerId, ownerClientId: containerOwners[row.containerId] })) })
         navigate('/comprehensive-service-orders/' + created.order.id)
         return
       }
@@ -305,7 +293,7 @@ const changeFillingType = (fillingType: FillingType) => {
   return (
     <section className={`form-page${serviceMode ? ' service-table-page' : ''}`}>
       <div className="page-header form-page-header">
-        <h1>{serviceMode ? 'Новая заявка на услугу' : config.createTitle}</h1>
+        <h1>{serviceMode ? 'Новая комплексная заявка' : config.createTitle}</h1>
         <div className="header-actions">
           {step > 1 && (<button className="secondary-button" onClick={goBack} disabled={submitting}>← Назад</button>)}
           <Link className="close-button" to={serviceMode ? '/comprehensive-service-orders' : config.listPath} aria-label="Закрыть форму" title="Закрыть">×</Link>
@@ -349,9 +337,9 @@ const changeFillingType = (fillingType: FillingType) => {
                 <label className="field horizontal-field">
                   <span>Клиент:<b>*</b></span><span className="field-control">
                     <UiSelect required value={form.clientId} onChange={event => setForm(current => ({ ...current, clientId: event.target.value, contractId: '', ...(serviceMode ? { defaultContainerOwnerId: event.target.value } : {}) }))} disabled={loadingReferences}>
-                      <option value="" hidden disabled />{(serviceMode ? tariffClients : clients).map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
+                      <option value="" hidden disabled />{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
                     </UiSelect>
-                    {!loadingReferences && (serviceMode ? tariffClients : clients).length === 0 && <small>{serviceMode ? 'Нет клиентов с активным тарифом выбранной услуги.' : 'В справочнике пока нет клиентов.'}</small>}
+                    {!loadingReferences && clients.length === 0 && <small>В справочнике пока нет клиентов.</small>}
                   </span>
                 </label>
                 <label className="field horizontal-field">
@@ -359,10 +347,9 @@ const changeFillingType = (fillingType: FillingType) => {
                     <UiSelect required value={form.contractId} disabled={loadingReferences || !form.clientId} onChange={event => setForm({ ...form, contractId: event.target.value })}>
                       <option value="" hidden disabled />{contracts.filter(item => item.clientId === form.clientId).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </UiSelect>
-                    {form.clientId && !loadingReferences && !contracts.some(item => item.clientId === form.clientId) && <small>{serviceMode ? 'У клиента нет договоров с активными тарифами.' : 'У клиента нет договоров.'}</small>}
+                    {form.clientId && !loadingReferences && !contracts.some(item => item.clientId === form.clientId) && <small>У клиента нет договоров.</small>}
                   </span>
                 </label>
-                {serviceMode && <div className="field horizontal-field service-choice-field"><span id="service-choice-label">Услуга:<b>*</b></span><WrappingSelect label="Услуга" labelledBy="service-choice-label" required value={complexServiceId} disabled={loadingReferences} onChange={setComplexServiceId} options={serviceOptions.map(service=>({value:service.id,label:service.name}))} /></div>}
                 {serviceMode && <label className="field horizontal-field"><span>Собственник КТК:<b>*</b></span><UiSelect aria-label="Собственник КТК" required value={form.defaultContainerOwnerId || ''} disabled={loadingReferences || !form.clientId} onChange={event => setForm(current => ({ ...current, defaultContainerOwnerId: event.target.value }))}><option value="" hidden disabled />{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</UiSelect></label>}
               </div>
               <div className="form-fields-column">

@@ -1,9 +1,0 @@
-export type BillingCharge = {
-  id: string; performedAt: string; clientName: string; contractName: string
-  comprehensiveServiceOrderId: string; comprehensiveServiceOrderCode: number; containerName: string; serviceName: string
-  receivingOrderId?: string | null; receivingOrderCode?: number | null; shippingOrderId: string; shippingOrderCode: number
-  amountWithoutVat: number; amountWithVat: number; currency: string
-}
-export type BillingChargePage = {
-  items: BillingCharge[]; totalWithoutVat: number; totalWithVat: number; total: number; page: number; size: number
-}

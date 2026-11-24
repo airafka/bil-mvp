@@ -20,14 +20,12 @@ public class ComprehensiveServiceOrderService {
     private final JdbcTemplate jdbc;
     private final ReceivingOrderService receiving;
     private final ShippingOrderService shipping;
-    private final ServiceTariffSnapshot tariffs;
     private final ServiceTransportOrderStore transportOrders;
 
-    public ComprehensiveServiceOrderService(JdbcTemplate jdbc, ReceivingOrderService receiving, ShippingOrderService shipping, ServiceTariffSnapshot tariffs, ServiceTransportOrderStore transportOrders) {
+    public ComprehensiveServiceOrderService(JdbcTemplate jdbc, ReceivingOrderService receiving, ShippingOrderService shipping, ServiceTransportOrderStore transportOrders) {
         this.jdbc = jdbc;
         this.receiving = receiving;
         this.shipping = shipping;
-        this.tariffs = tariffs;
         this.transportOrders = transportOrders;
     }
 
@@ -39,7 +37,6 @@ public class ComprehensiveServiceOrderService {
         if (request.containerOwners().stream().map(CreateComprehensiveServiceOrderRequest.ContainerOwner::containerId).distinct().count() != request.containerOwners().size()) {
             throw error(HttpStatus.BAD_REQUEST, "DUPLICATE_CONTAINER", "Собственник КТК указан несколько раз");
         }
-        validateServiceSelection(request.complexServiceId());
         List<UUID> areas = jdbc.query("select id from terminal_area_catalog where code = 'CONTAINER'",
                 (rs, row) -> rs.getObject("id", UUID.class));
         if (areas.isEmpty()) throw error(HttpStatus.NOT_FOUND, "TERMINAL_AREA_NOT_FOUND", "Контейнерная площадка не найдена");
@@ -54,8 +51,8 @@ public class ComprehensiveServiceOrderService {
                     .map(owner -> new UpdateOrderContainersRequest.Attributes(owner.containerId(), owner.ownerClientId(), null, null, null)).toList()));
         }
         UUID id = UUID.randomUUID();
-        jdbc.update("insert into comprehensive_service_order(id, code, client_id, contract_id, selected_complex_service_id) values (?, ?, ?, ?, ?)",
-                id, serviceCode, request.clientId(), request.contractId(), request.complexServiceId());
+        jdbc.update("insert into comprehensive_service_order(id, code, client_id, contract_id) values (?, ?, ?, ?)",
+                id, serviceCode, request.clientId(), request.contractId());
         jdbc.update("update receiving_order set comprehensive_service_order_id = ? where id = ?", id, delivery.id());
 
         List<SourceRow> sources = loadSources(delivery.id());
@@ -63,27 +60,12 @@ public class ComprehensiveServiceOrderService {
                 sources.stream().map(SourceRow::cargo).toList());
         if (containers.isEmpty()) throw error(HttpStatus.BAD_REQUEST, "COMPREHENSIVE_SERVICE_ORDER_CONTAINERS_REQUIRED",
                 "В выбранных накладных нет КТК для вывоза");
-        tariffs.fix(id, request.clientId(), request.contractId(), request.complexServiceId());
         Map<UUID, String> types = typesByContainer(sources);
         for (OrderContainerRequest container : containers) {
             requireType(types, container.containerId());
             createShipping(id, delivery.id(), request.clientId(), request.contractId(), areaId, List.of(container));
         }
         return findById(id);
-    }
-
-    public record AvailableService(UUID id, String name) {}
-
-    @Transactional(readOnly = true)
-    public List<AvailableService> availableServices() {
-        return jdbc.query("select id,name from complex_service_catalog where order_workflow='RAILWAY_RETURN' order by name",
-                (rs,n)->new AvailableService(rs.getObject(1,UUID.class),rs.getString(2)));
-    }
-
-    private void validateServiceSelection(UUID serviceId) {
-        if (availableServices().stream().noneMatch(option -> option.id().equals(serviceId))) {
-            throw error(HttpStatus.BAD_REQUEST, "SERVICE_NOT_AVAILABLE", "Выберите доступную комплексную услугу");
-        }
     }
 
     @Transactional
@@ -96,10 +78,10 @@ public class ComprehensiveServiceOrderService {
                 "select client_id, contract_id, status from comprehensive_service_order where id = ? for update",
                 (rs, row) -> new ServiceHeader(rs.getObject("client_id", UUID.class),
                         rs.getObject("contract_id", UUID.class), rs.getString("status")), serviceId);
-        if (services.isEmpty()) throw error(HttpStatus.NOT_FOUND, "COMPREHENSIVE_SERVICE_ORDER_NOT_FOUND", "Заявка на услугу не найдена");
+        if (services.isEmpty()) throw error(HttpStatus.NOT_FOUND, "COMPREHENSIVE_SERVICE_ORDER_NOT_FOUND", "Комплексная заявка не найдена");
         ServiceHeader service = services.getFirst();
         if ("COMPLETED".equals(service.status()) || "CANCELLED".equals(service.status())) throw error(HttpStatus.CONFLICT, "COMPREHENSIVE_SERVICE_ORDER_COMPLETED",
-                "Нельзя создавать заявки на вывоз для выполненной услуги");
+                "Нельзя создавать заявки на вывоз для выполненной комплексной заявки");
         UUID deliveryId = jdbc.queryForObject(
                 "select id from receiving_order where comprehensive_service_order_id = ? and service_role = 'INITIAL_RECEIVING'",
                 UUID.class, serviceId);
@@ -239,7 +221,7 @@ public class ComprehensiveServiceOrderService {
     @Transactional(readOnly = true)
     public ComprehensiveServiceOrderDetails findById(UUID id) {
         List<ComprehensiveServiceOrderSummary> rows = jdbc.query(SUMMARY_SQL + " where s.id = ?", (rs, row) -> summary(rs), id);
-        if (rows.isEmpty()) throw error(HttpStatus.NOT_FOUND, "COMPREHENSIVE_SERVICE_ORDER_NOT_FOUND", "Заявка на услугу не найдена");
+        if (rows.isEmpty()) throw error(HttpStatus.NOT_FOUND, "COMPREHENSIVE_SERVICE_ORDER_NOT_FOUND", "Комплексная заявка не найдена");
         UUID deliveryId = jdbc.queryForObject("select id from receiving_order where comprehensive_service_order_id = ? order by case when service_role='INITIAL_RECEIVING' then 0 else 1 end, number limit 1",
                 UUID.class, id);
         List<ServiceShippingOrder> removals = jdbc.query("""
@@ -266,14 +248,8 @@ public class ComprehensiveServiceOrderService {
                         rs.getString("code"), rs.getString("type")), id, deliveryId);
         List<ReturnReceivingOrder> returns = ReturnReceivingOrder.find(jdbc,
                 "r.comprehensive_service_order_id=? or sh.comprehensive_service_order_id=?", id, id);
-        var totals = jdbc.queryForMap("""
-                select coalesce(sum(b.amount_without_vat),0) as without_vat,
-                       coalesce(sum(b.amount_with_vat),0) as with_vat
-                from billing_charge b join service_execution e on e.id=b.service_execution_id
-                where e.comprehensive_service_order_id=?
-                """, id);
         return new ComprehensiveServiceOrderDetails(rows.getFirst(), receiving.findById(deliveryId), removals, selectable, returns, "AUTO_RETURN".equals(rows.getFirst().workflow()) ? autoProgress(id) : progress(id, deliveryId),
-                (java.math.BigDecimal) totals.get("without_vat"), (java.math.BigDecimal) totals.get("with_vat"), transportOrders.findByServiceId(id));
+                transportOrders.findByServiceId(id));
     }
 
     private ServiceProgress progress(UUID serviceId, UUID deliveryId) {
@@ -296,8 +272,7 @@ public class ComprehensiveServiceOrderService {
                 ), own_returns as (
                     select * from returns where service_id = ?
                 )
-                select selected.name as service_name,
-                    case when initial.order_status = 'COMPLETED'
+                select case when initial.order_status = 'COMPLETED'
                         then coalesce(initial.accepted_container_count, (select count(*) from initial_containers))
                         else 0 end as accepted,
                     (select count(distinct container_id) from shipping) as shipping_created,
@@ -316,10 +291,8 @@ public class ComprehensiveServiceOrderService {
                         and not exists(select 1 from shipping sh join shipping_order_container sc on sc.shipping_order_id=sh.id
                             where sc.container_id=ic.container_id and not sc.return_required)) as return_missing
                 from receiving_order initial
-                join comprehensive_service_order parent on parent.id=initial.comprehensive_service_order_id
-                join complex_service_catalog selected on selected.id=parent.selected_complex_service_id
                 where initial.id = ?
-                """, (rs, row) -> new ServiceProgress(rs.getString("service_name"),
+                """, (rs, row) -> new ServiceProgress(
                         rs.getInt("accepted"), rs.getInt("shipping_created"), rs.getInt("shipping_completed"),
                         rs.getInt("return_created"), rs.getInt("return_completed"),
                         rs.getInt("total"), rs.getInt("shipping_missing"),
@@ -330,15 +303,15 @@ public class ComprehensiveServiceOrderService {
 
     private ServiceProgress autoProgress(UUID id) {
         return jdbc.queryForObject("""
-            select c.name, count(rc.id) as total,
+            select count(rc.id) as total,
                    count(rc.id) filter(where r.order_status='COMPLETED') as completed,
                    count(distinct r.id) as orders,
                    count(distinct r.id) filter(where r.order_status='COMPLETED') as done
-            from comprehensive_service_order s join complex_service_catalog c on c.id=s.selected_complex_service_id
+            from comprehensive_service_order s
             left join receiving_order r on r.comprehensive_service_order_id=s.id and r.order_status<>'CANCELLED'
             left join receiving_order_container rc on rc.receiving_order_id=r.id
-            where s.id=? group by c.name
-            """,(rs,n)->new ServiceProgress(rs.getString("name"),0,0,0,rs.getInt("total"),rs.getInt("completed"),
+            where s.id=? group by s.id
+            """,(rs,n)->new ServiceProgress(0,0,0,rs.getInt("total"),rs.getInt("completed"),
             rs.getInt("total"),0,0,0,rs.getInt("orders"),rs.getInt("done"),0),id);
     }
 

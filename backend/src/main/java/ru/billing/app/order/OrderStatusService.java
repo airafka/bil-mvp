@@ -14,11 +14,10 @@ import ru.billing.app.error.ApiException;
 @org.springframework.stereotype.Service
 public class OrderStatusService {
     private final JdbcTemplate jdbc;
-    private final ru.billing.app.billing.BillingService billing;
     private final ru.billing.app.containerstock.ContainerStockService stock;
     private final TosContainerTasks tos;
     private final ru.billing.app.containerstock.RailwayCarriageStock wagons;
-    public OrderStatusService(JdbcTemplate jdbc, ru.billing.app.billing.BillingService billing, ru.billing.app.containerstock.ContainerStockService stock,TosContainerTasks tos, ru.billing.app.containerstock.RailwayCarriageStock wagons) { this.wagons=wagons; this.tos=tos; this.jdbc = jdbc; this.billing = billing; this.stock = stock; }
+    public OrderStatusService(JdbcTemplate jdbc, ru.billing.app.containerstock.ContainerStockService stock,TosContainerTasks tos, ru.billing.app.containerstock.RailwayCarriageStock wagons) { this.wagons=wagons; this.tos=tos; this.jdbc = jdbc; this.stock = stock; }
 
     @Transactional
     public CreatedOrderResponse finish(String resource, UUID id, String eventCode) {
@@ -65,7 +64,7 @@ public class OrderStatusService {
             ChangeStatusRequest request) {
         if (!resource.equals("comprehensive-service-orders") && request.status() == Status.CONFIRMED)
             throw new ApiException(HttpStatus.CONFLICT, "CONFIRM_THROUGH_ROUTE", "Подтвердите заявку через рейс");
-        if(resource.equals("comprehensive-service-orders")) throw new ApiException(HttpStatus.CONFLICT,"SERVICE_STATUS_AUTOMATIC","Статус услуги меняется автоматически после выполнения связанных заявок");
+        if(resource.equals("comprehensive-service-orders")) throw new ApiException(HttpStatus.CONFLICT,"SERVICE_STATUS_AUTOMATIC","Статус комплексной заявки меняется автоматически после выполнения связанных заявок");
         lockOrderRoute(resource, id);
         return changeInternal(resource, id, request,null,false);
     }
@@ -100,7 +99,7 @@ public class OrderStatusService {
             Integer unfinishedShipping = jdbc.queryForObject("select count(*) from shipping_order where comprehensive_service_order_id = ? and order_status <> 'COMPLETED'", Integer.class, id);
             if ((unfinishedReceiving != null && unfinishedReceiving > 0) || (unfinishedShipping != null && unfinishedShipping > 0)) {
                 throw new ApiException(HttpStatus.CONFLICT, "SERVICE_CHILD_ORDERS_UNFINISHED",
-                        "Завершите связанные поставки и вывозы перед выполнением услуги");
+                        "Завершите связанные поставки и вывозы перед выполнением комплексной заявки");
             }
             Integer remaining = jdbc.queryForObject("""
                     select count(distinct wc.container_id)
@@ -115,7 +114,7 @@ public class OrderStatusService {
                     )
                     """, Integer.class, id);
             if (remaining != null && remaining > 0) throw new ApiException(HttpStatus.CONFLICT,
-                    "SERVICE_CONTAINERS_UNASSIGNED", "Создайте заявки на вывоз для всех КТК перед выполнением услуги");
+                    "SERVICE_CONTAINERS_UNASSIGNED", "Создайте заявки на вывоз для всех КТК перед выполнением комплексной заявки");
         }
         if(request.status()==Status.CONFIRMED) {
             stock.reserve(resource,id);
@@ -144,7 +143,6 @@ public class OrderStatusService {
 
     private void complete(String resource,UUID id,String table,String statusColumn) {
         if (!resource.equals("comprehensive-service-orders")) wagons.complete(resource.equals("receiving-orders"),id);
-        billing.complete(resource, id);
         jdbc.update("update " + table + " set " + statusColumn + " = ? where id = ?", Status.COMPLETED.name(), id);
         if (!resource.equals("comprehensive-service-orders")) {
             jdbc.update("""

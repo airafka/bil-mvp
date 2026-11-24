@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router'
-import { createServiceReturns, getServiceReturnCandidates, getReferenceOptions, getReturnContracts, type CreatedReturns, type ReturnTariffContract } from '../api'
+import { createServiceReturns, getServiceReturnCandidates, getReferenceOptions, getReturnContracts, type CreatedReturns, type ReturnContract } from '../api'
 import type { OrderDetails, ReferenceOption } from '../domain'
 import { AppOverlay } from './AppOverlay'
 import { UiInput, UiSelect } from './FormControls'
@@ -36,7 +35,7 @@ export function ReturnSelectionDialog({ context: order, serviceId, containers: a
   const lock = useRef(false)
   const [selected, setSelected] = useState<string[]>(selectInitially ? available.map(item => item.containerId) : [])
   const [currentClient, setCurrentClient] = useState(false)
-  const [contracts, setContracts] = useState<ReturnTariffContract[]>([])
+  const [contracts, setContracts] = useState<ReturnContract[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [clientId, setClientId] = useState('')
@@ -93,7 +92,7 @@ export function ReturnSelectionDialog({ context: order, serviceId, containers: a
             </div>
             {loading && <p role="status">Загружаем договоры…</p>}
             {loadError && <Notification kind="error">{loadError}</Notification>}
-            {!loading && !loadError && !otherContracts.length && <p>Добавьте активный тариф приёма автотранспортом в разделе <Link to="/complex-services">«Комплексные услуги»</Link>, чтобы выбрать другой договор.</p>}
+            {!loading && !loadError && !otherContracts.length && <p>В справочнике нет договоров других клиентов.</p>}
           </>}
           <label className="return-current-client"><UiInput type="checkbox" checked={currentClient} disabled={busy} onChange={event => { setCurrentClient(event.target.checked); setOwnerClientId(event.target.checked ? '' : clientId); if (!event.target.checked && clientId) { setOwnersLoading(true); setOwnersError('') } }} />Использовать текущего клиента и договор</label>
         </section>

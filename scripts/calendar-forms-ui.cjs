@@ -54,26 +54,23 @@ try {
  assert.equal(Date.parse(route.departureAt),Date.parse('2096-02-28T21:05:00Z'));
  await click('[aria-label="Редактировать"]');await wait('document.querySelector("input[type=datetime-local]")?.value==="2096-02-29T00:05"');await button('Отмена');
  console.log('PASS: untouched date follows calendar, manual/cleared values persist, route saves and edits Moscow time in a different browser time zone');
- await nav('/payment-invoices/new');await wait('document.querySelector("input[type=month]")?.value==="2096-03"');
  await nav('/comprehensive-service-orders/new');await wait('[...document.querySelectorAll(".ui-readonly-value")].some(n=>n.textContent==="03.03.2096")');
  // New service fixture exposes the route drawer in its shipping table.
- const catalog=(await api('/comprehensive-service-orders/available-services'))[0];
- const q=`select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where active and complex_service_id='${catalog.id}' order by id limit 1)t`;
- const tariff=JSON.parse(execFileSync(docker,['exec','billing-next-db-1','psql','-X','-U','billing','-d','billing_stock_history_test','-At','-c',q],{encoding:'utf8',windowsHide:true}));
+ const contract=(await api('/references/contracts'))[0];
  const bill=await api('/waybills/generate','POST',{standard20:0,standard40:1},201);
- const service=await api('/comprehensive-service-orders','POST',{complexServiceId:catalog.id,clientId:tariff.client_id,contractId:tariff.contract_id,defaultContainerOwnerId:tariff.client_id,waybillIds:[bill.id]},201);
+ const service=await api('/comprehensive-service-orders','POST',{clientId:contract.clientId,contractId:contract.id,defaultContainerOwnerId:contract.clientId,waybillIds:[bill.id]},201);
  await nav('/comprehensive-service-orders/'+service.order.id);await wait('[...document.querySelectorAll("button")].some(b=>b.textContent.includes("Заявки на вывоз"))');
  await evaljs('[...document.querySelectorAll("button")].find(b=>b.textContent.includes("Заявки на вывоз")).click()');
  await wait('[...document.querySelectorAll("button")].some(b=>b.textContent.trim()==="Создать рейс"&&!b.disabled)');await button('Создать рейс');
  await wait('document.querySelector("dialog[open] input[type=datetime-local]")?.value.startsWith("2096-03-03T")');await click('[aria-label="Закрыть форму рейса"]');
  // Route picker in the manual order wizard.
- await nav('/receiving-orders/new');await wait('[...document.querySelectorAll("select")].some(s=>[...s.options].some(o=>o.value==="'+tariff.client_id+'"))');
- await selectLabel('Клиент',tariff.client_id);await wait('[...document.querySelectorAll("select")].some(s=>[...s.options].some(o=>o.value==="'+tariff.contract_id+'"))');
- await selectLabel('Договор',tariff.contract_id);await selectLabel('Вид транспорта','VEHICLE');await selectLabel('Собственник КТК',tariff.client_id);await button('Далее →');
+ await nav('/receiving-orders/new');await wait('[...document.querySelectorAll("select")].some(s=>[...s.options].some(o=>o.value==="'+contract.clientId+'"))');
+ await selectLabel('Клиент',contract.clientId);await wait('[...document.querySelectorAll("select")].some(s=>[...s.options].some(o=>o.value==="'+contract.id+'"))');
+ await selectLabel('Договор',contract.id);await selectLabel('Вид транспорта','VEHICLE');await selectLabel('Собственник КТК',contract.clientId);await button('Далее →');
  await wait('document.querySelector(".route-picker button")');await click('.route-picker button');
  await wait('document.querySelector(".route-picker-create input[type=datetime-local],.route-create-panel input[type=datetime-local],input[type=datetime-local]")?.value.startsWith("2096-03-03T")');
  assert.equal((await value()).slice(0,10),'2096-03-03');
- console.log('PASS: invoice month, service creation date, service route drawer and order route picker use working calendar');
+ console.log('PASS: group creation date, service route drawer and order route picker use working calendar');
  assert.deepEqual(errors,[]);const shot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(dir,'../backups/calendar-forms-ui.png'),Buffer.from(shot.data,'base64'));
 } catch(e) { console.error(await evaljs('document.body.innerText')); throw e; }
 finally {const c=await api('/application-clock');await api('/application-clock','PUT',{date:original.mode==='SYSTEM'?null:original.date,version:c.version});ws.close();}

@@ -9,7 +9,6 @@ import { Notification } from '../components/Notification'
 import { OrderRouteCell } from '../components/OrderRouteCell'
 import { ServiceProgressCards } from '../components/ServiceProgressCards'
 import { StatusBadge } from '../components/StatusBadge'
-import { BillingCharges, BillingChargeTotals } from './BillingChargesPage'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { completeServiceSection, prepareServiceTransport, createServiceShippingOrder, getComprehensiveServiceOrder, updateServiceTransportMetadata, getReferenceOptions } from '../api'
@@ -32,7 +31,6 @@ const serviceTabs = [
   { id: 'receiving', label: 'Заявки на поставку - ЖД' },
   { id: 'shipping', label: 'Заявки на вывоз - Авто' },
   { id: 'returns', label: 'Заявки на поставку - Авто' },
-  { id: 'charges', label: 'Начисления' },
 ] as const
 type ServiceTab = typeof serviceTabs[number]['id']
 type MetadataDraft = { plannedAt: string; partyName: string }
@@ -50,7 +48,7 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
   const [routeRevision,setRouteRevision]=useState(0)
   const [preparationNotice,setPreparationNotice]=useState('')
   async function prepareSection(){
-    if(preparationLock.current||activeTab==='main'||activeTab==='charges')return
+    if(preparationLock.current||activeTab==='main')return
     const section=activeTab==='receiving'?'INITIAL_RECEIVING':activeTab==='shipping'?'SHIPPING':'RETURN_RECEIVING'
     preparationLock.current=true;setPreparing(true);setMetadataError('');setPreparationNotice('')
     try{setData(await prepareServiceTransport(comprehensiveServiceOrderId,section));setRouteRevision(v=>v+1);setPreparationNotice('Дата, время и контрагенты заполнены. Рейсы подготовлены.')}
@@ -58,7 +56,7 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
     finally{preparationLock.current=false;setPreparing(false)}
   }
   async function completeSection(){
-    if(preparationLock.current||activeTab==='main'||activeTab==='charges')return
+    if(preparationLock.current||activeTab==='main')return
     const section=activeTab==='receiving'?'INITIAL_RECEIVING':activeTab==='shipping'?'SHIPPING':'RETURN_RECEIVING'
     preparationLock.current=true;setPreparing(true);setMetadataError('');setPreparationNotice('')
     try{setData(await completeServiceSection(comprehensiveServiceOrderId,section,needsConfirmation?'CONFIRM_ROUTES':'COMPLETE_ORDERS'));setRouteRevision(v=>v+1);setPreparationNotice(needsConfirmation?'Рейсы подтверждены. Теперь можно выполнить заявки.':'Заявки раздела выполнены.')}
@@ -159,7 +157,7 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
   const isAutoReturn = data?.order.workflow === 'AUTO_RETURN'
   const ownReturns = data?.returnOrders.filter(item => item.comprehensiveServiceOrderId === comprehensiveServiceOrderId) ?? []
   const visibleServiceTabs = serviceTabs.filter(tab =>
-    (!isAutoReturn || ['main', 'returns', 'charges'].includes(tab.id))
+    (!isAutoReturn || ['main', 'returns'].includes(tab.id))
     && (tab.id !== 'returns' || ownReturns.length > 0),
   )
   const removals = data?.shippingOrders ?? []
@@ -171,15 +169,15 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
   const cargo = [...new Set(waybills.flatMap(bill => bill.products.map(product => cargoLabel(product.etsngCode))))]
 
   return <section className="form-page service-dashboard service-table-page">
-    <header className="service-header"><div className="view-title"><h1>Заявка на услугу{data ? ` №${data.order.code}` : ''}</h1></div><div className="service-header-actions">{editingMetadata?<><button type="button" className="secondary-button" disabled={metadataBusy} onClick={()=>{setEditingMetadata(false);setMetadataDraft({});setMetadataError('')}}>Отмена</button><button type="button" className="primary-button" disabled={metadataBusy} onClick={saveMetadata}>{metadataBusy?'Сохраняем…':'Сохранить'}</button></>:((!isAutoReturn&&data?.receivingOrder.status==='DRAFT')||data?.shippingOrders.some(o=>o.status==='DRAFT')||ownReturns.some(o=>o.status==='DRAFT'))&&<button type="button" className="secondary-button icon-button" aria-label="Редактировать" title="Редактировать" disabled={preparing||metadataBusy||creatingShipping} onClick={startMetadataEditing}><ActionIcon name="edit"/></button>}<Link className="close-button" to="/comprehensive-service-orders" aria-label="Закрыть" title="Закрыть">×</Link></div></header>
-    {createdReturn && <Notification kind="success">Созданы возвратные заявки: {createdReturn.returns.length}. {!createdReturn.createdService && ownReturns.length > 0 && <button type="button" className="text-action-button" onClick={() => setActiveTab('returns')}>Показать возвраты</button>}{createdReturn.createdService && <> Заявка на автоуслугу <Link to={`/comprehensive-service-orders/${createdReturn.serviceOrderId}`}>№{createdReturn.serviceOrderCode}</Link>.</>}</Notification>}
+    <header className="service-header"><div className="view-title"><h1>Комплексная заявка{data ? ` №${data.order.code}` : ''}</h1></div><div className="service-header-actions">{editingMetadata?<><button type="button" className="secondary-button" disabled={metadataBusy} onClick={()=>{setEditingMetadata(false);setMetadataDraft({});setMetadataError('')}}>Отмена</button><button type="button" className="primary-button" disabled={metadataBusy} onClick={saveMetadata}>{metadataBusy?'Сохраняем…':'Сохранить'}</button></>:((!isAutoReturn&&data?.receivingOrder.status==='DRAFT')||data?.shippingOrders.some(o=>o.status==='DRAFT')||ownReturns.some(o=>o.status==='DRAFT'))&&<button type="button" className="secondary-button icon-button" aria-label="Редактировать" title="Редактировать" disabled={preparing||metadataBusy||creatingShipping} onClick={startMetadataEditing}><ActionIcon name="edit"/></button>}<Link className="close-button" to="/comprehensive-service-orders" aria-label="Закрыть" title="Закрыть">×</Link></div></header>
+    {createdReturn && <Notification kind="success">Созданы возвратные заявки: {createdReturn.returns.length}. {!createdReturn.createdService && ownReturns.length > 0 && <button type="button" className="text-action-button" onClick={() => setActiveTab('returns')}>Показать возвраты</button>}{createdReturn.createdService && <> Комплексная заявка на возврат <Link to={`/comprehensive-service-orders/${createdReturn.serviceOrderId}`}>№{createdReturn.serviceOrderCode}</Link>.</>}</Notification>}
     {preparationNotice && <Notification kind="success">{preparationNotice}</Notification>}
     {metadataError && <Notification kind="error">{metadataError}</Notification>}
     {error && <Notification kind="error">{error}<button className="secondary-button" onClick={() => { setError(''); setAttempt(value => value + 1) }}>Попробовать снова</button></Notification>}
     {!data && !error && <div className="service-loading" role="status" aria-label="Загружаем заявку"><span>Загружаем заявку…</span><div /><div /><div /></div>}
     {data && receiving && <><div className="form-workspace">
       <div className="service-tabs-toolbar">
-      <div className="stepper view-tabs service-tabs" role="tablist" aria-label="Разделы заявки на услугу">
+      <div className="stepper view-tabs service-tabs" role="tablist" aria-label="Разделы комплексной заявки">
         {visibleServiceTabs.map((tab, index) => <button
           key={tab.id}
           ref={element => { tabButtons.current[index] = element }}
@@ -204,9 +202,8 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
           }}
         >{tab.label}</button>)}
       </div>
-      <div className="service-tab-context" data-charges={activeTab === 'charges'}>
-      <div className="service-tab-charge-totals" aria-hidden={activeTab !== 'charges'}><BillingChargeTotals totalWithoutVat={data.totalWithoutVat} totalWithVat={data.totalWithVat} /></div>
-      {(activeTab === 'receiving' || activeTab === 'shipping' || activeTab === 'returns') && <div className="service-tab-actions service-section-actions">{activeTab === 'shipping' && <><ServiceNoReturnAction serviceId={data.order.id} disabled={editingMetadata || preparing || metadataBusy || creatingShipping || !removals.some(order => order.status !== 'CANCELLED')} onSaved={fresh => { setData(fresh); setPreparationNotice('Для выбранных КТК возврат не нужен. По выполненным вывозам услуга начислена.'); setRouteRevision(value => value + 1) }} onError={setMetadataError} /><ServiceReturnAction service={data.order} disabled={editingMetadata || preparing || metadataBusy || creatingShipping || !removals.length} onCreated={result => void returnCreated(result)} onError={setMetadataError} /></>}
+      <div className="service-tab-context">
+      {(activeTab === 'receiving' || activeTab === 'shipping' || activeTab === 'returns') && <div className="service-tab-actions service-section-actions">{activeTab === 'shipping' && <><ServiceNoReturnAction serviceId={data.order.id} disabled={editingMetadata || preparing || metadataBusy || creatingShipping || !removals.some(order => order.status !== 'CANCELLED')} onSaved={fresh => { setData(fresh); setPreparationNotice('Для выбранных КТК возврат не нужен.'); setRouteRevision(value => value + 1) }} onError={setMetadataError} /><ServiceReturnAction service={data.order} disabled={editingMetadata || preparing || metadataBusy || creatingShipping || !removals.length} onCreated={result => void returnCreated(result)} onError={setMetadataError} /></>}
         <SidebarActions><button type="button" className="secondary-button icon-button" aria-label={sectionActionLabel} title={sectionActionLabel} disabled={preparing||editingMetadata||metadataBusy||creatingShipping||!(activeTab==='receiving'?!['COMPLETED','CANCELLED'].includes(receiving.status):activeTab==='shipping'?removals.some(o=>!['COMPLETED','CANCELLED'].includes(o.status)):ownReturns.some(o=>!['COMPLETED','CANCELLED'].includes(o.status)))} onClick={completeSection}><ActionIcon name="complete" /></button>
         <button type="button" className="secondary-button icon-button" aria-label="Заполнить заявки и создать рейсы" title="Заполнить текущую дату и время, контрагентов и создать рейсы" disabled={preparing||editingMetadata||metadataBusy||creatingShipping||!(activeTab==='receiving'?receiving.status==='DRAFT':activeTab==='shipping'?removals.some(o=>o.status==='DRAFT'):ownReturns.some(o=>o.status==='DRAFT'))} onClick={prepareSection}><ActionIcon name="magic" /></button></SidebarActions></div>}
       </div>
@@ -218,22 +215,16 @@ function ComprehensiveServiceOrderDashboard({ comprehensiveServiceOrderId }: { c
           <dl className="details-grid">
             <div><dt>Клиент</dt><dd>{data.order.clientName}</dd></div>
             <div><dt>Договор</dt><dd>{data.order.contractName}</dd></div>
-            <div><dt>Услуга</dt><dd>{data.progress?.serviceName || '—'}</dd></div>
-            {data.order.sourceServiceOrderId && <div><dt>Исходная заявка на услугу</dt><dd><RelatedOrderLink kind="comprehensive-service-orders" id={data.order.sourceServiceOrderId} /></dd></div>}
+            {data.order.sourceServiceOrderId && <div><dt>Исходная комплексная заявка</dt><dd><RelatedOrderLink kind="comprehensive-service-orders" id={data.order.sourceServiceOrderId} /></dd></div>}
             <div><dt>Дата создания</dt><dd>{data.order.createdAt ? new Date(data.order.createdAt).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'short', timeStyle: 'short' }) : 'Не указана'}</dd></div>
           </dl>
           <dl className="details-grid">
             <div><dt>Статус</dt><dd><StatusBadge status={data.order.status} /></dd></div>
-            <div><dt>Начислено без НДС, ₽</dt><dd>{data.totalWithoutVat.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</dd></div>
-            <div><dt>Начислено с НДС, ₽</dt><dd>{data.totalWithVat.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</dd></div>
           </dl>
         </div>
       </section>
       {data.progress && <ServiceProgressCards progress={data.progress} initialOrderStatus={receiving.status} autoReturn={isAutoReturn} />}
 
-      </div>
-      <div id="service-panel-charges" role="tabpanel" aria-labelledby="service-tab-charges" tabIndex={0} hidden={activeTab !== 'charges'}>
-        <BillingCharges active={activeTab === 'charges'} comprehensiveServiceOrderId={comprehensiveServiceOrderId} refreshKey={data.totalWithoutVat+':'+data.totalWithVat+':'+data.progress.returnCompleted+':'+routeRevision} />
       </div>
       <div id="service-panel-receiving" role="tabpanel" aria-labelledby="service-tab-receiving" tabIndex={0} hidden={activeTab !== 'receiving'}>
       <section className="service-order-section" aria-label="Заявки на поставку - ЖД">

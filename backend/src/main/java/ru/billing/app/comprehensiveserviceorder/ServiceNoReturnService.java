@@ -6,7 +6,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.billing.app.billing.BillingService;
 import ru.billing.app.error.ApiException;
 
 @Service
@@ -15,17 +14,16 @@ public class ServiceNoReturnService {
                             String shippingStatus,boolean returnRequired) {}
     public record Request(@NotEmpty @Size(max=10000) List<@NotNull UUID> containerIds) {}
     private final JdbcTemplate jdbc;
-    private final BillingService billing;
     private final ComprehensiveServiceOrderService services;
-    public ServiceNoReturnService(JdbcTemplate jdbc,BillingService billing,ComprehensiveServiceOrderService services) {
-        this.jdbc=jdbc;this.billing=billing;this.services=services;
+    public ServiceNoReturnService(JdbcTemplate jdbc,ComprehensiveServiceOrderService services) {
+        this.jdbc=jdbc;this.services=services;
     }
     private void requireRailwayService(UUID id) {
         var rows=jdbc.query("select workflow,status from comprehensive_service_order where id=?",
             (rs,n)->List.of(rs.getString(1),rs.getString(2)),id);
-        if(rows.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"SERVICE_NOT_FOUND","Заявка на услугу не найдена");
-        if(!"RAILWAY_RETURN".equals(rows.getFirst().getFirst()))throw conflict("RAILWAY_SERVICE_REQUIRED","Действие доступно только для ЖД-услуги");
-        if("CANCELLED".equals(rows.getFirst().get(1)))throw conflict("SERVICE_CANCELLED","Заявка на услугу отменена");
+        if(rows.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"SERVICE_NOT_FOUND","Комплексная заявка не найдена");
+        if(!"RAILWAY_RETURN".equals(rows.getFirst().getFirst()))throw conflict("RAILWAY_SERVICE_REQUIRED","Действие доступно только для комплексной ЖД-заявки");
+        if("CANCELLED".equals(rows.getFirst().get(1)))throw conflict("SERVICE_CANCELLED","Комплексная заявка отменена");
     }
     @Transactional(readOnly=true)
     public List<Candidate> candidates(UUID id) {
@@ -50,11 +48,9 @@ public class ServiceNoReturnService {
         if(selected.size()!=request.containerIds().size())throw conflict("DUPLICATE_CONTAINER","КТК указан повторно");
         var available=candidates(id).stream().filter(c->selected.contains(c.containerId())).toList();
         if(available.size()!=selected.size())throw conflict("NO_RETURN_CONTAINERS_UNAVAILABLE",
-            "Часть КТК уже имеет возврат, вывоз отменён или КТК не относится к этой услуге. Обновите список.");
+            "Часть КТК уже имеет возврат, вывоз отменён или КТК не относится к этой комплексной заявке. Обновите список.");
         // Same parent lock as return creation, shipping completion and cancellation; the batch is atomic.
         for(var row:available) jdbc.update("update shipping_order_container set return_required=false where shipping_order_id=? and container_id=?",row.shippingOrderId(),row.containerId());
-        available.stream().filter(c->"COMPLETED".equals(c.shippingStatus())).map(Candidate::shippingOrderId).distinct().sorted()
-            .forEach(billing::completeShipping);
         ServiceCompletion.refresh(jdbc,id);
         return services.findById(id);
     }

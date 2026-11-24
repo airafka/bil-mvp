@@ -53,10 +53,9 @@ async function main() {
     assert.equal(sql(`select count(*) from container_visit_facts where receiving_order_id='${repeat}' and is_cancelled`),'1');
     assert.equal(sql(`select count(*) from receiving_order_container where receiving_order_id='${repeat}' and status is not null`),'0');
 
-    const service=(await api('/comprehensive-service-orders/available-services'))[0];
-    const tariff=json(`select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where complex_service_id='${service.id}' and active order by id limit 1)t`);
     const bill=await api('/waybills/generate','POST',{standard20:2,standard40:0},201);
-    const request={complexServiceId:service.id,clientId:tariff.client_id,contractId:tariff.contract_id,defaultContainerOwnerId:x.a,waybillIds:[bill.id]};
+    const contract=(await api("/references/contracts?clientId="+x.a))[0];
+    const request={clientId:x.a,contractId:contract.id,defaultContainerOwnerId:x.a,waybillIds:[bill.id]};
     async function confirmedRail() {
         const order=await api('/comprehensive-service-orders','POST',request,201);
         const section='/comprehensive-service-orders/'+order.order.id;

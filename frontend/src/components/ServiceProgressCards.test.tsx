@@ -4,7 +4,6 @@ import { ServiceProgressCards } from './ServiceProgressCards'
 import type { ServiceProgress } from '../comprehensiveServiceOrder'
 
 const progress: ServiceProgress = {
-  serviceName: 'Выбранная услуга из справочника',
   accepted: 10, shippingCreated: 8, shippingCompleted: 6, returnCreated: 0, returnCompleted: 0,
   total: 10, shippingMissing: 2, shippingOrderCount: 4, shippingOrdersCompleted: 3,
   returnOrderCount: 0, returnOrdersCompleted: 0, returnMissing: 10,

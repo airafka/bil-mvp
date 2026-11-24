@@ -14,18 +14,13 @@ const navigationGroups = [
     { path: '/transport-vehicles', title: 'Транспортные средства', icon: 'list' },
     { path: '/routes', title: 'Рейсы', icon: 'list' },
     { path: '/waybills', title: 'Накладные ЭТРАН', icon: 'list' },
-    { path: '/complex-services', title: 'Комплексные услуги', icon: 'billing' },
   ] },
   { title: 'Отчеты', icon: 'paper', items: [{ path: '/container-storage', title: 'Хранение КТК', icon: 'list' }, { path: '/container-owners', title: 'Остатки и собственники КТК', icon: 'list' }] },
   { title: 'Заявки', icon: 'documents', items: [
     { path: '/receiving-orders', title: 'Заявки на поставку', icon: 'paper' },
     { path: '/shipping-orders', title: 'Заявки на вывоз', icon: 'paper' },
     { path: '/service-orders', title: 'Заявка на смену собственника', icon: 'paper' },
-    { path: '/comprehensive-service-orders', title: 'Заявка на услугу', icon: 'billing' },
-  ] },
-  { title: 'Биллинг', icon: 'billing', items: [
-    { path: '/billing-charges', title: 'Оказанные услуги', icon: 'billing' },
-    { path: '/payment-invoices', title: 'Счета на оплату', icon: 'paper' },
+    { path: '/comprehensive-service-orders', title: 'Комплексные заявки', icon: 'paper' },
   ] },
 ]
 const navigation = navigationGroups.flatMap(group => group.items)
@@ -46,7 +41,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(() => setMenuClosing(false), 350)
     return () => window.clearTimeout(timer)
   }, [menuClosing])
-  useEffect(() => { document.title = (navigation.find(item => pathname.startsWith(item.path))?.title ?? 'Биллинг') + ' · Биллинг 2.0'; window.scrollTo(0, 0) }, [pathname])
+  useEffect(() => { document.title = (navigation.find(item => pathname.startsWith(item.path))?.title ?? 'Контейнерная площадка') + ' · Контейнерная площадка'; window.scrollTo(0, 0) }, [pathname])
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   const toggleGroup = (title: string) => {
     setMenuClosing(false)
@@ -63,7 +58,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return <div className="app-shell" data-menu-expanded={expanded} data-menu-closing={menuClosing}>
     <a className="skip-link" href="#main-content">Перейти к содержимому</a>
     <aside className="sidebar">
-      <Link className="brand-mark" to="/" onClick={collapseForNavigation} aria-label="Биллинг 2.0"><img src="/icons/figma/logo.svg" alt="" /></Link>
+      <Link className="brand-mark" to="/" onClick={collapseForNavigation} aria-label="Контейнерная площадка"><img src="/icons/figma/logo.svg" alt="" /></Link>
       <nav id="main-navigation" className="main-nav navigation-tree" aria-label="Основная навигация">
         {navigationGroups.map((group, index) => {
           const open = expanded && openGroups.has(group.title)
@@ -90,7 +85,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       if (event.target === event.currentTarget && (event.propertyName === 'width' || event.propertyName === 'margin-left')) setMenuClosing(false)
     }}>
       <header className="topbar">
-        <nav className="breadcrumbs" aria-label="Навигационная цепочка"><Link to="/">Главная</Link><span aria-hidden="true">—</span><Link to={current?.path ?? '/'}>{current?.title ?? 'Биллинг'}</Link>{(isCreating || isViewing) && <><span aria-hidden="true">—</span><strong>{isCreating ? 'Создание' : 'Просмотр'}</strong></>}</nav>
+        <nav className="breadcrumbs" aria-label="Навигационная цепочка"><Link to="/">Главная</Link><span aria-hidden="true">—</span><Link to={current?.path ?? '/'}>{current?.title ?? 'Контейнерная площадка'}</Link>{(isCreating || isViewing) && <><span aria-hidden="true">—</span><strong>{isCreating ? 'Создание' : 'Просмотр'}</strong></>}</nav>
         <ApplicationCalendar />
         <OperationalReset />
         <div className="user-badge" title="Локальный пользователь"><img src="/icons/figma/avatar.svg" alt="Локальный пользователь" /></div>

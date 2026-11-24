@@ -16,25 +16,6 @@ import type {
 import type { CreateOrderPayload } from './orderForm'
 import type { RouteType, RouteSummary, RouteOrder, RouteDetails, CreateRoutePayload } from './routes'
 import type { CreateWaybillPayload } from './waybillForm'
-import type { ComplexService, ComplexServiceTariff, ComplexServiceDetails, ComplexServicePayload, ComplexServiceTariffPayload } from './complexService'
-import type { AppliedInvoiceTariff, InvoiceCandidates, InvoiceDetails, InvoiceFilters, PaymentInvoice } from './invoices'
-
-export function getPaymentInvoices(page = 0) {
-  return request<PagedResponse<PaymentInvoice>>(`/api/payment-invoices?page=${page}`)
-}
-export function getInvoiceCandidates(filters: InvoiceFilters, invoiceId?: string) {
-  return request<InvoiceCandidates>(`/api/payment-invoices/${invoiceId ? invoiceId + '/' : ''}available-charges?${new URLSearchParams(filters)}`)
-}
-export function createPaymentInvoice(filters: InvoiceFilters, chargeIds: string[], requestKey: string) {
-  return request<InvoiceDetails>('/api/payment-invoices', { method: 'POST', body: JSON.stringify({ ...filters, chargeIds, requestKey }) })
-}
-export function getPaymentInvoice(id: string) {
-  return request<InvoiceDetails>(`/api/payment-invoices/${id}`)
-}
-export function deletePaymentInvoice(id: string) {
-  return request<void>(`/api/payment-invoices/${id}`, { method: 'DELETE' })
-}
-
 export function getReferenceOptions(resource: 'clients' | 'containers' | 'etsng-codes' | 'railway-carriages' | 'seal-types' | 'hazard-classes' | 'danger-products' | 'railway-carriage-models' | 'railway-carriage-kinds', query = '') {
   return request<ReferenceOption[]>(`/api/references/${resource}?limit=100&q=${encodeURIComponent(query)}`)
 }
@@ -92,12 +73,10 @@ export function getGroupedWaybills(
 }
 
 
-export function getContracts(activeTariffsOnly = false) { return request<ContractOption[]>('/api/references/contracts' + (activeTariffsOnly ? '?activeTariffsOnly=true' : '')) }
-export function getTariffClients() { return request<ReferenceOption[]>('/api/references/tariff-clients') }
+export function getContracts() { return request<ContractOption[]>('/api/references/contracts') }
 export function getComprehensiveServiceOrders(page = 0, query = '', status = '') { return request<PagedResponse<ComprehensiveServiceOrderSummary>>('/api/comprehensive-service-orders?page=' + page + '&size=20&query=' + encodeURIComponent(query) + '&status=' + encodeURIComponent(status)) }
 export function getComprehensiveServiceOrder(id: string) { return request<ComprehensiveServiceOrderDetails>('/api/comprehensive-service-orders/' + id) }
-export function getAvailableOrderServices() { return request<import('./serviceWaybillValidation').AvailableOrderService[]>('/api/comprehensive-service-orders/available-services') }
-export function createComprehensiveServiceOrder(payload: { complexServiceId: string; clientId: string; contractId: string; waybillIds: string[]; defaultRailwayCarriageOwnerId?: string; defaultContainerOwnerId?: string; containerOwners?: Array<{ containerId: string; ownerClientId: string }> }) {
+export function createComprehensiveServiceOrder(payload: { clientId: string; contractId: string; waybillIds: string[]; defaultRailwayCarriageOwnerId?: string; defaultContainerOwnerId?: string; containerOwners?: Array<{ containerId: string; ownerClientId: string }> }) {
   return request<ComprehensiveServiceOrderDetails>('/api/comprehensive-service-orders', { method: 'POST', body: JSON.stringify(payload) })
 }
 export function createServiceShippingOrder(serviceId: string, containerIds: string[]) {
@@ -123,32 +102,6 @@ export function createRoute(payload: CreateRoutePayload) {
 export function assignRouteOrders(id: string, orderIds: string[]) {
   return request<RouteDetails>('/api/routes/' + id + '/orders', { method: 'POST', body: JSON.stringify({ orderIds }) })
 }
-
-export function getComplexServices() { return request<ComplexService[]>('/api/complex-services') }
-export function getComplexService(id: string) { return request<ComplexServiceDetails>(`/api/complex-services/${id}`) }
-export function createComplexService(payload: ComplexServicePayload) {
-  return request<ComplexServiceDetails>('/api/complex-services', { method: 'POST', body: JSON.stringify(payload) })
-}
-export function updateComplexService(id: string, payload: ComplexServicePayload) {
-  return request<ComplexServiceDetails>(`/api/complex-services/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
-}
-export function deleteComplexService(id: string) {
-  return request<void>(`/api/complex-services/${id}`, { method: 'DELETE' })
-}
-export function saveComplexServiceTariff(id: string, payload: ComplexServiceTariffPayload) {
-  return request<ComplexServiceDetails>(`/api/complex-services/${id}/tariffs`, { method: 'PUT', body: JSON.stringify(payload) })
-}
-export function updateComplexServiceTariff(id: string, tariffId: string, payload: ComplexServiceTariffPayload) {
-  return request<ComplexServiceDetails>(`/api/complex-services/${id}/tariffs/${tariffId}`, { method: 'PUT', body: JSON.stringify(payload) })
-}
-export function deleteComplexServiceTariff(id: string, tariffId: string) {
-  return request<void>(`/api/complex-services/${id}/tariffs/${tariffId}`, { method: 'DELETE' })
-}
-
-export function getBillingCharges(comprehensiveServiceOrderId?: string, page = 0) {
-  return request<import('./billing').BillingChargePage>(`/api/billing-charges?page=${page}&size=20${comprehensiveServiceOrderId ? `&comprehensiveServiceOrderId=${comprehensiveServiceOrderId}` : ''}`)
-}
-
 
 export function getRailwayCarriagePage(page: number) {
   return request<PagedResponse<import('./railwayCarriages').RailwayCarriage>>(`/api/references/railway-carriages/page?page=${page}&size=20`)
@@ -206,21 +159,6 @@ export function getWaybillSelectionOptions() {
 
 export function getOwnershipAvailableForCreate(clientId: string, query = '', page = 0, effectiveDate = '', sourceClientId = '') { return request<PagedResponse<import('./containerStock').OwnershipContainer>>('/api/service-orders/containers/available?' + new URLSearchParams({ ...(effectiveDate ? { effectiveDate } : {}), ...(sourceClientId ? { sourceClientId } : {}), clientId, query, page: String(page) })) }
 
-export function getInvoiceTariff(invoiceId: string, chargeId: string) {
-  return request<AppliedInvoiceTariff>(`/api/payment-invoices/${invoiceId}/tariffs/${chargeId}`)
-}
-
-export function getComplexServiceTariff(tariffId: string) {
-  return request<ComplexServiceTariff>(`/api/complex-services/tariffs/${tariffId}`)
-}
-
-export function updatePaymentInvoice(id: string, filters: InvoiceFilters, chargeIds: string[], version: number) {
-  return request<InvoiceDetails>(`/api/payment-invoices/${id}`, { method: 'PUT', body: JSON.stringify({ ...filters, chargeIds, version }) })
-}
-export function markPaymentInvoicePaid(id: string, version: number) {
-  return request<InvoiceDetails>(`/api/payment-invoices/${id}/paid`, { method: 'POST', body: JSON.stringify({ version }) })
-}
-
 export function getTransportCatalog(kind: import('./transportCatalogs').TransportCatalogKind) {
  return request<import('./transportCatalogs').TransportCatalogEntry[]>('/api/transport-catalogs/'+kind)
 }
@@ -251,9 +189,9 @@ export function completeServiceSection(id: string, section: 'INITIAL_RECEIVING' 
   return request<ComprehensiveServiceOrderDetails>('/api/comprehensive-service-orders/' + id + '/complete-section', { method: 'POST', body: JSON.stringify({ section, action }) })
 }
 
-export type ReturnTariffContract = { clientId: string; clientName: string; contractId: string; contractName: string }
+export type ReturnContract = { clientId: string; clientName: string; contractId: string; contractName: string }
 export type CreatedReturn = { receivingOrderId: string; receivingOrderCode: number; serviceOrderId: string; serviceOrderCode: number; createdService: boolean }
-export function getReturnContracts() { return request<ReturnTariffContract[]>('/api/shipping-orders/return-contracts') }
+export function getReturnContracts() { return request<ReturnContract[]>('/api/shipping-orders/return-contracts') }
 export type ReturnCandidate = { containerId: string; containerName: string; shippingOrderId: string; shippingOrderCode: number }
 export type CreatedReturns = { serviceOrderId: string; serviceOrderCode: number; createdService: boolean; returns: CreatedReturn[] }
 export function getServiceReturnCandidates(id: string) { return request<ReturnCandidate[]>(`/api/comprehensive-service-orders/${id}/returns/available-containers`) }

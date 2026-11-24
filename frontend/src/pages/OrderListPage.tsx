@@ -79,7 +79,7 @@ export function OrderListPage({ config }: { config: OrderConfig }) {
                 <th>Площадка</th>
                 <th>Вид транспорта</th>
                 <th>Рейс</th>
-                <th>Услуга</th>
+                <th>Комплексная заявка</th>
                 <th>Комментарий</th>
                 <th>Статус</th><th className="registry-actions" scope="col" aria-label="Действия" />
               </tr>

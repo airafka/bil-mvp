@@ -1,7 +1,7 @@
 import type { ServiceProgress } from '../comprehensiveServiceOrder'
 
 export function ServiceProgressCards({ progress, initialOrderStatus, autoReturn = false }: { progress: ServiceProgress; initialOrderStatus: string; autoReturn?: boolean }) {
-  return <div className="service-progress" aria-label="Выполнение этапов услуги">
+  return <div className="service-progress" aria-label="Выполнение этапов заявки">
     {!autoReturn && <><section aria-labelledby="initial-progress-title">
       <h2 id="initial-progress-title">Поставка - ЖД</h2>
       <dl className="service-progress-metrics">

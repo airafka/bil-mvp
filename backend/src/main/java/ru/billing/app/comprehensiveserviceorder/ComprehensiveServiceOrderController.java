@@ -27,8 +27,6 @@ public class ComprehensiveServiceOrderController {
         return service.createShippingForTwentyFootContainers(id, request.containerIds());
     }
 
-    @GetMapping("/available-services")
-    public java.util.List<ComprehensiveServiceOrderService.AvailableService> availableServices() { return service.availableServices(); }
 
     @GetMapping
     public PagedResponse<ComprehensiveServiceOrderSummary> findPage(@RequestParam(defaultValue = "0") int page,
