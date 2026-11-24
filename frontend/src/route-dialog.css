@@ -51,3 +51,17 @@
 @media (max-width: 480px) {
   #app-overlay-root .route-side-dialog:not(.return-dialog) .field { grid-template-columns: minmax(0, 1fr); gap: 6px; }
 }
+
+.shipment-stock-picker { margin: 0; padding: 0; border: 0; }
+.shipment-stock-picker legend { margin-bottom: 6px; padding: 0; font-size: 14px; }
+.shipment-stock-options {
+  max-height: 14rem; overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid var(--app-border); border-radius: var(--app-radius);
+}
+#app-overlay-root .shipment-stock-options label {
+  display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 12px; cursor: pointer;
+}
+.shipment-stock-picker .pagination button { width: auto; }
+.shipment-stock-options label + label { border-top: 1px solid var(--table-border); }
+.shipment-stock-options label:hover, .shipment-stock-options label:focus-within { background: var(--table-hover); }
+.shipment-stock-options input { margin: 0; flex: 0 0 auto; }

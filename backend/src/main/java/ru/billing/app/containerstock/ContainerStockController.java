@@ -1,6 +1,7 @@
 package ru.billing.app.containerstock;
 import java.util.*;
 import org.springframework.web.bind.annotation.*;
+import ru.billing.app.order.ContainerType;
 import ru.billing.app.order.PagedResponse;
 @RestController
 public class ContainerStockController {
@@ -15,9 +16,10 @@ public class ContainerStockController {
     @GetMapping({"/api/container-owners","/api/container-remains"})
     public PagedResponse<ContainerStockService.Owner> page(@RequestParam(defaultValue="")String query,
             @RequestParam(required=false)UUID clientId,@RequestParam(required=false)String status,
+            @RequestParam(required=false) ContainerType containerType,
             @RequestParam(defaultValue="true")boolean inRemains,@RequestParam(defaultValue="0")int page,
             @RequestParam(defaultValue="20")int size,jakarta.servlet.http.HttpServletRequest request){
-        return service.page(query.trim(),clientId,status==null||status.isBlank()?null:status,
+        return service.page(query.trim(),clientId,status==null||status.isBlank()?null:status,containerType,
             request.getRequestURI().equals("/api/container-remains")&&inRemains,page,size);
     }
     @GetMapping("/api/containers/{id}/owner-history")

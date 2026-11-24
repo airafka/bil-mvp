@@ -211,6 +211,14 @@ async function run(name) {
     const unnumbered = await order('shipping', 4, { fillingType: 'NONE_CONTAINER',
         containerQuantities: [{ quantity: 1, type: 'STANDARD_20', empty: true, ownerClientId: source.id }] });
     await confirm('shipping', unnumbered, 4, 'VEHICLE');
+    const candidates = (containerType, clientId, row) => api('/container-owners?' + new URLSearchParams({
+        status: 'ON_TERMINAL', containerType, clientId, query: row.containerName, size: '1',
+    }));
+    const eligible = await candidates('STANDARD_20', source.id, second);
+    assert.equal(eligible.totalElements, 1);
+    assert.equal(eligible.items[0].containerId, second.containerId);
+    assert.equal((await candidates('STANDARD_40', source.id, second)).totalElements, 0);
+    assert.equal((await candidates('STANDARD_20', target.id, second)).totalElements, 0);
     const cargo = { ...unload.cargoResult[0], cargoNumber: second.containerName, transportType: 'АВТО', transportNumber: 'А001АА' };
     const load = { ...unload, _order: unnumbered.id, orderNumber: String(unnumbered.code), _id: randomUUID(),
         eventCode: 'LOAD_FINISH', eventName: 'Погрузка завершена', eventDateTime: day(4) + 'T15:00:00+03:00', cargoResult: [cargo] };
@@ -228,6 +236,7 @@ async function run(name) {
     await send(load, 'DONE');
     assert.equal((await api('/shipping-orders/' + unnumbered.id)).status, 'COMPLETED');
     assert.equal((await stock(second)).shippingOrderId, unnumbered.id);
+    assert.equal((await candidates('STANDARD_20', source.id, second)).totalElements, 0);
     assert.deepEqual((await periods(second)).map(row => row.storageDays).sort(), [1, 3]);
     console.log('PASS draft, grouped conflicts, partial receiving, dated transfer, storage, repeat-visit cancellation and unnumbered TOS shipment');
 }

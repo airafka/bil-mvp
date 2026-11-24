@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.billing.app.error.ApiException;
+import ru.billing.app.order.ContainerType;
 import ru.billing.app.order.PagedResponse;
 
 @Service
@@ -227,11 +228,13 @@ public class ContainerStockService {
             rs.getObject("receiving_order_id",UUID.class),rs.getObject("shipping_order_id",UUID.class));
     }
     @Transactional(readOnly=true)
-    public PagedResponse<Owner> page(String query, UUID client, String status, boolean remains, int page, int size) {
+    public PagedResponse<Owner> page(String query, UUID client, String status, ContainerType containerType, boolean remains, int page, int size) {
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
         if(status!=null&&!Set.of("EXPECTED","ON_TERMINAL","RESERVED_OUT","DEPARTED").contains(status))throw error("INVALID_CONTAINER_STATUS","Неизвестный статус КТК");
         String filter=" where (?='' or position(lower(?) in lower(concat_ws(' ',c.code,cl.name)))>0) and (?::uuid is null or o.client_id=?) and (?::text is null or o.status=?) and (not ? or o.status in ('ON_TERMINAL','RESERVED_OUT'))";
-        Object[] args={query,query,client,client,status,status,remains};
+        filter += " and (?::text is null or c.container_type=?)";
+        String type = containerType == null ? null : containerType.name();
+        Object[] args={query,query,client,client,status,status,remains,type,type};
         long count=jdbc.queryForObject("select count(*) from ("+OWNER_SELECT+filter+") q",Long.class,args);
         var params=new ArrayList<>(Arrays.asList(args));params.add(size);params.add(page*size);
         return PagedResponse.of(jdbc.query(OWNER_SELECT+filter+" order by c.code,o.id limit ? offset ?",(rs,n)->owner(rs),params.toArray()),page,size,count);

@@ -1,6 +1,7 @@
 import { request } from './http'
 export { ApiError } from './http'
 import type {
+  ContainerType,
   ContractOption,
   CreatedOrder,
   CreatedWaybill,
@@ -107,8 +108,10 @@ export function finishContainerOrder(apiPath: string, id: string) {
   return request<import('./domain').CreatedOrder>(apiPath + '/' + id + '/events', { method: 'POST', body: JSON.stringify({ eventCode: apiPath === '/api/receiving-orders' ? 'UNLOAD_FINISH' : 'LOAD_FINISH' }) })
 }
 
-export function getContainerStock(query = '', clientId = '', status = '', page = 0) {
-  return request<PagedResponse<import('./containerStock').StockOwner>>('/api/container-owners?' + new URLSearchParams({ query, ...(clientId ? { clientId } : {}), ...(status ? { status } : {}), page: String(page) }))
+export function getContainerStock(query = '', clientId = '', status = '', page = 0, containerType?: ContainerType) {
+  return request<PagedResponse<import('./containerStock').StockOwner>>('/api/container-owners?' + new URLSearchParams({
+    query, page: String(page), ...(clientId ? { clientId } : {}), ...(status ? { status } : {}), ...(containerType ? { containerType } : {}),
+  }))
 }
 export function getOwnerHistory(id: string, includeReservations = false) { return request<import('./containerStock').OwnerHistory[]>('/api/containers/' + id + '/owner-history?includeReservations=' + includeReservations) }
 export function getOwnershipOrders(query = '', page = 0) { return request<PagedResponse<import('./containerStock').OwnershipHeader>>('/api/service-orders?' + new URLSearchParams({ query, page: String(page) })) }
