@@ -100,8 +100,16 @@ public class ContainerStockService {
         }
     }
 
-    /** Caller holds the physical container locks and has applied any transfers due today. */
+    /** Caller holds the physical container locks. */
     void requireNoPlannedOwnershipTransfers(Collection<UUID> lockedContainerIds, String recoveryHint) {
+        requireNoPlannedOwnershipTransfers(lockedContainerIds, recoveryHint, false);
+    }
+
+    void requireNoDueOwnershipTransfers(Collection<UUID> lockedContainerIds) {
+        requireNoPlannedOwnershipTransfers(lockedContainerIds, "", true);
+    }
+
+    private void requireNoPlannedOwnershipTransfers(Collection<UUID> lockedContainerIds, String recoveryHint, boolean dueOnly) {
         if (lockedContainerIds.isEmpty()) return;
         String placeholders = String.join(",", Collections.nCopies(lockedContainerIds.size(), "?"));
         var conflicts = jdbc.query("""
@@ -110,9 +118,10 @@ public class ContainerStockService {
                 join service_order s on s.id = sc.service_order_id
                 join container c on c.id = sc.container_id
                 where s.status = 'CONFIRMED' and sc.result_status = 'PLANNED'
-                  and sc.container_id in (%s)
+                  and sc.container_id in (%s) %s
                 group by s.id, s.number order by s.number
-                """.formatted(placeholders), (rs, n) -> "По КТК " + rs.getString("container_codes")
+                """.formatted(placeholders, dueOnly ? "and sc.plan_at < ((billing_today()+1)::timestamp at time zone 'Europe/Moscow')" : ""),
+                (rs, n) -> "По КТК " + rs.getString("container_codes")
                         + " ожидает выполнения заявка на смену собственника №" + rs.getLong("number") + ".",
                 lockedContainerIds.toArray());
         if (!conflicts.isEmpty()) {
@@ -136,6 +145,7 @@ public class ContainerStockService {
         var selectedIds = selected.stream().map(ContainerTaskRows.Row::container).toList();
         if (eventTime == null) lockContainers(selectedIds);
         else ContainerLocks.lockCurrentOwners(jdbc,selectedIds);
+        requireNoDueOwnershipTransfers(selectedIds);
         for(var row:selected) applyFinishedResult(order,receiving,row,eventTime);
         // Read the persisted results while the order is locked. Empty legacy documents can be completed manually.
         return allTasksFinished(order,receiving);
@@ -193,6 +203,7 @@ public class ContainerStockService {
         var rows=tasks.rows(order,receiving);
         var ids=rows.stream().map(ContainerTaskRows.Row::container).toList();
         lockContainers(ids);
+        requireNoDueOwnershipTransfers(ids);
         var reservations=jdbc.query("""
             select container_id,old_client_id from container_owner_history_view
             where order_id=? and order_type=? and operation_type=? and not cancellation and new_status=?

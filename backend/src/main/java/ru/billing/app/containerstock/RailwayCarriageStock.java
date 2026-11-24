@@ -124,7 +124,6 @@ public class RailwayCarriageStock {
         if (plans.size()!=1 || plans.getFirst().quantity()!=1 || !plans.getFirst().empty()) throw referenceError("Для безномерного автовывоза укажите один порожний КТК", "ShippingOrder.InvalidNoneContainerData");
         var plan=plans.getFirst();
         if (plan.owner()==null) throw referenceError("Укажите собственника КТК", "ShippingOrderContainerQty.MissingOwnerClient");
-        jdbc.queryForObject("select refresh_container_owner_clients()",Integer.class);
         var types=jdbc.queryForList("""
                 select distinct c.container_type from container_owner_current o join container c on c.id=o.container_id
                 where o.client_id=? and o.status='ON_TERMINAL'

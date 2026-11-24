@@ -39,7 +39,7 @@ public class ApplicationClockController {
             """,request.date(),request.version());
         if(updated==0) throw new ApiException(HttpStatus.CONFLICT,"BUSINESS_DATE_CHANGED",
             "Рабочая дата уже изменена. Обновите календарь и повторите выбор");
-        jdbc.queryForObject("select refresh_container_owner_clients()",Integer.class);
+        jdbc.queryForObject("select refresh_owner_snapshot()",Integer.class);
         return state();
     }
 

@@ -231,6 +231,8 @@ public class OwnershipOrderService {
         LocalDate effective=date(h.effectiveDate());
         var eligible=validateExisting(h,links,true);
         var confirmedAt=jdbc.queryForObject("select billing_now()",java.time.OffsetDateTime.class);
+        boolean immediate = !effective.isAfter(confirmedAt.atZoneSameInstant(ScheduledOwnershipTransfers.MOSCOW).toLocalDate());
+        if (immediate) stock.requireNoDueOwnershipTransfers(eligible.keySet());
         for (var link : links) {
             var candidate=eligible.get(link.containerId());
             jdbc.update("""
@@ -240,7 +242,13 @@ public class OwnershipOrderService {
                 """,candidate.visit(),candidate.previousClient(),h.clientId(),candidate.instant(),link.id());
         }
         jdbc.update("update service_order set status='CONFIRMED',effective_date=?,completion_at=?::timestamptz at time zone 'UTC',updated_at=?::timestamptz at time zone 'UTC',updated_by='local' where id=?",effective,confirmedAt,confirmedAt,id);
-        ContainerLocks.refreshLockedOwners(jdbc,eligible.keySet());
+        if (immediate) {
+            jdbc.queryForObject("""
+                    select refresh_container_owner_clients(array(
+                        select container_id from service_order_container where service_order_id=? and result_status='PLANNED'
+                    ))
+                    """, Integer.class, id);
+        }
         return details(id);
     }
     @Transactional public Details withdraw(UUID id) {

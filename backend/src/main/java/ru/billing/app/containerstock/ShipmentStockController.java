@@ -14,9 +14,8 @@ public class ShipmentStockController {
     public ShipmentStockController(JdbcTemplate jdbc) { this.jdbc=jdbc; }
     public record Owner(UUID id,String name,long available) {}
     @GetMapping("/api/references/container-stock-owners")
-    @Transactional
+    @Transactional(readOnly=true)
     public List<Owner> containerOwners(@RequestParam(required=false) String type) {
-        jdbc.queryForObject("select refresh_container_owner_clients()",Integer.class);
         return jdbc.query("""
                 select c.id, c.name, coalesce(s.n,0) n from client c left join (
                     select o.client_id, count(*) n from container_owner_current o join container k on k.id=o.container_id

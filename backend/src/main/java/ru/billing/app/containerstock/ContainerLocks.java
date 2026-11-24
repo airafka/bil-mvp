@@ -31,11 +31,11 @@ public final class ContainerLocks {
         refreshLockedOwners(jdbc, lock(jdbc, containerIds));
     }
 
-    /** Refresh the complete already-locked batch in one database call. */
+    /** Refresh registered owners from recorded events for the selected working date. */
     public static void refreshLockedOwners(JdbcTemplate jdbc, Collection<UUID> lockedIds) {
         if (lockedIds.isEmpty()) return;
         String marks = String.join(",", Collections.nCopies(lockedIds.size(), "?"));
-        jdbc.queryForObject("select refresh_container_owner_clients(array[" + marks + "]::uuid[])",
+        jdbc.queryForObject("select refresh_owner_snapshot(array[" + marks + "]::uuid[])",
                 Integer.class, lockedIds.toArray());
     }
 
