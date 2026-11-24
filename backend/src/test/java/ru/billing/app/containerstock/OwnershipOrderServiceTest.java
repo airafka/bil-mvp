@@ -29,7 +29,7 @@ class OwnershipOrderServiceTest {
 
     private void withOrder(String status) {
         Header header = new Header(orderId, 12, nextOwner, "Б", "CHANGE_OWNER", null, status, null, 0,
-                date, previousOwner, "А");
+                date, previousOwner, "А", null, false, null, null);
         when(jdbc.query(contains("for update"), ArgumentMatchers.<RowMapper<UUID>>any(), eq(orderId)))
                 .thenReturn(List.of(orderId));
         when(jdbc.queryForObject(contains("from service_order_current"), ArgumentMatchers.<RowMapper<Header>>any(), eq(orderId)))

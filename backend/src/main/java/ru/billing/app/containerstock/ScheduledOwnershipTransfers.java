@@ -36,26 +36,26 @@ public class ScheduledOwnershipTransfers {
         if (now.toLocalTime().isBefore(START)) return;
 
         var day = now.toLocalDate();
-        var cutoff = day.plusDays(1).atStartOfDay(MOSCOW).toOffsetDateTime();
-        var containers = jdbc.queryForList("""
-                select distinct container_id from service_order_container
-                where result_status='PLANNED' and plan_at < ? order by container_id
-                """, UUID.class, cutoff);
-        for (var id : containers) {
+        var orders = jdbc.queryForList("""
+                select s.id from service_order s where s.status='SCHEDULED' and s.effective_date<=?
+                order by s.effective_date,(select min(sc.plan_at) from service_order_container sc
+                    where sc.service_order_id=s.id and sc.result_status='PLANNED'),s.number
+                """, UUID.class, day);
+        for (var id : orders) {
             try {
                 transactions.executeWithoutResult(tx -> applyIfAvailable(id, day));
             } catch (DataAccessException | TransactionException ex) {
-                log.error("Scheduled ownership transfer failed for container {}", id, ex);
+                log.error("Scheduled ownership transfer failed for order {}", id, ex);
             }
         }
     }
 
     private void applyIfAvailable(UUID id, LocalDate day) {
-        // Acquire the shared calendar lock before claiming this container.
+        // Acquire the shared calendar lock before claiming this order.
         if (!day.equals(jdbc.queryForObject("select billing_today()", LocalDate.class))) return;
-        var locked = jdbc.queryForList("select id from container where id=? for update skip locked", UUID.class, id);
+        var locked = jdbc.queryForList("select id from service_order where id=? and status='SCHEDULED' for update skip locked", UUID.class, id);
         if (!locked.isEmpty()) {
-            jdbc.queryForObject("select refresh_container_owner_clients(array[?]::uuid[])", Integer.class, id);
+            jdbc.queryForObject("select apply_ownership_order(?)", String.class, id);
         }
     }
 

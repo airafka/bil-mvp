@@ -106,6 +106,16 @@ async function run(name) {
     const transfer = (offset, ownerIds) => api('/service-orders', 'POST', { service: 'CHANGE_OWNER', sourceClientId: source.id,
         clientId: target.id, effectiveDate: day(offset), containerOwnerIds: ownerIds }, 201);
 
+    async function waitForTransfer(path, ready) {
+        const deadline = Date.now() + 75_000;
+        do {
+            const state = await api(path);
+            if (ready(state)) return state;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        } while (Date.now() < deadline);
+        assert.fail('Scheduled ownership order did not reach the expected state: ' + path);
+    }
+
     // Draft headers and their equipment are saved independently.
     const empty = await transfer(0, []);
     assert.equal(empty.order.containerQuantity, 0);
@@ -171,7 +181,12 @@ async function run(name) {
     assert.equal((await stock(first)).clientId, source.id);
     await send(result(second, 1, 'T00:05:00+03:00'), 'DONE');
     assert.equal((await api('/receiving-orders/' + receiving.id)).status, 'COMPLETED');
+    assert.equal((await api(path)).order.exportQueued, false);
     await setDay(2);
+    // The backend worker runs on the minute. Reading stock does not execute the transfer.
+    const executed = await waitForTransfer(path, state => state.order.status === 'DONE');
+    assert.equal(executed.order.status, 'DONE', executed.order.executionError);
+    assert.equal(executed.order.exportQueued, true);
     assert.equal((await stock(first)).clientId, target.id);
     assert.equal((await api(path)).order.status, 'DONE');
 
@@ -257,7 +272,7 @@ async function run(name) {
     assert.equal((await candidates('STANDARD_20', target.id, second)).totalElements, 0);
     const cargo = { ...unload.cargoResult[0], cargoNumber: second.containerName, transportType: 'АВТО', transportNumber: 'А001АА' };
     const load = { ...unload, _order: unnumbered.id, orderNumber: String(unnumbered.code), _id: randomUUID(),
-        eventCode: 'LOAD_FINISH', eventName: 'Погрузка завершена', eventDateTime: day(4) + 'T15:00:00+03:00', cargoResult: [cargo] };
+        eventCode: 'LOAD_FINISH', eventName: 'Погрузка завершена', eventDateTime: (await api('/application-clock')).now, cargoResult: [cargo] };
     assert.equal(await send({ ...load, cargoResult: [cargo, cargo] }, 'INVALID'),
         'TosShipmentResultAction: Exactly one cargoResult is required for NONE_CONTAINER shipping order');
     const unknown = 'MISSING-' + randomUUID();
@@ -284,6 +299,39 @@ async function run(name) {
     assert.equal((await stock(second)).shippingOrderId, unnumbered.id);
     assert.equal((await candidates('STANDARD_20', source.id, second)).totalElements, 0);
     assert.deepEqual((await periods(second)).map(row => row.storageDays).sort(), [1, 3]);
-    console.log('PASS draft, grouped conflicts, shipment blocked by scheduled transfer, partial receiving, dated transfer, storage, repeat-visit cancellation and unnumbered TOS shipment');
+    // A scheduled document is indivisible even if one of its arrivals is later cancelled.
+    async function receiveBatch(quantity) {
+        const waybill = await api('/waybills/generate', 'POST', { standard20: quantity, standard40: 0 }, 201);
+        const doc = await order('receiving', 4, { transportType: 'RAILWAY',
+            defaultRailwayCarriageOwnerId: source.id, waybillIds: [waybill.id] });
+        await confirm('receiving', doc, 4, 'RAILWAY');
+        await finish('receiving', doc);
+        const rows = (await api('/receiving-orders/' + doc.id)).containers;
+        return { doc, ids: (await Promise.all(rows.map(stock))).map(owner => owner.id) };
+    }
+    async function schedule(ids) {
+        const draft = await transfer(5, ids);
+        const path = '/service-orders/' + draft.order.id;
+        const { order } = await api(path + '/accept', 'POST');
+        assert.equal(order.status, 'SCHEDULED');
+        assert.equal(order.exportQueued, false);
+        return path;
+    }
+    const complete = await receiveBatch(2);
+    const retained = await receiveBatch(1);
+    const cancelled = await receiveBatch(1);
+    const completePath = await schedule(complete.ids);
+    const blockedPath = await schedule([...retained.ids, ...cancelled.ids]);
+    await cancel('receiving', cancelled.doc);
+    await setDay(5);
+    const completed = await waitForTransfer(completePath, state => state.order.status === 'DONE');
+    assert.equal(completed.order.exportQueued, true);
+    assert.deepEqual(completed.containers.map(row => row.resultStatus), ['APPLIED', 'APPLIED']);
+    const pending = await waitForTransfer(blockedPath, state => !!state.order.executionError);
+    assert.equal(pending.order.status, 'SCHEDULED');
+    assert.equal(pending.order.exportQueued, false);
+    assert.ok(pending.containers.every(row => row.resultStatus !== 'APPLIED'));
+    assert.equal((await api(blockedPath + '/withdraw', 'POST')).order.status, 'DRAFT');
+    console.log('PASS atomic two-container transfer, scheduled shipment blocking, draft, grouped conflicts, shipment blocked by scheduled transfer, partial receiving, dated transfer, storage, repeat-visit cancellation and unnumbered TOS shipment');
 }
 run(process.argv[2]).catch(error => { console.error(error.message); process.exitCode = 1; });

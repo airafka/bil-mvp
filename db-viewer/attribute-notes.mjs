@@ -257,7 +257,15 @@ const specific = {
     service: 'Вид операции: CHANGE_OWNER — смена собственника КТК.',
     completion_at: 'Дата и время подтверждения заявки на смену собственника.',
     effective_date: 'Дата действия передачи по рабочему календарю Europe/Moscow.',
-    status: 'DRAFT — черновик, CONFIRMED — дата сохранена; API вычисляет SCHEDULED/DONE/PARTIAL/CANCELLED. Прежние завершённые статусы сохранены.',
+    status: 'DRAFT — черновик, SCHEDULED — ожидает выполнения, DONE — смена собственника выполнена.',
+  },
+  service_order_export: {
+    service_order_id: 'Заявка, по которой проведена передача всех КТК.',
+    payload: 'Полный состав пакета, сохранённый при проведении.',
+    attempts: 'Количество попыток отправки.',
+    sent_at: 'Время успешного ответа Datareon.',
+    message_id: 'UUID сообщения из ответа Datareon.',
+    last_error: 'Причина последней неуспешной попытки.',
   },
   shipping_order: {
     filling_type: 'Способ задания состава вывоза: например, конкретные КТК или вагоны.',

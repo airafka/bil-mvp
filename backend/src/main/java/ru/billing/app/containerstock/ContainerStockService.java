@@ -119,7 +119,7 @@ public class ContainerStockService {
                 from service_order_container sc
                 join service_order s on s.id = sc.service_order_id
                 join container c on c.id = sc.container_id
-                where s.status = 'CONFIRMED' and sc.result_status = 'PLANNED'
+                where s.status = 'SCHEDULED' and sc.result_status = 'PLANNED'
                   and sc.container_id in (%s) %s
                 group by s.id, s.number order by s.number
                 """.formatted(placeholders, dueOnly ? "and sc.plan_at < ((billing_today()+1)::timestamp at time zone 'Europe/Moscow')" : ""),
@@ -289,7 +289,7 @@ public class ContainerStockService {
             left join shipping_order s on h.order_type='SHIPPING_ORDER' and s.id=h.order_id
             left join service_order_current so on h.order_type='SERVICE_ORDER' and so.id=h.order_id
             where h.container_id=? and (? or (h.occurred_at at time zone 'Europe/Moscow')::date<=billing_today()) and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
-                and (h.order_type in ('RECEIVING_ORDER','SHIPPING_ORDER') or so.status in ('DONE','PARTIAL'))))
+                and (h.order_type in ('RECEIVING_ORDER','SHIPPING_ORDER') or so.status = 'DONE')))
             order by h.created_at desc,h.id desc
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("timeline_old_client_id",UUID.class),rs.getString("old_name"),
                 rs.getObject("new_client_id",UUID.class),rs.getString("new_name"),rs.getString("old_status"),rs.getString("new_status"),

@@ -32,8 +32,8 @@ class ScheduledOwnershipTransfersTest {
     void selectsTheMoscowWorkingDayAtTheFirstEligibleTick() {
         when(jdbc.queryForObject("select billing_now()", OffsetDateTime.class))
                 .thenReturn(OffsetDateTime.parse("2026-11-29T21:01:00Z"));
-        var nextMidnight = OffsetDateTime.parse("2026-12-01T00:00:00+03:00");
-        when(jdbc.queryForList(contains("result_status='PLANNED'"), eq(UUID.class), eq(nextMidnight)))
+        var dueDay = java.time.LocalDate.parse("2026-11-30");
+        when(jdbc.queryForList(contains("s.status='SCHEDULED'"), eq(UUID.class), eq(dueDay)))
                 .thenReturn(List.of(UUID.randomUUID()));
 
         worker.applyDueTransfers();

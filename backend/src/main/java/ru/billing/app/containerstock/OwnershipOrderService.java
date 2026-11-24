@@ -24,17 +24,19 @@ public class OwnershipOrderService {
     public record Link(UUID id,UUID containerOwnerId,UUID containerId,String containerName,String containerType,
             UUID clientId,String clientName,String status,UUID containerVisitId,UUID expectedClientId,String resultStatus,String resultReason) {}
     public record Header(UUID id,long number,UUID clientId,String clientName,String service,String comment,
-            String status,OffsetDateTime completionAt,long containerQuantity,LocalDate effectiveDate,UUID sourceClientId,String sourceClientName) {}
+            String status,OffsetDateTime completionAt,long containerQuantity,LocalDate effectiveDate,UUID sourceClientId,String sourceClientName,
+            String executionError,boolean exportQueued,OffsetDateTime exportSentAt,String exportError) {}
     public record Details(Header order,List<Link> containers) {}
     private static final String HEADER="""
-        select s.*,s.completion_at at time zone 'UTC' as confirmation_instant,c.name as client_name,src.name as source_client_name,(select count(*) from service_order_container_current sc where sc.service_order_id=s.id) as quantity
+        select s.*,e.service_order_id is not null as export_queued,e.sent_at,e.last_error,s.completion_at at time zone 'UTC' as confirmation_instant,c.name as client_name,src.name as source_client_name,(select count(*) from service_order_container_current sc where sc.service_order_id=s.id) as quantity
         from service_order_current s join client c on c.id=s.client_id
-        left join client src on src.id=s.source_client_id
+        left join client src on src.id=s.source_client_id left join service_order_export e on e.service_order_id=s.id
         """;
     private Header header(java.sql.ResultSet rs)throws java.sql.SQLException {
         return new Header(rs.getObject("id",UUID.class),rs.getLong("number"),rs.getObject("client_id",UUID.class),rs.getString("client_name"),
             rs.getString("service"),rs.getString("comment"),rs.getString("status"),rs.getObject("confirmation_instant",OffsetDateTime.class),rs.getLong("quantity"),rs.getObject("effective_date",LocalDate.class),
-            rs.getObject("source_client_id",UUID.class),rs.getString("source_client_name"));
+            rs.getObject("source_client_id",UUID.class),rs.getString("source_client_name"),rs.getString("execution_error"),rs.getBoolean("export_queued"),
+            rs.getObject("sent_at",OffsetDateTime.class),rs.getString("last_error"));
     }
     private Header locked(UUID id){
         var ids=jdbc.query("select id from service_order where id=? for update",(rs,n)->rs.getObject(1,UUID.class),id);
@@ -241,13 +243,10 @@ public class OwnershipOrderService {
                 where id=?
                 """,candidate.visit(),candidate.previousClient(),h.clientId(),candidate.instant(),link.id());
         }
-        jdbc.update("update service_order set status='CONFIRMED',effective_date=?,completion_at=?::timestamptz at time zone 'UTC',updated_at=?::timestamptz at time zone 'UTC',updated_by='local' where id=?",effective,confirmedAt,confirmedAt,id);
+        jdbc.update("update service_order set status='SCHEDULED',execution_error=null,effective_date=?,completion_at=?::timestamptz at time zone 'UTC',updated_at=?::timestamptz at time zone 'UTC',updated_by='local' where id=?",effective,confirmedAt,confirmedAt,id);
         if (immediate) {
-            jdbc.queryForObject("""
-                    select refresh_container_owner_clients(array(
-                        select container_id from service_order_container where service_order_id=? and result_status='PLANNED'
-                    ))
-                    """, Integer.class, id);
+            String reason = jdbc.queryForObject("select apply_ownership_order(?)", String.class, id);
+            if (reason != null) throw error(HttpStatus.CONFLICT, "OWNERSHIP_DATE_UNAVAILABLE", reason);
         }
         return details(id);
     }
@@ -256,7 +255,7 @@ public class OwnershipOrderService {
         if(!h.status().equals("SCHEDULED")) throw error(HttpStatus.CONFLICT,"SERVICE_ORDER_NOT_SCHEDULED","Вернуть в черновик можно только ожидающую заявку");
         stock.lockContainers(links(id).stream().map(Link::containerId).toList());
         jdbc.queryForObject("select withdraw_ownership_order(?)",Object.class,id);
-        jdbc.update("update service_order set status='DRAFT',completion_at=null,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",id);
+        jdbc.update("update service_order set status='DRAFT',execution_error=null,completion_at=null,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",id);
         return details(id);
     }
     private ApiException error(HttpStatus status,String code,String message){return new ApiException(status,code,message);}

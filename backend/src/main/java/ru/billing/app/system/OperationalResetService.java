@@ -23,7 +23,7 @@ public class OperationalResetService {
         "container_owner", "container_owner_history", "container_period", "container_visit",
         "railway_carriage_owner_history", "inbound_event", "shipping_order_container_qty",
         "receiving_order", "receiving_order_container",
-        "receiving_order_container_item", "route", "service_order", "service_order_container",
+        "receiving_order_container_item", "route", "service_order", "service_order_container", "service_order_export",
         "shipping_order", "shipping_order_container", "shipping_order_container_item", "shipping_order_railway_carriage",
         "waybill", "waybill_container", "waybill_container_relocation",
         "waybill_product", "waybill_railway_carriage", "waybill_zpu");

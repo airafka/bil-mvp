@@ -17,7 +17,7 @@ const resultLabels: Record<string, string> = { PLANNED: 'Передача зап
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error)
 const completedAt = (value: string | null) => value ? new Date(value).toLocaleString('ru-RU', { timeZone: 'UTC' }) : '—'
 function OwnershipStatus({ status }: { status: string }) {
-  return <span className={'ownership-status ' + (status === 'DONE' ? 'ownership-status-done' : status === 'SCHEDULED' ? 'ownership-status-scheduled' : '')}>{status === 'DONE' ? 'Выполнено' : status === 'SCHEDULED' ? 'Ожидает даты передачи' : status === 'PARTIAL' ? 'Выполнено частично' : status === 'CANCELLED' ? 'Отменено' : 'Черновик'}</span>
+  return <span className={'ownership-status ' + (status === 'DONE' ? 'ownership-status-done' : status === 'SCHEDULED' ? 'ownership-status-scheduled' : '')}>{status === 'DONE' ? 'Выполнено' : status === 'SCHEDULED' ? 'Ожидает выполнения' : 'Черновик'}</span>
 }
 function CloseLink() {
   return <Link className="close-button" to="/service-orders" aria-label="Закрыть" title="Закрыть"><ActionIcon name="close" /></Link>
@@ -163,13 +163,14 @@ export function OwnershipOrderViewPage() {
     getReferenceOptions('clients').then(value => { if (active) setClients(value) }).catch(e => { if (active) setError(errorText(e)) })
     return () => { active = false }
   }, [editing])
+  const awaitingDelivery = !!data?.order.exportQueued && !data.order.exportSentAt
   useEffect(() => {
-    if (data?.order.status !== 'SCHEDULED' || busy) return
+    if ((data?.order.status !== 'SCHEDULED' && !awaitingDelivery) || busy) return
     let active = true
-    const refresh = () => { if (!document.hidden) getOwnershipOrder(ownershipOrderId).then(value => { if (active) { apply(value); if (value.order.status === 'DONE') setMessage('Дата передачи наступила.') } }).catch(e => { if (active) setError(errorText(e)) }) }
+    const refresh = () => { if (!document.hidden) getOwnershipOrder(ownershipOrderId).then(value => { if (active) { apply(value); if (data?.order.status === 'SCHEDULED' && value.order.status === 'DONE') setMessage('Смена собственника выполнена.') } }).catch(e => { if (active) setError(errorText(e)) }) }
     const timer = window.setInterval(refresh, 5000)
     return () => { active = false; window.clearInterval(timer) }
-  }, [ownershipOrderId, data?.order.status, busy])
+  }, [ownershipOrderId, data?.order.status, awaitingDelivery, busy])
   useEffect(() => { if (!editing || !effectiveDate || !client) return; let active = true; getOwnershipAvailable(ownershipOrderId, '', page, effectiveDate, client).then(v => { if (active) setAvailable(v) }).catch(e => { if (active) setError(errorText(e)) }); return () => { active = false } }, [ownershipOrderId, editing, page, revision, clock.date, effectiveDate, client])
   function clearSelection() { setSelected(new Set()); setAvailable(null); setPage(0); setError('') }
   function changeTab(value: 'main' | 'containers') { if (editing && value === 'containers' && !effectiveDate) { setError('Укажите дату передачи'); return }; setParams({ ...(editing ? { edit: '1' } : {}), ...(value === 'containers' ? { tab: value } : {}) }, { replace: true }) }
@@ -183,7 +184,7 @@ export function OwnershipOrderViewPage() {
       const result = accept
         ? await acceptOwnershipOrder(ownershipOrderId)
         : await updateOwnershipOrder(ownershipOrderId, comment, effectiveDate, { clientId: client, containerOwnerIds: [...selected] })
-      apply(result); finishEditing(); setRevision(v => v + 1); setMessage(accept ? 'Дата передачи сохранена. Собственник определяется по рабочей дате.' : 'Заявка сохранена')
+      apply(result); finishEditing(); setRevision(v => v + 1); setMessage(accept ? (result.order.status === 'DONE' ? 'Смена собственника выполнена.' : 'Заявка ожидает выполнения.') : 'Заявка сохранена')
     } catch (e) { setError(errorText(e)) } finally { lock.current = false; setBusy(false) }
   }
   async function withdraw() {
@@ -203,6 +204,8 @@ export function OwnershipOrderViewPage() {
     <div className="form-workspace"><div className="ownership-tabs-toolbar"><OwnershipTabs tab={tab} change={changeTab} disabled={busy} />{editing && tab === 'containers' && selected.size > 0 && <button type="button" className="secondary-button" disabled={busy} onClick={() => setSelected(new Set())}>Снять выбор КТК</button>}</div>
       {tab === 'main' && <><section className="form-section ui-form-section"><div className="form-section-heading"><h2>Основная информация</h2></div><dl className="details-grid">
         <div><dt>Номер заявки</dt><dd>{data.order.number}</dd></div><div><dt>Статус</dt><dd><OwnershipStatus status={data.order.status} /></dd></div>
+        {data.order.executionError && <div><dt>Причина ожидания</dt><dd>{data.order.executionError}</dd></div>}
+        {data.order.exportQueued && <div><dt>Пакет TOS</dt><dd>{data.order.exportSentAt ? 'Принят Datareon ' + completedAt(data.order.exportSentAt) + ' UTC' : data.order.exportError || 'В очереди на отправку'}</dd></div>}
         <div><dt>Количество КТК</dt><dd>{editing ? selected.size : data.order.containerQuantity}</dd></div><div><dt>Подтверждено (UTC)</dt><dd>{completedAt(data.order.completionAt)}</dd></div>
         <div><dt><label htmlFor="ownership-effective-date">Дата передачи</label></dt><dd>{editing ? <UiInput id="ownership-effective-date" type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEffectiveDate(e.target.value); clearSelection() }} /> : data.order.effectiveDate ? businessDateLabel(data.order.effectiveDate) : '—'}</dd></div>
         <div><dt>Прежний собственник</dt><dd>{data.order.sourceClientName || '—'}</dd></div>
