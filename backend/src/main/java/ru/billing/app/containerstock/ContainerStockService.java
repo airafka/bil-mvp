@@ -164,7 +164,8 @@ public class ContainerStockService {
         if(!receiving && (old==null || !"RESERVED_OUT".equals(old.status()) || !order.equals(old.shipping())))
             throw error("SHIPPING_RESERVATION_REQUIRED",describe(row.container(),old,"КТК не зарезервирован этим вывозом"));
         if (eventTime != null && Boolean.TRUE.equals(jdbc.queryForObject("""
-                select exists(select 1 from container_owner_history where container_id=? and occurred_at>?)
+                select exists(select 1 from container_owner_history h where container_id=? and occurred_at>?
+                    and (order_type<>'SERVICE_ORDER' or exists(select 1 from service_order s where s.id=h.order_id and s.status='DONE')))
                 """,Boolean.class,row.container(),eventTime)))
             throw error("TOS_EVENT_OUT_OF_SEQUENCE","Время операции раньше предыдущего события КТК");
         tasks.change(row,"UPLOADED","FINISHED");
@@ -288,7 +289,7 @@ public class ContainerStockService {
             left join receiving_order r on h.order_type='RECEIVING_ORDER' and r.id=h.order_id
             left join shipping_order s on h.order_type='SHIPPING_ORDER' and s.id=h.order_id
             left join service_order_current so on h.order_type='SERVICE_ORDER' and so.id=h.order_id
-            where h.container_id=? and (? or (h.occurred_at at time zone 'Europe/Moscow')::date<=billing_today()) and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
+            where h.container_id=? and so.status is distinct from 'CANCELLED' and (? or (h.occurred_at at time zone 'Europe/Moscow')::date<=billing_today()) and (? or ((h.order_type='SERVICE_ORDER' or h.new_status in ('ON_TERMINAL','DEPARTED'))
                 and (h.order_type in ('RECEIVING_ORDER','SHIPPING_ORDER') or so.status = 'DONE')))
             order by h.created_at desc,h.id desc
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("timeline_old_client_id",UUID.class),rs.getString("old_name"),

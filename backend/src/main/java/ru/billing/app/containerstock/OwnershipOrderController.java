@@ -23,7 +23,7 @@ public class OwnershipOrderController {
     @PutMapping("/{id}") public OwnershipOrderService.Details update(@PathVariable UUID id,@Valid @RequestBody OwnershipOrderService.Update request){return service.update(id,request);}
     @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void delete(@PathVariable UUID id){service.delete(id);}
     @PostMapping("/{id}/accept") public OwnershipOrderService.Details accept(@PathVariable UUID id){return service.accept(id);}
-    @PostMapping("/{id}/withdraw") public OwnershipOrderService.Details withdraw(@PathVariable UUID id){return service.withdraw(id);}
+    @PostMapping({"/{id}/cancellation","/{id}/withdraw"}) public OwnershipOrderService.Details cancel(@PathVariable UUID id){return service.cancel(id);}
     @GetMapping("/{id}/containers/available") public PagedResponse<OwnershipOrderService.Link> available(
             @PathVariable UUID id,@RequestParam(required=false) UUID clientId,
             @RequestParam(required=false) java.time.LocalDate effectiveDate,@RequestParam(defaultValue="") String query,

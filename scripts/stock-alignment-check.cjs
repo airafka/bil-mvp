@@ -181,7 +181,7 @@ async function run(name) {
     assert.equal((await stock(first)).clientId, source.id);
     await send(result(second, 1, 'T00:05:00+03:00'), 'DONE');
     assert.equal((await api('/receiving-orders/' + receiving.id)).status, 'COMPLETED');
-    assert.equal((await api(path)).order.exportQueued, false);
+    assert.equal((await api(path)).order.exportQueued, true);
     await setDay(2);
     // The backend worker runs on the minute. Reading stock does not execute the transfer.
     const executed = await waitForTransfer(path, state => state.order.status === 'DONE');
@@ -217,9 +217,10 @@ async function run(name) {
     await checkRefusal(combinedRoute, ownershipHold.order.number, second.containerName);
     assert.deepEqual(await Promise.all(containers.map(stock)), beforeConfirmation);
     assert.equal((await api(holdPath)).order.status, 'SCHEDULED');
-    assert.equal((await api(holdPath + '/withdraw', 'POST')).order.status, 'DRAFT');
+    assert.equal((await api(holdPath + '/cancellation', 'POST')).order.status, 'CANCELLED');
     assert.equal((await api(routePath + '/confirm', 'POST', {})).route.status, 'CONFIRMED');
-    await api(holdPath + '/containers', 'PUT', []);
+    await api(holdPath + '/containers', 'PUT', [], 403);
+    await api(holdPath + '/accept', 'POST', undefined, 409);
     const cancelError = await cancel('receiving', receiving, 400);
     assert.equal(cancelError.errorMessage, 'ContainerStatus.CancelReceivingInShipping: [' + shipping.code + '; ' + groupedCodes + ']');
     await setDay(3);
@@ -292,7 +293,7 @@ async function run(name) {
     assert.deepEqual(await stock(second), beforeLoad);
     assert.deepEqual(await periods(second), beforeStorage);
     assert.equal((await api(loadHoldPath)).order.status, 'SCHEDULED');
-    await api(loadHoldPath + '/withdraw', 'POST');
+    await api(loadHoldPath + '/cancellation', 'POST');
     await send(load, 'DONE');
     await send(load, 'DONE');
     assert.equal((await api('/shipping-orders/' + unnumbered.id)).status, 'COMPLETED');
@@ -307,15 +308,15 @@ async function run(name) {
         await confirm('receiving', doc, 4, 'RAILWAY');
         await finish('receiving', doc);
         const rows = (await api('/receiving-orders/' + doc.id)).containers;
-        return { doc, ids: (await Promise.all(rows.map(stock))).map(owner => owner.id) };
+        return { doc, rows, ids: (await Promise.all(rows.map(stock))).map(owner => owner.id) };
     }
     async function schedule(ids) {
         const draft = await transfer(5, ids);
         const path = '/service-orders/' + draft.order.id;
         const { order } = await api(path + '/accept', 'POST');
         assert.equal(order.status, 'SCHEDULED');
-        assert.equal(order.exportQueued, false);
-        assert.equal(order.outboundDataId, undefined);
+        assert.equal(order.exportQueued, true);
+        assert.match(order.outboundDataId, /^[0-9a-f-]{36}$/);
         return path;
     }
     const complete = await receiveBatch(2);
@@ -323,6 +324,13 @@ async function run(name) {
     const cancelled = await receiveBatch(1);
     const completePath = await schedule(complete.ids);
     const blockedPath = await schedule([...retained.ids, ...cancelled.ids]);
+    const chained = await api('/service-orders', 'POST', { service: 'CHANGE_OWNER', sourceClientId: target.id,
+        clientId: source.id, isDeferred: true, effectiveDate: day(6), containerOwnerIds: complete.ids }, 201);
+    const chainPath = '/service-orders/' + chained.order.id;
+    assert.equal((await api(chainPath + '/accept', 'POST')).order.status, 'SCHEDULED');
+    assert.equal((await api(completePath + '/cancellation', 'POST', undefined, 409)).code, 'OWNERSHIP_LATER_TRANSFER');
+    assert.equal((await stock(complete.rows[0])).clientId, source.id);
+    assert.equal((await periods(complete.rows[0])).length, 1);
     await cancel('receiving', cancelled.doc);
     await setDay(5);
     const completed = await waitForTransfer(completePath, state => state.order.status === 'DONE');
@@ -330,12 +338,30 @@ async function run(name) {
     assert.match(completed.order.outboundDataId, /^[0-9a-f-]{36}$/);
     assert.equal(completed.order.exportExhausted, false);
     assert.deepEqual(completed.containers.map(row => row.resultStatus), ['APPLIED', 'APPLIED']);
-    const pending = await waitForTransfer(blockedPath, state => !!state.order.executionError);
-    assert.equal(pending.order.status, 'SCHEDULED');
+    const pending = await api(blockedPath);
+    assert.equal(pending.order.status, 'CANCELLED');
     assert.equal(pending.order.exportQueued, false);
     assert.equal(pending.order.outboundDataId, undefined);
-    assert.ok(pending.containers.every(row => row.resultStatus !== 'APPLIED'));
-    assert.equal((await api(blockedPath + '/withdraw', 'POST')).order.status, 'DRAFT');
+    assert.ok(pending.containers.every(row => row.resultStatus === 'CANCELLED'));
+    await api(blockedPath + '/cancellation', 'POST', undefined, 409);
+    assert.equal((await stock(complete.rows[0])).clientId, target.id);
+    assert.equal((await periods(complete.rows[0])).length, 2);
+    assert.equal((await api(chainPath)).order.status, 'SCHEDULED');
+    await setDay(6);
+    await waitForTransfer(chainPath, state => state.order.status === 'DONE');
+    assert.equal((await stock(complete.rows[0])).clientId, source.id);
+    assert.equal((await periods(complete.rows[0])).length, 3);
+    const historical = await api('/container-storage-periods?query=' + encodeURIComponent(complete.rows[0].containerName) + '&asOf=' + day(4));
+    assert.equal(historical.items.length, 1);
+    for (const [offset, oldOwner, newOwner] of [[5, source.id, target.id], [6, target.id, source.id]]) {
+        const immediate = await api('/service-orders', 'POST', { service: 'CHANGE_OWNER', sourceClientId: oldOwner,
+            clientId: newOwner, effectiveDate: day(offset), isDeferred: false, containerOwnerIds: retained.ids }, 201);
+        const result = await api('/service-orders/' + immediate.order.id + '/accept', 'POST');
+        assert.equal(result.order.status, 'DONE');
+        assert.equal((await stock(retained.rows[0])).clientId, newOwner);
+        await api('/service-orders/' + immediate.order.id + '/cancellation', 'POST', undefined, 409);
+    }
+    console.log('PASS two confirmed future periods in one visit, as-of reporting and terminal cancellation');
     console.log('PASS atomic two-container transfer, scheduled shipment blocking, draft, grouped conflicts, shipment blocked by scheduled transfer, partial receiving, dated transfer, storage, repeat-visit cancellation and unnumbered TOS shipment');
 }
 run(process.argv[2]).catch(error => { console.error(error.message); process.exitCode = 1; });

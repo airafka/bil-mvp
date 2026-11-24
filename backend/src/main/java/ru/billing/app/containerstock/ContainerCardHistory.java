@@ -47,7 +47,7 @@ public class ContainerCardHistory {
                 left join service_order so on h.order_type='SERVICE_ORDER' and so.id=h.order_id
                 left join client old on old.id=h.timeline_old_client_id
                 left join client new on new.id=h.new_client_id
-                where h.container_id=:id and (h.order_type='SERVICE_ORDER' or
+                where h.container_id=:id and ((h.order_type='SERVICE_ORDER' and so.status<>'CANCELLED' and (h.occurred_at at time zone 'Europe/Moscow')::date<=billing_today()) or
                     (coalesce(r.order_status,s.order_status)='COMPLETED' and h.new_status in ('ON_TERMINAL','DEPARTED')))
             )
             """;

@@ -6,8 +6,8 @@ import { Notification } from '../components/Notification'
 import { ActionIcon } from '../components/ActionIcon'
 import { RowActions } from '../components/RowActions'
 import { UiInput, UiSelect, UiTextarea } from '../components/FormControls'
-import { getReferenceOptions, getOwnershipOrders, getOwnershipOrder, createOwnershipOrder, updateOwnershipOrder, getOwnershipAvailable, getOwnershipAvailableForCreate, acceptOwnershipOrder, withdrawOwnershipOrder, deleteOwnershipOrder, resendOutboundData } from '../api'
-import { businessDateLabel, useApplicationClock } from '../applicationClock'
+import { getReferenceOptions, getOwnershipOrders, getOwnershipOrder, createOwnershipOrder, updateOwnershipOrder, getOwnershipAvailable, getOwnershipAvailableForCreate, acceptOwnershipOrder, cancelOwnershipOrder, deleteOwnershipOrder, resendOutboundData } from '../api'
+import { businessDateLabel, shiftBusinessDate, useApplicationClock } from '../applicationClock'
 import type { OwnershipContainer, OwnershipDetails, OwnershipHeader } from '../containerStock'
 import { containerTypeLabel, type PagedResponse, type ReferenceOption } from '../domain'
 import { ContainerStatusBadge } from '../components/ContainerStatusBadge'
@@ -17,7 +17,7 @@ const resultLabels: Record<string, string> = { PLANNED: 'Передача зап
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error)
 const completedAt = (value: string | null) => value ? new Date(value).toLocaleString('ru-RU', { timeZone: 'UTC' }) : '—'
 function OwnershipStatus({ status }: { status: string }) {
-  return <span className={'ownership-status ' + (status === 'DONE' ? 'ownership-status-done' : status === 'SCHEDULED' ? 'ownership-status-scheduled' : '')}>{status === 'DONE' ? 'Выполнено' : status === 'SCHEDULED' ? 'Ожидает выполнения' : 'Черновик'}</span>
+  return <span className={'ownership-status ' + (status === 'DONE' ? 'ownership-status-done' : status === 'SCHEDULED' ? 'ownership-status-scheduled' : '')}>{status === 'DONE' ? 'Выполнено' : status === 'SCHEDULED' ? 'Ожидает выполнения' : status === 'CANCELLED' ? 'Отменено' : 'Черновик'}</span>
 }
 function CloseLink() {
   return <Link className="close-button" to="/service-orders" aria-label="Закрыть" title="Закрыть"><ActionIcon name="close" /></Link>
@@ -67,6 +67,8 @@ export function OwnershipOrderRegistryPage() {
 export function OwnershipOrderCreatePage() {
   const { clock } = useApplicationClock()
   const [enteredDate, setEnteredDate] = useState<string>()
+  const [isDeferred, setDeferred] = useState(false)
+  const tomorrow = shiftBusinessDate(clock.date, 1)
   const effectiveDate = enteredDate ?? clock.date
   const [sourceClient, setSourceClient] = useState('')
   const [clients, setClients] = useState<ReferenceOption[]>([]), [client, setClient] = useState(''), [comment, setComment] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false)
@@ -93,6 +95,7 @@ export function OwnershipOrderCreatePage() {
     else if (!client) setError('Выберите нового собственника КТК')
     else if (client === sourceClient) setError('Прежний и новый собственники должны различаться')
     else if (!effectiveDate) setError('Укажите дату передачи')
+    else if (isDeferred !== (effectiveDate > clock.date)) setError(isDeferred ? 'Выберите будущую дату передачи' : 'Выберите сегодняшнюю или прошедшую дату передачи')
     else return true
     setTab('main')
     return false
@@ -107,7 +110,7 @@ export function OwnershipOrderCreatePage() {
     if (lock.current) return
     if (!checkFields()) return
     lock.current = true; setBusy(true); setError('')
-    try { const result = await createOwnershipOrder(client, comment, [...selected], effectiveDate, sourceClient); navigate('/service-orders/' + result.order.id) }
+    try { const result = await createOwnershipOrder(client, comment, [...selected], effectiveDate, sourceClient, isDeferred); navigate('/service-orders/' + result.order.id) }
     catch (e) { setError(errorText(e)) } finally { lock.current = false; setBusy(false) }
   }
   return <section className="form-page ownership-page"><div className="page-header"><h1>Новая смена собственника КТК</h1><div className="header-actions"><CloseLink /><button className={tab === 'main' ? 'primary-button' : 'secondary-button'} disabled={busy} onClick={() => changeTab(tab === 'main' ? 'containers' : 'main')}>{tab === 'main' ? 'Далее →' : '← Назад'}</button>{tab === 'containers' && <button className="primary-button" disabled={busy} onClick={create}>{busy ? 'Сохраняем…' : 'Создать'}</button>}</div></div>
@@ -126,7 +129,8 @@ export function OwnershipOrderCreatePage() {
           }}><option value="" hidden disabled />{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</UiSelect></label>
           <label className="field horizontal-field"><span>Новый собственник <b>*</b></span><UiSelect required disabled={busy} value={client} onChange={e => { setClient(e.target.value); clearSelection(); setError('') }}><option value="" hidden disabled />{clients.filter(c => c.id !== sourceClient).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</UiSelect></label>
           <label className="field horizontal-field"><span>Операция</span><UiInput value="Смена собственника КТК" readOnly /></label>
-          <label className="field horizontal-field"><span>Дата передачи <b>*</b></span><UiInput type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEnteredDate(e.target.value); setError('') }} /></label>
+          <label className="field horizontal-field"><span>Дата будущая</span><UiInput type="checkbox" checked={isDeferred} disabled={busy} onChange={e => { setDeferred(e.target.checked); setEnteredDate(e.target.checked ? tomorrow : clock.date); setError('') }} /></label>
+          <label className="field horizontal-field"><span>Дата передачи <b>*</b></span><UiInput type="date" required min={isDeferred ? tomorrow : undefined} max={isDeferred ? "9999-12-31" : clock.date} disabled={busy} value={effectiveDate} onChange={e => { setEnteredDate(e.target.value); setError('') }} /></label>
         </div><div className="form-fields-column"><div className="field horizontal-field"><span>Статус</span><div className="ownership-status-field"><OwnershipStatus status="DRAFT" /></div></div></div></div>
       </section>
       <section className="form-section ui-form-section"><div className="form-section-heading"><h2>Дополнительная информация</h2></div><label className="field horizontal-field ownership-comment"><span>Комментарий</span><UiTextarea disabled={busy} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} placeholder="Введите комментарий" /></label></section>
@@ -139,6 +143,9 @@ export function OwnershipOrderCreatePage() {
 export function OwnershipOrderViewPage() {
   const { clock } = useApplicationClock()
   const [effectiveDate, setEffectiveDate] = useState('')
+  const [isDeferred, setDeferred] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const tomorrow = shiftBusinessDate(clock.date, 1)
   const { ownershipOrderId = '' } = useParams()
   const [client, setClient] = useState(''), [clients, setClients] = useState<ReferenceOption[]>([])
   const [params, setParams] = useSearchParams()
@@ -149,7 +156,7 @@ export function OwnershipOrderViewPage() {
   const [error, setError] = useState(''), [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [revision, setRevision] = useState(0)
   const lock = useRef(false)
   const loadedOrderId = useRef('')
-  function apply(value: OwnershipDetails) { loadedOrderId.current = value.order.id; setData(value); setClient(value.order.clientId); setEffectiveDate(value.order.effectiveDate || ''); setComment(value.order.comment || ''); setSelected(new Set(value.containers.map(c => c.containerOwnerId))) }
+  function apply(value: OwnershipDetails) { loadedOrderId.current = value.order.id; setData(value); setClient(value.order.clientId); setDeferred(value.order.isDeferred); setEffectiveDate(value.order.effectiveDate || ''); setComment(value.order.comment || ''); setSelected(new Set(value.containers.map(c => c.containerOwnerId))) }
   useEffect(() => {
     if (busy || (editingRequested && loadedOrderId.current === ownershipOrderId)) return
     let active = true
@@ -178,12 +185,13 @@ export function OwnershipOrderViewPage() {
   async function save(accept: boolean) {
     if (lock.current) return
     if (editing && !effectiveDate) { setError('Укажите дату передачи'); return }
+    if (editing && isDeferred !== (effectiveDate > clock.date)) { setError(isDeferred ? 'Выберите будущую дату передачи' : 'Выберите сегодняшнюю или прошедшую дату передачи'); return }
     if (editing && (!client || client === data?.order.sourceClientId)) { setError('Выберите нового собственника, отличного от прежнего'); return }
     lock.current = true; setBusy(true); setError(''); setMessage('')
     try {
       const result = accept
         ? await acceptOwnershipOrder(ownershipOrderId)
-        : await updateOwnershipOrder(ownershipOrderId, comment, effectiveDate, { clientId: client, containerOwnerIds: [...selected] })
+        : await updateOwnershipOrder(ownershipOrderId, comment, effectiveDate, { clientId: client, isDeferred, containerOwnerIds: [...selected] })
       apply(result); finishEditing(); setRevision(v => v + 1); setMessage(accept ? (result.order.status === 'DONE' ? 'Смена собственника выполнена.' : 'Заявка ожидает выполнения.') : 'Заявка сохранена')
     } catch (e) { setError(errorText(e)) } finally { lock.current = false; setBusy(false) }
   }
@@ -196,10 +204,10 @@ export function OwnershipOrderViewPage() {
       setMessage('Пакет поставлен в очередь на повторную отправку.')
     } catch (e) { setError(errorText(e)) } finally { lock.current = false; setBusy(false) }
   }
-  async function withdraw() {
+  async function cancel() {
     if (lock.current) return
     lock.current = true; setBusy(true); setError(''); setMessage('')
-    try { apply(await withdrawOwnershipOrder(ownershipOrderId)); setMessage('Заявка возвращена в черновик') }
+    try { apply(await cancelOwnershipOrder(ownershipOrderId)); setConfirmCancel(false); setMessage('Заявка отменена') }
     catch (e) { setError(errorText(e)) } finally { lock.current = false; setBusy(false) }
   }
   function toggle(id: string, checked: boolean) { setSelected(previous => { const next = new Set(previous); if (checked) next.add(id); else next.delete(id); return next }) }
@@ -207,18 +215,20 @@ export function OwnershipOrderViewPage() {
   const rows = editing ? available?.items ?? [] : data.containers
   return <section className="form-page ownership-page"><div className="page-header"><h1>Смена собственника КТК №{data.order.number}</h1><div className="header-actions">
     {editing ? <><button className="secondary-button" disabled={busy} onClick={() => { apply(data); finishEditing(); setError('') }}>Отмена</button>{tab === 'containers' && <button className="secondary-button" disabled={busy} onClick={() => changeTab('main')}>← Назад</button>}<button className="primary-button" disabled={busy} onClick={() => save(false)}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>{tab === 'main' && <button className="primary-button" disabled={busy} onClick={() => changeTab('containers')}>Далее →</button>}</> : draft && <><button type="button" className="secondary-button icon-button" aria-label="Редактировать" title="Редактировать" disabled={busy} onClick={() => { setParams({ edit: '1', ...(tab === 'containers' ? { tab } : {}) }, { replace: true }); setMessage('') }}><ActionIcon name="edit" /></button><button className="primary-button" disabled={busy || !data.containers.length} onClick={() => save(true)}>{busy ? 'Подтверждаем…' : 'Подтвердить'}</button></>}
-    {data.order.status === 'SCHEDULED' && <button className="secondary-button" disabled={busy} onClick={withdraw}>{busy ? 'Обрабатываем…' : 'Вернуть в черновик'}</button>}<CloseLink />
+    {data.order.status === 'SCHEDULED' && <button className="secondary-button" disabled={busy} onClick={() => setConfirmCancel(true)}>Отменить заявку</button>}<CloseLink />
   </div></div>
     {error && <Notification kind="error">{error}</Notification>}{message && <Notification kind="success">{message}</Notification>}
+    {confirmCancel && <div className="modal-backdrop"><div className="ownership-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-transfer-title"><h2 id="cancel-transfer-title">Отменить заявку №{data.order.number}?</h2><p>Для новой передачи потребуется создать другую заявку.</p><div className="ownership-delete-dialog-actions"><button className="secondary-button" disabled={busy} onClick={() => setConfirmCancel(false)}>Закрыть</button><button className="primary-button" disabled={busy} onClick={cancel}>Отменить заявку</button></div></div></div>}
     <div className="form-workspace"><div className="ownership-tabs-toolbar"><OwnershipTabs tab={tab} change={changeTab} disabled={busy} />{editing && tab === 'containers' && selected.size > 0 && <button type="button" className="secondary-button" disabled={busy} onClick={() => setSelected(new Set())}>Снять выбор КТК</button>}</div>
       {tab === 'main' && <><section className="form-section ui-form-section"><div className="form-section-heading"><h2>Основная информация</h2></div><dl className="details-grid">
         <div><dt>Номер заявки</dt><dd>{data.order.number}</dd></div><div><dt>Статус</dt><dd><OwnershipStatus status={data.order.status} /></dd></div>
         {data.order.executionError && <div><dt>Причина ожидания</dt><dd>{data.order.executionError}</dd></div>}
-        {data.order.exportQueued && <div><dt>Пакет TOS</dt><dd>{data.order.exportSentAt ? 'Принят Datareon ' + completedAt(data.order.exportSentAt) + ' UTC' : data.order.exportError?.replace(/\. Отправка будет повторена\.$/, '') || 'В очереди на отправку'}
+        {data.order.exportQueued && <div><dt>Пакет TOS</dt><dd>{data.order.status === 'SCHEDULED' ? 'Ожидает смены собственника в остатках' : data.order.exportSentAt ? 'Принят Datareon ' + completedAt(data.order.exportSentAt) + ' UTC' : data.order.exportError?.replace(/\. Отправка будет повторена\.$/, '') || 'В очереди на отправку'}
           {data.order.exportExhausted && <><span> Автоматические попытки исчерпаны. </span><button className="secondary-button" disabled={busy} onClick={resend}>Повторить отправку</button></>}
         </dd></div>}
         <div><dt>Количество КТК</dt><dd>{editing ? selected.size : data.order.containerQuantity}</dd></div><div><dt>Подтверждено (UTC)</dt><dd>{completedAt(data.order.completionAt)}</dd></div>
-        <div><dt><label htmlFor="ownership-effective-date">Дата передачи</label></dt><dd>{editing ? <UiInput id="ownership-effective-date" type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEffectiveDate(e.target.value); clearSelection() }} /> : data.order.effectiveDate ? businessDateLabel(data.order.effectiveDate) : '—'}</dd></div>
+        <div><dt><label htmlFor="ownership-deferred">Дата будущая</label></dt><dd>{editing ? <UiInput id="ownership-deferred" type="checkbox" checked={isDeferred} disabled={busy} onChange={e => { setDeferred(e.target.checked); setEffectiveDate(e.target.checked ? tomorrow : clock.date); clearSelection() }} /> : data.order.isDeferred ? 'Да' : 'Нет'}</dd></div>
+        <div><dt><label htmlFor="ownership-effective-date">Дата передачи</label></dt><dd>{editing ? <UiInput id="ownership-effective-date" type="date" required min={isDeferred ? tomorrow : undefined} max={isDeferred ? "9999-12-31" : clock.date} disabled={busy} value={effectiveDate} onChange={e => { setEffectiveDate(e.target.value); clearSelection() }} /> : data.order.effectiveDate ? businessDateLabel(data.order.effectiveDate) : '—'}</dd></div>
         <div><dt>Прежний собственник</dt><dd>{data.order.sourceClientName || '—'}</dd></div>
         <div><dt><label htmlFor="ownership-new-client">Новый собственник</label></dt><dd>{editing ? <UiSelect id="ownership-new-client" required disabled={busy} value={client} onChange={e => { setClient(e.target.value); clearSelection() }}>
           {client === data.order.clientId && !clients.some(c => c.id === client) && <option value={client}>{data.order.clientName}</option>}

@@ -37,6 +37,12 @@ public class OwnershipOrderExporter {
                 .encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
     }
 
+    public record Ready(UUID orderId) {}
+
+    @org.springframework.scheduling.annotation.Async
+    @org.springframework.transaction.event.TransactionalEventListener
+    public void onReady(Ready event) { sendPending(); }
+
     @Scheduled(fixedDelayString = "${datareon.cron.serviceOrderChainPackage:5000}")
     public void sendPending() {
         if (endpoint == null) return;
@@ -50,7 +56,7 @@ public class OwnershipOrderExporter {
         var packets = jdbc.query("""
                 select e.id,e.root_object_id,e.payload from outbound_data e
                 where e.entity_type='SERVICE_ORDER' and e.message_type='SERVICE_ORDER_CHAIN_PACKAGE'
-                  and e.success is not true and e.attempts<5
+                  and e.ready_at is not null and e.success is not true and e.attempts<5
                   and (e.last_attempt_at is null or
                        e.last_attempt_at + (5 * e.attempts + 1) * interval '1 minute' <= now() at time zone 'UTC')
                   and not exists (
@@ -58,7 +64,7 @@ public class OwnershipOrderExporter {
                     join service_order_container a on a.service_order_id=prior.root_object_id and a.result_status='APPLIED'
                     join service_order_container b on b.container_id=a.container_id and b.result_status='APPLIED'
                     where prior.entity_type=e.entity_type and prior.message_type=e.message_type and prior.success is not true
-                      and (prior.created_at,prior.id)<(e.created_at,e.id) and b.service_order_id=e.root_object_id
+                      and (prior.ready_at,prior.id)<(e.ready_at,e.id) and b.service_order_id=e.root_object_id
                   )
                 order by e.created_at desc,e.id desc limit 1 for update of e skip locked
                 """, (rs,n) -> new Packet(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),rs.getString(3)));

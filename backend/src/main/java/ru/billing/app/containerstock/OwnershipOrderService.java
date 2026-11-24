@@ -4,6 +4,7 @@ import java.util.*;
 import java.time.OffsetDateTime;
 import java.time.LocalDate;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
@@ -15,17 +16,20 @@ import jakarta.validation.constraints.*;
 public class OwnershipOrderService {
     private final JdbcTemplate jdbc;
     private final ContainerStockService stock;
-    public OwnershipOrderService(JdbcTemplate jdbc,ContainerStockService stock){this.jdbc=jdbc;this.stock=stock;}
+    private final ApplicationEventPublisher events;
+    public OwnershipOrderService(JdbcTemplate jdbc,ContainerStockService stock,ApplicationEventPublisher events){
+        this.jdbc=jdbc;this.stock=stock;this.events=events;
+    }
     public enum ServiceType { CHANGE_OWNER }
-    public record Create(@NotNull UUID clientId,@NotNull ServiceType service,@Size(max=1000)String comment,List<@NotNull UUID> containerOwnerIds,LocalDate effectiveDate,UUID sourceClientId) {}
+    public record Create(@NotNull UUID clientId,@NotNull ServiceType service,@Size(max=1000)String comment,List<@NotNull UUID> containerOwnerIds,LocalDate effectiveDate,UUID sourceClientId,Boolean isDeferred) {}
     public record Update(@NotNull UUID id,@NotNull ServiceType service,@Size(max=1000)String comment,LocalDate effectiveDate,
-            UUID clientId,List<@NotNull UUID> containerOwnerIds) {}
+            UUID clientId,List<@NotNull UUID> containerOwnerIds,Boolean isDeferred) {}
     public record Selection(UUID id,UUID containerOwnerId) {}
     public record Link(UUID id,UUID containerOwnerId,UUID containerId,String containerName,String containerType,
             UUID clientId,String clientName,String status,UUID containerVisitId,UUID expectedClientId,String resultStatus,String resultReason) {}
     public record Header(UUID id,long number,UUID clientId,String clientName,String service,String comment,
             String status,OffsetDateTime completionAt,long containerQuantity,LocalDate effectiveDate,UUID sourceClientId,String sourceClientName,
-            String executionError,boolean exportQueued,OffsetDateTime exportSentAt,String exportError,UUID outboundDataId,boolean exportExhausted) {}
+            String executionError,boolean exportQueued,OffsetDateTime exportSentAt,String exportError,UUID outboundDataId,boolean exportExhausted,boolean isDeferred) {}
     public record Details(Header order,List<Link> containers) {}
     private static final String HEADER="""
         select s.*,e.id as outbound_data_id,e.id is not null as export_queued,(e.success is false and e.attempts>=5) as export_exhausted,
@@ -38,7 +42,7 @@ public class OwnershipOrderService {
         return new Header(rs.getObject("id",UUID.class),rs.getLong("number"),rs.getObject("client_id",UUID.class),rs.getString("client_name"),
             rs.getString("service"),rs.getString("comment"),rs.getString("status"),rs.getObject("confirmation_instant",OffsetDateTime.class),rs.getLong("quantity"),rs.getObject("effective_date",LocalDate.class),
             rs.getObject("source_client_id",UUID.class),rs.getString("source_client_name"),rs.getString("execution_error"),rs.getBoolean("export_queued"),
-            rs.getObject("sent_at",OffsetDateTime.class),rs.getString("error_message"),rs.getObject("outbound_data_id",UUID.class),rs.getBoolean("export_exhausted"));
+            rs.getObject("sent_at",OffsetDateTime.class),rs.getString("error_message"),rs.getObject("outbound_data_id",UUID.class),rs.getBoolean("export_exhausted"),rs.getBoolean("is_deferred"));
     }
     private Header locked(UUID id){
         var ids=jdbc.query("select id from service_order where id=? for update",(rs,n)->rs.getObject(1,UUID.class),id);
@@ -63,6 +67,16 @@ public class OwnershipOrderService {
         if(value.getYear()<1 || value.getYear()>9999) throw error(HttpStatus.BAD_REQUEST,"INVALID_EFFECTIVE_DATE","Укажите дату передачи с годом от 1 до 9999");
         return value;
     }
+    private boolean validateMode(LocalDate effective, Boolean deferred) {
+        LocalDate today=jdbc.queryForObject("select billing_today()",LocalDate.class);
+        boolean future=effective.isAfter(today);
+        if (deferred!=null && deferred!=future) {
+            throw error(HttpStatus.CONFLICT,"OWNERSHIP_DATE_MODE",deferred
+                    ? "Для отложенной передачи выберите будущую дату или снимите флажок «Дата будущая»"
+                    : "Для передачи будущей датой установите флажок «Дата будущая»");
+        }
+        return future;
+    }
     @Transactional(readOnly=true)
     public PagedResponse<Header> page(String query,String status,int page,int size){
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
@@ -78,8 +92,10 @@ public class OwnershipOrderService {
         differentOwners(request.sourceClientId(),request.clientId());
         requireClient(request.clientId());
         if (request.sourceClientId()!=null) requireClient(request.sourceClientId());
+        LocalDate effective=date(request.effectiveDate());
+        boolean deferred=validateMode(effective,request.isDeferred());
         UUID id=UUID.randomUUID();
-        jdbc.update("insert into service_order(id,client_id,service,comment,effective_date,source_client_id) values(?,?,?,?,?,?)",id,request.clientId(),request.service().name(),request.comment(),date(request.effectiveDate()),request.sourceClientId());
+        jdbc.update("insert into service_order(id,client_id,service,comment,effective_date,source_client_id,is_deferred) values(?,?,?,?,?,?,?)",id,request.clientId(),request.service().name(),request.comment(),effective,request.sourceClientId(),deferred);
         return selection.isEmpty() ? details(id) : select(id,asSelections(selection));
     }
     private List<Selection> asSelections(List<UUID> ownerIds){
@@ -109,10 +125,11 @@ public class OwnershipOrderService {
         Header h=locked(id);draft(h);
         UUID target=request.clientId()==null?h.clientId():request.clientId();
         LocalDate effective=date(request.effectiveDate()==null?h.effectiveDate():request.effectiveDate());
+        boolean deferred=validateMode(effective,request.isDeferred()==null ? h.isDeferred() : request.isDeferred());
         differentOwners(h.sourceClientId(),target);
         if (!target.equals(h.clientId())) requireClient(target);
-        jdbc.update("update service_order set service=?,comment=?,client_id=?,effective_date=?,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
-                request.service().name(),request.comment(),target,effective,id);
+        jdbc.update("update service_order set service=?,comment=?,client_id=?,effective_date=?,is_deferred=?,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
+                request.service().name(),request.comment(),target,effective,deferred,id);
         if (request.containerOwnerIds()!=null) return select(id,asSelections(request.containerOwnerIds()));
         if (!target.equals(h.clientId()) || !effective.equals(h.effectiveDate())){
             var existing=links(id);
@@ -233,10 +250,10 @@ public class OwnershipOrderService {
         if (links.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "SERVICE_ORDER_CONTAINERS_REQUIRED",
                 "Для подтверждения выберите хотя бы один КТК", "Service order must contain equipment");
         LocalDate effective=date(h.effectiveDate());
+        boolean deferred=validateMode(effective,h.isDeferred());
         var eligible=validateExisting(h,links,true);
         var confirmedAt=jdbc.queryForObject("select billing_now()",java.time.OffsetDateTime.class);
-        boolean immediate = !effective.isAfter(confirmedAt.atZoneSameInstant(ScheduledOwnershipTransfers.MOSCOW).toLocalDate());
-        if (immediate) stock.requireNoDueOwnershipTransfers(eligible.keySet());
+        if (!deferred) stock.requireNoDueOwnershipTransfers(eligible.keySet());
         for (var link : links) {
             var candidate=eligible.get(link.containerId());
             jdbc.update("""
@@ -246,18 +263,26 @@ public class OwnershipOrderService {
                 """,candidate.visit(),candidate.previousClient(),h.clientId(),candidate.instant(),link.id());
         }
         jdbc.update("update service_order set status='SCHEDULED',execution_error=null,effective_date=?,completion_at=?::timestamptz at time zone 'UTC',updated_at=?::timestamptz at time zone 'UTC',updated_by='local' where id=?",effective,confirmedAt,confirmedAt,id);
-        if (immediate) {
+        jdbc.queryForObject("select record_ownership_order(?)",Object.class,id);
+        if (!deferred) {
             String reason = jdbc.queryForObject("select apply_ownership_order(?)", String.class, id);
             if (reason != null) throw error(HttpStatus.CONFLICT, "OWNERSHIP_DATE_UNAVAILABLE", reason);
+            events.publishEvent(new OwnershipOrderExporter.Ready(id));
         }
         return details(id);
     }
-    @Transactional public Details withdraw(UUID id) {
+    @Transactional public Details cancel(UUID id) {
         Header h=locked(id);
-        if(!h.status().equals("SCHEDULED")) throw error(HttpStatus.CONFLICT,"SERVICE_ORDER_NOT_SCHEDULED","Вернуть в черновик можно только ожидающую заявку");
+        if (!h.status().equals("SCHEDULED"))
+            throw error(HttpStatus.CONFLICT,"SERVICE_ORDER_CANNOT_CANCEL","Отменить можно только заявку, ожидающую выполнения");
         stock.lockContainers(links(id).stream().map(Link::containerId).toList());
-        jdbc.queryForObject("select withdraw_ownership_order(?)",Object.class,id);
-        jdbc.update("update service_order set status='DRAFT',execution_error=null,completion_at=null,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",id);
+        if (Boolean.TRUE.equals(jdbc.queryForObject("""
+                select exists(select 1 from service_order_container a join service_order_container b
+                    on b.container_id=a.container_id and b.plan_at>a.plan_at
+                    where a.service_order_id=? and a.result_status='PLANNED' and b.result_status='PLANNED')
+                """, Boolean.class,id)))
+            throw error(HttpStatus.CONFLICT,"OWNERSHIP_LATER_TRANSFER","Сначала отмените последующую передачу КТК");
+        jdbc.queryForObject("select cancel_ownership_order(?,?)",Object.class,id,"Заявка отменена");
         return details(id);
     }
     private ApiException error(HttpStatus status,String code,String message){return new ApiException(status,code,message);}

@@ -21,7 +21,7 @@ import static org.mockito.Mockito.*;
 
 class OwnershipOrderServiceTest {
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
-    private final OwnershipOrderService service = new OwnershipOrderService(jdbc, mock(ContainerStockService.class));
+    private final OwnershipOrderService service = new OwnershipOrderService(jdbc, mock(ContainerStockService.class), mock(org.springframework.context.ApplicationEventPublisher.class));
     private final UUID orderId = UUID.randomUUID();
     private final UUID previousOwner = UUID.randomUUID();
     private final UUID nextOwner = UUID.randomUUID();
@@ -29,7 +29,7 @@ class OwnershipOrderServiceTest {
 
     private void withOrder(String status) {
         Header header = new Header(orderId, 12, nextOwner, "Б", "CHANGE_OWNER", null, status, null, 0,
-                date, previousOwner, "А", null, false, null, null, null, false);
+                date, previousOwner, "А", null, false, null, null, null, false, false);
         when(jdbc.query(contains("for update"), ArgumentMatchers.<RowMapper<UUID>>any(), eq(orderId)))
                 .thenReturn(List.of(orderId));
         when(jdbc.queryForObject(contains("from service_order_current"), ArgumentMatchers.<RowMapper<Header>>any(), eq(orderId)))
@@ -59,7 +59,7 @@ class OwnershipOrderServiceTest {
     @Test
     void emptyDraftNeedsAnExplicitSourceOwner() {
         assertThatExceptionOfType(ApiException.class)
-                .isThrownBy(() -> service.create(new Create(nextOwner, ServiceType.CHANGE_OWNER, null, List.of(), date, null)))
+                .isThrownBy(() -> service.create(new Create(nextOwner, ServiceType.CHANGE_OWNER, null, List.of(), date, null, false)))
                 .satisfies(error -> assertThat(error.getCode()).isEqualTo("SOURCE_CLIENT_REQUIRED"));
         verifyNoInteractions(jdbc);
     }
