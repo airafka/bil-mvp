@@ -106,7 +106,6 @@ export function OwnershipOrderCreatePage() {
   async function create() {
     if (lock.current) return
     if (!checkFields()) return
-    if (!selected.size) { setError('Выберите хотя бы один КТК'); setTab('containers'); return }
     lock.current = true; setBusy(true); setError('')
     try { const result = await createOwnershipOrder(client, comment, [...selected], effectiveDate, sourceClient); navigate('/service-orders/' + result.order.id) }
     catch (e) { setError(errorText(e)) } finally { lock.current = false; setBusy(false) }
@@ -179,7 +178,6 @@ export function OwnershipOrderViewPage() {
     if (lock.current) return
     if (editing && !effectiveDate) { setError('Укажите дату передачи'); return }
     if (editing && (!client || client === data?.order.sourceClientId)) { setError('Выберите нового собственника, отличного от прежнего'); return }
-    if (editing && !selected.size) { setError('Выберите хотя бы один КТК'); return }
     lock.current = true; setBusy(true); setError(''); setMessage('')
     try {
       const result = accept

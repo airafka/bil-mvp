@@ -55,11 +55,10 @@ public class ContainerStockService {
     }
     UUID transition(UUID container, UUID client, String status, UUID receiving, UUID shipping, UUID order, String type,java.time.OffsetDateTime effectiveAt) {
         State old=state(container);
-        UUID currentShipping=Set.of("EXPECTED","ON_TERMINAL").contains(status)?null:shipping;
         if(old==null) jdbc.update("insert into container_owner(id,container_id,client_id,status,shipping_order_id) values(?,?,?,?,?)",
-            UUID.randomUUID(),container,client,status,currentShipping);
+            UUID.randomUUID(),container,client,status,shipping);
         else jdbc.update("update container_owner set client_id=?,status=?,shipping_order_id=?,version=version+1,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
-            client,status,currentShipping,old.id());
+            client,status,shipping,old.id());
         // Only drafts follow the register. Confirmation freezes the shipment owner.
         jdbc.update("""
             update shipping_order_container sc set owner_container_id=?
@@ -77,21 +76,21 @@ public class ContainerStockService {
     }
     public void reserve(String resource, UUID order) {
         boolean receiving=resource.equals("receiving-orders");
-        var rows=tasks.rows(order,receiving);
+        var rows=tasks.rowsForStockOperation(order,receiving);
         lockContainers(rows.stream().map(ContainerTaskRows.Row::container).toList());
-        var conflicts = new ArrayList<String>();
-        for(var row:rows) {
-            State old=state(row.container());
-            if(receiving && row.owner()==null) conflicts.add(containerName(row.container())+": не указан собственник");
-            String problem=ContainerStockPolicy.reservationConflict(receiving,old==null?null:old.status());
-            if(problem!=null) conflicts.add(describe(row.container(),old,problem));
+        var conflicts = new StockViolations();
+        for (var row : rows) {
+            var old = state(row.container());
+            var problem = ContainerStockPolicy.reservationViolation(receiving, old == null ? null : old.status());
+            if (problem != null) addViolation(conflicts, row.code(), old, problem);
         }
-        if(!conflicts.isEmpty()) throw error("CONTAINER_RESERVATION_CONFLICT",String.join("; ",conflicts));
+        if (!conflicts.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "CONTAINER_RESERVATION_CONFLICT",
+                conflicts.detail(), conflicts.originalMessage());
         for(var row:rows) {
             tasks.change(row,null,"UPLOADED");
-            if(receiving) transition(row.container(),row.owner(),"EXPECTED",order,null,order,"RECEIVING_ORDER");
+            State old=state(row.container());
+            if(receiving) transition(row.container(),row.owner(),"EXPECTED",order,old == null ? null : old.shipping(),order,"RECEIVING_ORDER");
             else {
-                State old=state(row.container());
                 jdbc.update("update shipping_order_container set owner_container_id=? where id=?",old.client(),row.id());
                 transition(row.container(),old.client(),"RESERVED_OUT",old.receiving(),order,order,"SHIPPING_ORDER");
             }
@@ -105,7 +104,7 @@ public class ContainerStockService {
     /** Caller holds the document lock. The manual button delivers all outstanding row results. */
     public boolean finishContainers(String resource,UUID order,UUID containerId,java.time.OffsetDateTime eventTime){
         boolean receiving=resource.equals("receiving-orders");
-        var rows=tasks.rows(order,receiving);
+        var rows=tasks.rowsForStockOperation(order,receiving);
         if(containerId!=null && rows.stream().noneMatch(r->r.container().equals(containerId)))
             throw error("CONTAINER_NOT_IN_ORDER","КТК отсутствует в этой заявке");
         var outstanding=rows.stream().filter(r->!"FINISHED".equals(r.status())).toList();
@@ -133,9 +132,27 @@ public class ContainerStockService {
                 """,Boolean.class,row.container(),eventTime)))
             throw error("TOS_EVENT_OUT_OF_SEQUENCE","Время операции раньше предыдущего события КТК");
         tasks.change(row,"UPLOADED","FINISHED");
-        if(receiving) transition(row.container(),old.client(),"ON_TERMINAL",order,null,order,"RECEIVING_ORDER",eventTime);
+        if(receiving) transition(row.container(),old.client(),"ON_TERMINAL",order,old.shipping(),order,"RECEIVING_ORDER",eventTime);
         else transition(row.container(),old.client(),"DEPARTED",old.receiving(),order,order,"SHIPPING_ORDER",eventTime);
     }
+    private void addViolation(StockViolations conflicts, String code, State state, ContainerStockPolicy.Violation problem) {
+        var related = problem.relatedOrder();
+        UUID document = state == null ? null : switch (related) {
+            case RECEIVING -> state.receiving();
+            case SHIPPING -> state.shipping();
+            case NONE -> null;
+        };
+        String detail = problem.description("КТК");
+        Integer number = null;
+        if (document != null) {
+            boolean shipping = related == ContainerStockPolicy.RelatedOrder.SHIPPING;
+            String table = shipping ? "shipping_order" : "receiving_order";
+            number = jdbc.queryForObject("select number from " + table + " where id=?", Integer.class, document);
+            detail += " (" + (shipping ? "вывоз" : "поставка") + " №" + number + ")";
+        }
+        conflicts.add(problem.key("ContainerStatus"), number, code, detail);
+    }
+
     private String containerName(UUID id) {
         return jdbc.queryForObject("select code from container where id=?",String.class,id);
     }
@@ -164,17 +181,28 @@ public class ContainerStockService {
         }
         if(!previousOwners.keySet().equals(new HashSet<>(ids)))
             throw error("STOCK_HISTORY_REQUIRED","Состав заявки не совпадает с историей резервирования. Требуется сверка остатков");
-        var conflicts=new ArrayList<String>();
+        var conflicts = new StockViolations();
+        var pendingConflicts = new ArrayList<String>();
         for(var row:rows) {
             UUID id=row.container();
             boolean finished="FINISHED".equals(row.status());
             if(!finished && (!"UPLOADED".equals(row.status()) || "COMPLETED".equals(previousStatus)))
                 throw error("CONTAINER_TASK_STATUS_CHANGED","Статус строки КТК не соответствует отменяемой операции");
             State old=state(id);
-            if(old==null || !ContainerStockPolicy.canCancel(receiving,finished,old.status(),receiving?old.receiving():old.shipping(),order))
-                conflicts.add(describe(id,old,"отмена невозможна: КТК уже участвует в другой операции; сначала отмените последующие заявки"));
+            UUID currentOrder = old == null ? null : (receiving ? old.receiving() : old.shipping());
+            String status = old == null ? null : old.status();
+            if (finished) {
+                var problem = ContainerStockPolicy.completedCancellationViolation(receiving, status, currentOrder, order);
+                if (problem != null) addViolation(conflicts, row.code(), old, problem);
+            } else if (!ContainerStockPolicy.canCancel(receiving, false, status, currentOrder, order)) {
+                pendingConflicts.add(describe(id,old,"отмена невозможна: КТК уже участвует в другой операции; сначала отмените последующие заявки"));
+            }
         }
-        if(!conflicts.isEmpty())throw error("CANCELLATION_STOCK_CONFLICT",String.join("; ",conflicts));
+        if (!conflicts.isEmpty()) {
+            pendingConflicts.addFirst(conflicts.detail());
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CANCELLATION_STOCK_CONFLICT", String.join("; ", pendingConflicts), conflicts.originalMessage());
+        }
+        if (!pendingConflicts.isEmpty()) throw error("CANCELLATION_STOCK_CONFLICT", String.join("; ", pendingConflicts));
         for(UUID id:ids) {
             State old=state(id);
             UUID previousOrder;

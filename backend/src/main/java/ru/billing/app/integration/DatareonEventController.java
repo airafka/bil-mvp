@@ -52,6 +52,10 @@ public class DatareonEventController {
                 return recordStatus(delivery, "DONE", null);
             });
         } catch (ApiException e) {
+            if (e.getSourceMessage() != null) {
+                String status = e.getStatus() == org.springframework.http.HttpStatus.NOT_FOUND ? "FAILED" : "INVALID";
+                return recordStatus(delivery, status, e.getSourceMessage());
+            }
             return recordStatus(delivery, "INVALID", e.getCode() + " — " + e.getMessage());
         } catch (RuntimeException e) {
             log.error("Could not process TOS delivery {}", delivery, e);

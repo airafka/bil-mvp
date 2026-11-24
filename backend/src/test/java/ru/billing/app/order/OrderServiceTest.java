@@ -52,8 +52,10 @@ class OrderServiceTest {
                 List.of(UUID.randomUUID(), UUID.randomUUID()),
                 List.of(),
                 FillingType.ALL,
-                List.of()
-        ).withDefaultContainerOwner(UUID.randomUUID());
+                List.of(),
+                null, null, null, null, null, UUID.randomUUID(),
+                null, null, null, null, null, List.of(), UUID.randomUUID()
+        );
         CreatedOrderResponse expected = new CreatedOrderResponse(UUID.randomUUID(), 18, "DRAFT");
         when(store.createRailway(request)).thenReturn(expected);
 

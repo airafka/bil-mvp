@@ -308,7 +308,7 @@ public class ReceivingOrderStore {
                 request.arrivalAt(),
                 ru.billing.app.reference.PartyReferences.clientName(jdbcTemplate, request.consignor()), request.effectiveDefaultContainerOwnerId(),
                 request.authorizedRepresentative(), request.phone(), request.email(), request.comment(), request.transportWaybillNumber(),
-                request.transportType()==TransportType.RAILWAY ? java.util.Objects.requireNonNullElse(request.defaultRailwayCarriageOwnerId(),request.clientId()) : null
+                request.transportType()==TransportType.RAILWAY ? request.defaultRailwayCarriageOwnerId() : null
         );
     }
 

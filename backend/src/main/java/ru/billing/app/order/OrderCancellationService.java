@@ -29,14 +29,14 @@ public class OrderCancellationService {
         jdbc.query("select r.id from route r join "+table+" o on o.route_id=r.id where o.id=? for update of r",(rs,n)->rs.getObject(1,UUID.class),id);
         var rows=jdbc.query("select number,order_status from "+table+" where id=? for update",
             (rs,n)->new CreatedOrderResponse(id,rs.getInt(1),rs.getString(2)),id);
-        if(rows.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"ORDER_NOT_FOUND","Заявка не найдена");
+        if (rows.isEmpty()) throw ApiException.fromSourceCode(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Заявка не найдена", "NotFound");
         var current=rows.getFirst();
         var lockedRoute=jdbc.queryForObject("select route_id from "+table+" where id=?",UUID.class,id);
         if(!java.util.Objects.equals(observedRoute,lockedRoute))throw conflict("ROUTE_CHANGED","Рейс заявки изменился. Повторите отмену");
         if(current.status().equals("CANCELLED"))return current;
         if(!current.status().equals(request.expectedStatus()))throw conflict("STATUS_CHANGED","Статус изменился. Обновите заявку перед отменой");
         stock.cancel(resource,id,current.status());
-        wagons.checkCancellation(incoming,id);
+        wagons.checkCancellation(incoming,id,current.status());
         jdbc.update("update "+table+" set order_status='CANCELLED' where id=?",id);
         if(incoming) {
             jdbc.update("update waybill set receiving_order_id=null where receiving_order_id=?",id);

@@ -18,7 +18,7 @@ public class OrderRequestValidator {
         if (request.transportType() == TransportType.RAILWAY) {
             validateReceivingRailway(request);
         } else {
-            validateVehicle(request);
+            validateVehicle(request, "ReceivingOrderContainer.AlreadyExists");
         }
     }
 
@@ -28,7 +28,7 @@ public class OrderRequestValidator {
             if (effectiveFillingType(request) == FillingType.NONE_CONTAINER) {
                 validateUnnumberedVehicleShipping(request);
             } else {
-                validateVehicle(request);
+                validateVehicle(request, "ShippingOrderContainer.AlreadyExists");
             }
             return;
         }
@@ -59,7 +59,7 @@ public class OrderRequestValidator {
         }
     }
 
-    private void validateVehicle(CreateOrderRequest request) {
+    private void validateVehicle(CreateOrderRequest request, String duplicateContainerCode) {
         if (effectiveFillingType(request) != FillingType.ALL) {
             throw badRequest(
                     "INVALID_VEHICLE_FILLING_TYPE",
@@ -76,7 +76,7 @@ public class OrderRequestValidator {
         if (!hasValues(request.containers())) {
             throw badRequest("EMPTY_CONTAINER_LIST", "Выберите хотя бы один КТК");
         }
-        validateContainers(request.containers(), new HashSet<>(), false);
+        validateContainers(request.containers(), new HashSet<>(), duplicateContainerCode);
     }
 
     private void validateUnnumberedVehicleShipping(CreateOrderRequest request) {
@@ -149,6 +149,11 @@ public class OrderRequestValidator {
                 throw badRequest("DUPLICATE_WAYBILL", "Одна накладная не может быть выбрана дважды");
             }
         }
+        if (request.defaultRailwayCarriageOwnerId() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "DEFAULT_RAILWAY_CARRIAGE_OWNER_REQUIRED",
+                    "Выберите собственника вагонов по умолчанию в ЖД-поставке",
+                    "ReceivingOrder.MissingDefaultRailwayCarriageOwner");
+        }
     }
 
     private void validateAll(CreateOrderRequest request) {
@@ -170,26 +175,25 @@ public class OrderRequestValidator {
                 throw badRequest("RAILWAY_CARRIAGE_REQUIRED", "Выберите вагон");
             }
             if (!carriageIds.add(carriage.railwayCarriageId())) {
-                throw badRequest("DUPLICATE_RAILWAY_CARRIAGE", "Один вагон нельзя добавить в заявку дважды");
+                throw ApiException.fromSourceCode(HttpStatus.CONFLICT, "DUPLICATE_RAILWAY_CARRIAGE",
+                        "Один вагон нельзя добавить в заявку дважды", "ShippingOrderRailwayCarriage.AlreadyExists");
             }
             if (!hasValues(carriage.containers())) {
                 throw badRequest("EMPTY_RAILWAY_CARRIAGE", "Добавьте хотя бы один КТК на вагон");
             }
-            validateContainers(carriage.containers(), containerIds, true);
+            validateContainers(carriage.containers(), containerIds, "ShippingOrderContainer.AlreadyExists");
         }
     }
 
     private void validateContainers(
             Iterable<OrderContainerRequest> containers,
             Set<UUID> containerIds,
-            boolean railway
+            String duplicateContainerCode
     ) {
         for (OrderContainerRequest container : containers) {
             if (!containerIds.add(container.containerId())) {
-                throw badRequest(
-                        "DUPLICATE_CONTAINER",
-                        railway ? "Один КТК нельзя добавить в ЖД-заявку дважды" : "Один КТК нельзя добавить в заявку дважды"
-                );
+                throw ApiException.fromSourceCode(HttpStatus.CONFLICT, "DUPLICATE_CONTAINER",
+                        "Один КТК нельзя добавить в заявку дважды", duplicateContainerCode);
             }
             validateCargo(container.empty(), container.cargoItems());
         }

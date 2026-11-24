@@ -30,18 +30,18 @@ class OrderRequestValidatorTest {
 
     @Test
     void acceptsContainerAreaWithRailway() {
-        assertThatCode(() -> validator.validate(new CreateOrderRequest(
-                CLIENT_ID,
-                UUID.randomUUID(),
-                TERMINAL_AREA_ID,
-                TransportType.RAILWAY,
-                List.of(),
-                List.of(WAYBILL_ONE),
-                List.of(),
-                FillingType.ALL,
-                List.of()
-        )))
-                .doesNotThrowAnyException();
+        assertThatCode(() -> validator.validate(railwayReceiving(CLIENT_ID))).doesNotThrowAnyException();
+    }
+
+    @Test
+    void requiresRailwayOwnerEvenWhenReceivingClientIsKnown() {
+        assertError(railwayReceiving(null), "DEFAULT_RAILWAY_CARRIAGE_OWNER_REQUIRED");
+    }
+
+    private CreateOrderRequest railwayReceiving(UUID wagonOwner) {
+        return new CreateOrderRequest(CLIENT_ID, UUID.randomUUID(), TERMINAL_AREA_ID, TransportType.RAILWAY,
+                List.of(), List.of(WAYBILL_ONE), List.of(), FillingType.ALL, List.of(),
+                null, null, null, null, null, CLIENT_ID, null, null, null, null, null, List.of(), wagonOwner);
     }
 
     @Test

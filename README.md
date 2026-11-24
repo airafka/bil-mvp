@@ -12,6 +12,8 @@ MVP принимает результаты TOS по каждому КТК. Пр
 
 С V58 удалены служебные таблицы container_movement, order_cancellation и outbound_data. Отмена выполняется без причины и архивного снимка состава; складская история, отчёт хранения и CSV сохраняются.
 
+Разработчикам основной системы пригодятся точки подключения хранения, соответствие проверок и сценарий приёмки на отдельной базе. [Сопоставление с dev_back](CONTAINER_STOCK.md#сопоставление-с-dev_back)
+
 ## Документация
 
 | Документ | Назначение |
@@ -81,7 +83,7 @@ MVP принимает результаты TOS по каждому КТК. Пр
 
 - Frontend: React, TypeScript, React Router, Vite; зависимости фиксирует [package-lock.json](frontend/package-lock.json).
 - Backend: Java 21, Spring Boot 4.1.0, Spring JDBC, Bean Validation.
-- БД: PostgreSQL 16, Flyway. Активные миграции V1–V74 находятся в [db/baseline](backend/src/main/resources/db/baseline).
+- БД: PostgreSQL 16, Flyway. Активные миграции V1–V76 находятся в [db/baseline](backend/src/main/resources/db/baseline).
 - Сборка и запуск: Docker Compose; frontend раздаёт Nginx.
 
 [Backend Dockerfile](backend/Dockerfile) выполняет Maven package с тестами; [frontend Dockerfile](frontend/Dockerfile) — ESLint, Vitest и TypeScript/Vite build. Локально: mvn test из backend; npm ci, npm run lint, npm run test, npm run build из frontend. Для frontend dev доступен npm run dev.

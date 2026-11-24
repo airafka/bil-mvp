@@ -30,7 +30,7 @@ public class ShipmentStockController {
         return jdbc.query("""
                 select distinct c.id,c.code,cl.id,cl.name from waybill w join receiving_order r on r.id=w.receiving_order_id
                 join waybill_railway_carriage wr on wr.waybill_id=w.id join railway_carriage c on c.id=wr.railway_carriage_id
-                left join client cl on cl.id=coalesce(wr.owner_railway_carriage_id,r.default_railway_carriage_owner_id,r.client_id)
+                left join client cl on cl.id=coalesce(wr.owner_railway_carriage_id,r.default_railway_carriage_owner_id)
                 where r.id=? order by c.code
                 """,(rs,n)->new ReceiptWagon(rs.getObject(1,UUID.class),rs.getString(2),rs.getObject(3,UUID.class),rs.getString(4)),order);
     }

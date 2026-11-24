@@ -19,6 +19,8 @@ public class ApiErrorHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(exception.getStatus(), exception.getMessage());
         problem.setTitle("Ошибка выполнения запроса");
         problem.setProperty("code", exception.getCode());
+        if (exception.getSourceMessage() != null) problem.setProperty("errorMessage", exception.getSourceMessage());
+        if (exception.getSourceCode() != null) problem.setProperty("errorCode", exception.getSourceCode());
         return problem;
     }
 

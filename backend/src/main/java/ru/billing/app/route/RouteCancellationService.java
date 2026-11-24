@@ -25,7 +25,7 @@ public class RouteCancellationService {
     public CreatedOrderResponse cancel(UUID id,OrderCancellationService.Request request) {
         var initial=members(id);
         var routes=jdbc.query("select number,status from route where id=? for update",(rs,n)->new CreatedOrderResponse(id,rs.getInt(1),rs.getString(2)),id);
-        if(routes.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"ROUTE_NOT_FOUND","Рейс не найден");
+        if (routes.isEmpty()) throw ApiException.fromSourceCode(HttpStatus.NOT_FOUND, "ROUTE_NOT_FOUND", "Рейс не найден", "NotFound");
         var route=routes.getFirst();if(route.status().equals("CANCELLED"))return route;
         if(!route.status().equals(request.expectedStatus()))throw conflict("STATUS_CHANGED","Статус рейса изменился. Обновите страницу");
         var current=members(id);

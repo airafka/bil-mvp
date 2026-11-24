@@ -35,16 +35,22 @@ public class OrderStatusService {
 
     @Transactional
     public void finishTos(TosEvent event, boolean receiving) {
+        if (event.cargoResult().isEmpty() && event.addServicesResult().isEmpty()) {
+            String action = receiving ? "TosReceivingResultAction" : "TosShipmentResultAction";
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_TOS_RESULT", "Пакет не содержит результатов",
+                    action + ": Required fields are empty");
+        }
         String resource = receiving ? "receiving-orders" : "shipping-orders";
         String table = receiving ? "receiving_order" : "shipping_order";
         String mode = receiving ? "'ALL'" : "o.filling_type";
         UUID order = event.orderId();
         lockOrderRoute(resource,order);
-        record Document(String status,FillingType mode) {}
-        var docs = jdbc.query("select o.order_status,"+mode+" from "+table+" o join terminal_area_catalog a on a.id=o.terminal_area_catalog_id where o.id=? and lower(a.name)=lower(?) for update of o",
-                (rs,n)->new Document(rs.getString(1),FillingType.valueOf(rs.getString(2))),order,event.site());
-        if (docs.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND,"TOS_ORDER_NOT_FOUND","Заявка или площадка пакета не найдена");
+        record Document(String status, FillingType mode, boolean matchesSite) {}
+        var docs = jdbc.query("select o.order_status,"+mode+",lower(a.name)=lower(?) from "+table+" o join terminal_area_catalog a on a.id=o.terminal_area_catalog_id where o.id=? for update of o",
+                (rs,n)->new Document(rs.getString(1),FillingType.valueOf(rs.getString(2)),rs.getBoolean(3)),event.site(),order);
+        if (docs.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "TOS_ORDER_NOT_FOUND", "Заявка пакета не найдена", "Suitable order not found");
         var doc=docs.getFirst();
+        if (!doc.matchesSite()) throw new ApiException(HttpStatus.CONFLICT, "TOS_SITE_MISMATCH", "Площадка пакета не соответствует заявке");
         if (Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from inbound_event where order_id=? and task_id=? and event_code=? and status='DONE')",Boolean.class,order,event.taskId(),event.eventCode()))) return;
         if (!doc.status().equals("CONFIRMED") && !doc.status().equals("COMPLETED"))
             throw new ApiException(HttpStatus.CONFLICT,"TOS_ORDER_STATUS","Заявка не подтверждена");

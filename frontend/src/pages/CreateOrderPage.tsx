@@ -347,7 +347,7 @@ const changeFillingType = (fillingType: FillingType) => {
 
               </div>
             </div>
-            {isRailwayReceiving && <label className="field horizontal-field"><span>Собственник вагонов по умолчанию</span><UiSelect value={form.defaultRailwayCarriageOwnerId || form.clientId} onChange={e => setForm(state => ({ ...state, defaultRailwayCarriageOwnerId: e.target.value }))}><option value="">Выберите собственника</option>{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</UiSelect></label>}
+            {isRailwayReceiving && <label className="field horizontal-field"><span>Собственник вагонов по умолчанию:<b>*</b></span><UiSelect required value={form.defaultRailwayCarriageOwnerId || form.clientId} onChange={e => setForm(state => ({ ...state, defaultRailwayCarriageOwnerId: e.target.value }))}><option value="">Выберите собственника</option>{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</UiSelect></label>}
             {isRailwayReceiving && <WaybillFilterFields value={waybillFilter} disabled={submitting} onChange={value => {
               setWaybillFilter(value)
               setForm(state => ({ ...state, waybills: [] }))
