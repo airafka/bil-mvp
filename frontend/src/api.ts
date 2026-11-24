@@ -121,6 +121,7 @@ export function updateOwnershipOrder(id: string, comment: string, effectiveDate:
 export function getOwnershipAvailable(id: string, query = '', page = 0, effectiveDate = '', clientId = '') { return request<PagedResponse<import('./containerStock').OwnershipContainer>>('/api/service-orders/' + id + '/containers/available?' + new URLSearchParams({ ...(effectiveDate ? { effectiveDate } : {}), ...(clientId ? { clientId } : {}), query, page: String(page) })) }
 export function saveOwnershipSelection(id: string, containerOwnerIds: string[]) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id + '/containers', { method: 'PUT', body: JSON.stringify(containerOwnerIds.map(containerOwnerId => ({ containerOwnerId }))) }) }
 export function acceptOwnershipOrder(id: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id + '/accept', { method: 'POST' }) }
+export function resendOutboundData(id: string) { return request<void>('/api/outbounddata/resend/' + id, { method: 'PUT' }) }
 export function withdrawOwnershipOrder(id: string) { return request<import('./containerStock').OwnershipDetails>('/api/service-orders/' + id + '/withdraw', { method: 'POST' }) }
 export function deleteOwnershipOrder(id: string) { return request<void>('/api/service-orders/' + id, { method: 'DELETE' }) }
 

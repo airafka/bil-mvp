@@ -25,18 +25,20 @@ public class OwnershipOrderService {
             UUID clientId,String clientName,String status,UUID containerVisitId,UUID expectedClientId,String resultStatus,String resultReason) {}
     public record Header(UUID id,long number,UUID clientId,String clientName,String service,String comment,
             String status,OffsetDateTime completionAt,long containerQuantity,LocalDate effectiveDate,UUID sourceClientId,String sourceClientName,
-            String executionError,boolean exportQueued,OffsetDateTime exportSentAt,String exportError) {}
+            String executionError,boolean exportQueued,OffsetDateTime exportSentAt,String exportError,UUID outboundDataId,boolean exportExhausted) {}
     public record Details(Header order,List<Link> containers) {}
     private static final String HEADER="""
-        select s.*,e.service_order_id is not null as export_queued,e.sent_at,e.last_error,s.completion_at at time zone 'UTC' as confirmation_instant,c.name as client_name,src.name as source_client_name,(select count(*) from service_order_container_current sc where sc.service_order_id=s.id) as quantity
+        select s.*,e.id as outbound_data_id,e.id is not null as export_queued,(e.success is false and e.attempts>=5) as export_exhausted,
+               case when e.success then e.updated_at at time zone 'UTC' end as sent_at,e.error_message,s.completion_at at time zone 'UTC' as confirmation_instant,c.name as client_name,src.name as source_client_name,(select count(*) from service_order_container_current sc where sc.service_order_id=s.id) as quantity
         from service_order_current s join client c on c.id=s.client_id
-        left join client src on src.id=s.source_client_id left join service_order_export e on e.service_order_id=s.id
+        left join client src on src.id=s.source_client_id
+        left join outbound_data e on e.root_object_id=s.id and e.entity_type='SERVICE_ORDER' and e.message_type='SERVICE_ORDER_CHAIN_PACKAGE'
         """;
     private Header header(java.sql.ResultSet rs)throws java.sql.SQLException {
         return new Header(rs.getObject("id",UUID.class),rs.getLong("number"),rs.getObject("client_id",UUID.class),rs.getString("client_name"),
             rs.getString("service"),rs.getString("comment"),rs.getString("status"),rs.getObject("confirmation_instant",OffsetDateTime.class),rs.getLong("quantity"),rs.getObject("effective_date",LocalDate.class),
             rs.getObject("source_client_id",UUID.class),rs.getString("source_client_name"),rs.getString("execution_error"),rs.getBoolean("export_queued"),
-            rs.getObject("sent_at",OffsetDateTime.class),rs.getString("last_error"));
+            rs.getObject("sent_at",OffsetDateTime.class),rs.getString("error_message"),rs.getObject("outbound_data_id",UUID.class),rs.getBoolean("export_exhausted"));
     }
     private Header locked(UUID id){
         var ids=jdbc.query("select id from service_order where id=? for update",(rs,n)->rs.getObject(1,UUID.class),id);

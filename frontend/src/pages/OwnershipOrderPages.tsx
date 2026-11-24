@@ -6,7 +6,7 @@ import { Notification } from '../components/Notification'
 import { ActionIcon } from '../components/ActionIcon'
 import { RowActions } from '../components/RowActions'
 import { UiInput, UiSelect, UiTextarea } from '../components/FormControls'
-import { getReferenceOptions, getOwnershipOrders, getOwnershipOrder, createOwnershipOrder, updateOwnershipOrder, getOwnershipAvailable, getOwnershipAvailableForCreate, acceptOwnershipOrder, withdrawOwnershipOrder, deleteOwnershipOrder } from '../api'
+import { getReferenceOptions, getOwnershipOrders, getOwnershipOrder, createOwnershipOrder, updateOwnershipOrder, getOwnershipAvailable, getOwnershipAvailableForCreate, acceptOwnershipOrder, withdrawOwnershipOrder, deleteOwnershipOrder, resendOutboundData } from '../api'
 import { businessDateLabel, useApplicationClock } from '../applicationClock'
 import type { OwnershipContainer, OwnershipDetails, OwnershipHeader } from '../containerStock'
 import { containerTypeLabel, type PagedResponse, type ReferenceOption } from '../domain'
@@ -163,7 +163,7 @@ export function OwnershipOrderViewPage() {
     getReferenceOptions('clients').then(value => { if (active) setClients(value) }).catch(e => { if (active) setError(errorText(e)) })
     return () => { active = false }
   }, [editing])
-  const awaitingDelivery = !!data?.order.exportQueued && !data.order.exportSentAt
+  const awaitingDelivery = !!data?.order.exportQueued && !data.order.exportSentAt && !data.order.exportExhausted
   useEffect(() => {
     if ((data?.order.status !== 'SCHEDULED' && !awaitingDelivery) || busy) return
     let active = true
@@ -187,6 +187,15 @@ export function OwnershipOrderViewPage() {
       apply(result); finishEditing(); setRevision(v => v + 1); setMessage(accept ? (result.order.status === 'DONE' ? 'Смена собственника выполнена.' : 'Заявка ожидает выполнения.') : 'Заявка сохранена')
     } catch (e) { setError(errorText(e)) } finally { lock.current = false; setBusy(false) }
   }
+  async function resend() {
+    if (lock.current || !data?.order.outboundDataId) return
+    lock.current = true; setBusy(true); setError(''); setMessage('')
+    try {
+      await resendOutboundData(data.order.outboundDataId)
+      apply(await getOwnershipOrder(ownershipOrderId))
+      setMessage('Пакет поставлен в очередь на повторную отправку.')
+    } catch (e) { setError(errorText(e)) } finally { lock.current = false; setBusy(false) }
+  }
   async function withdraw() {
     if (lock.current) return
     lock.current = true; setBusy(true); setError(''); setMessage('')
@@ -205,7 +214,9 @@ export function OwnershipOrderViewPage() {
       {tab === 'main' && <><section className="form-section ui-form-section"><div className="form-section-heading"><h2>Основная информация</h2></div><dl className="details-grid">
         <div><dt>Номер заявки</dt><dd>{data.order.number}</dd></div><div><dt>Статус</dt><dd><OwnershipStatus status={data.order.status} /></dd></div>
         {data.order.executionError && <div><dt>Причина ожидания</dt><dd>{data.order.executionError}</dd></div>}
-        {data.order.exportQueued && <div><dt>Пакет TOS</dt><dd>{data.order.exportSentAt ? 'Принят Datareon ' + completedAt(data.order.exportSentAt) + ' UTC' : data.order.exportError || 'В очереди на отправку'}</dd></div>}
+        {data.order.exportQueued && <div><dt>Пакет TOS</dt><dd>{data.order.exportSentAt ? 'Принят Datareon ' + completedAt(data.order.exportSentAt) + ' UTC' : data.order.exportError?.replace(/\. Отправка будет повторена\.$/, '') || 'В очереди на отправку'}
+          {data.order.exportExhausted && <><span> Автоматические попытки исчерпаны. </span><button className="secondary-button" disabled={busy} onClick={resend}>Повторить отправку</button></>}
+        </dd></div>}
         <div><dt>Количество КТК</dt><dd>{editing ? selected.size : data.order.containerQuantity}</dd></div><div><dt>Подтверждено (UTC)</dt><dd>{completedAt(data.order.completionAt)}</dd></div>
         <div><dt><label htmlFor="ownership-effective-date">Дата передачи</label></dt><dd>{editing ? <UiInput id="ownership-effective-date" type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEffectiveDate(e.target.value); clearSelection() }} /> : data.order.effectiveDate ? businessDateLabel(data.order.effectiveDate) : '—'}</dd></div>
         <div><dt>Прежний собственник</dt><dd>{data.order.sourceClientName || '—'}</dd></div>

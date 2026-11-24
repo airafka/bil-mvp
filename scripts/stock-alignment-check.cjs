@@ -315,6 +315,7 @@ async function run(name) {
         const { order } = await api(path + '/accept', 'POST');
         assert.equal(order.status, 'SCHEDULED');
         assert.equal(order.exportQueued, false);
+        assert.equal(order.outboundDataId, undefined);
         return path;
     }
     const complete = await receiveBatch(2);
@@ -326,10 +327,13 @@ async function run(name) {
     await setDay(5);
     const completed = await waitForTransfer(completePath, state => state.order.status === 'DONE');
     assert.equal(completed.order.exportQueued, true);
+    assert.match(completed.order.outboundDataId, /^[0-9a-f-]{36}$/);
+    assert.equal(completed.order.exportExhausted, false);
     assert.deepEqual(completed.containers.map(row => row.resultStatus), ['APPLIED', 'APPLIED']);
     const pending = await waitForTransfer(blockedPath, state => !!state.order.executionError);
     assert.equal(pending.order.status, 'SCHEDULED');
     assert.equal(pending.order.exportQueued, false);
+    assert.equal(pending.order.outboundDataId, undefined);
     assert.ok(pending.containers.every(row => row.resultStatus !== 'APPLIED'));
     assert.equal((await api(blockedPath + '/withdraw', 'POST')).order.status, 'DRAFT');
     console.log('PASS atomic two-container transfer, scheduled shipment blocking, draft, grouped conflicts, shipment blocked by scheduled transfer, partial receiving, dated transfer, storage, repeat-visit cancellation and unnumbered TOS shipment');
