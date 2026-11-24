@@ -52,7 +52,7 @@ export function OwnershipOrderRegistryPage() {
     catch (e) { setError(errorText(e)) } finally { setBusy(false) }
   }
   return <section className="registry-page ownership-page">
-    <div className="page-header"><h1>Смена собственника КТК</h1><Link className="primary-button create-action-button" to="/service-orders/new"><ActionIcon name="plus" /> Создать</Link></div>
+    <div className="page-header"><h1>Смена собственника КТК</h1><div className="header-actions"><Link className="secondary-button" to="/container-owners">К остаткам</Link><Link className="primary-button create-action-button" to="/service-orders/new"><ActionIcon name="plus" /> Создать</Link></div></div>
     {error && <Notification kind="error">{error}</Notification>}{message && <Notification kind="success">{message}</Notification>}
     <TableReveal loading={!data && !error}>
       <div className="table-wrap"><table className="ownership-registry-table"><thead><tr><th className="registry-index">№</th><th>Номер заявки</th><th>Новый собственник</th><th>Количество КТК</th><th>Статус</th><th>Дата передачи</th><th>Подтверждено</th><th>Комментарий</th><th className="registry-actions" aria-label="Действия" /></tr></thead><tbody>

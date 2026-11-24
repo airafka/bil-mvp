@@ -21,11 +21,9 @@ final class OrderRowMapper {
                 row.getString("status"),
                 row.getObject("contract_id", UUID.class),
                 row.getString("contract_name"),
-                row.getObject("comprehensive_service_order_id", UUID.class),
                 row.getObject("planned_at", LocalDateTime.class),
                 row.getObject("route_id", UUID.class),
                 row.getObject("route_number", Integer.class),
-                row.getObject("service_number", Integer.class),
                 row.getString("comment")
         );
     }

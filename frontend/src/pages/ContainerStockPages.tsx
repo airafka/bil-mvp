@@ -20,7 +20,7 @@ export function ContainerStockPage() {
     return () => { active = false }
   }, [page, clock.date])
   return <section className="registry-page">
-    <div className="page-header"><h1>Остатки и собственники КТК</h1></div>
+    <div className="page-header"><h1>Остатки и собственники КТК</h1><Link className="secondary-button" to="/service-orders">Смена собственника</Link></div>
     <p className="composition-hint">В физических остатках учитываются КТК со статусами «В остатках» и «Ожидает вывоза». Ожидаемые поставки и КТК вне остатков показаны отдельно по статусу.</p>
     {error && <Notification kind="error">{error}</Notification>}
     <TableReveal loading={!data && !error}><div className="table-wrap"><table><thead><tr><th>Номер КТК</th><th>Тип</th><th>Собственник</th><th>Состояние</th><th>История</th></tr></thead><tbody>

@@ -1,5 +1,3 @@
-import { CreateReturnDialog } from '../components/CreateReturnDialog'
-import { RelatedOrderLink } from '../components/RelatedOrderLink'
 import { Notification } from '../components/Notification'
 import { RailwayReceivingHierarchy } from '../components/RailwayReceivingHierarchy'
 import { AddedContainerCargo } from '../components/AddedContainerCargo'
@@ -33,13 +31,12 @@ const shippingRailwayTabs = ['Основное', 'Вагоны', 'КТК', 'Гр
 
 const formatWeight = (weight: number) => weight.toLocaleString('ru-RU', { maximumFractionDigits: 3 })
 
-export function OrderViewPage({ config, providedOrderId, embedded = false }: { config: OrderConfig; providedOrderId?: string; embedded?: boolean }) {
-  const { orderId: routeOrderId = '' } = useParams()
-  const orderId = providedOrderId ?? routeOrderId
-  return <OrderCard key={orderId} config={config} orderId={orderId} embedded={embedded} />
+export function OrderViewPage({ config }: { config: OrderConfig }) {
+  const { orderId = '' } = useParams()
+  return <OrderCard key={orderId} config={config} orderId={orderId} />
 }
 
-function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId: string; embedded: boolean }) {
+function OrderCard({ config, orderId }: { config: OrderConfig; orderId: string }) {
   const { clock } = useApplicationClock()
   const [ownerActionTarget, setOwnerActionTarget] = useState<HTMLDivElement | null>(null)
   const [activeTab, setActiveTab] = useState(1)
@@ -106,16 +103,11 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
 
   const visibleTabs = [tabs[0], 'Рейс', ...tabs.slice(1)]
   const contentTab = activeTab === 2 ? 0 : activeTab > 2 ? activeTab - 1 : activeTab
-  const [returnDialogOpen, setReturnDialogOpen] = useState(false)
   const [tosDialogOpen, setTosDialogOpen] = useState(false)
   const [refreshingPacket, setRefreshingPacket] = useState(false)
-  const [returnNotice, setReturnNotice] = useState<import('../api').CreatedReturns | null>(null)
-  const returnedContainerIds = new Set(order?.returnOrders?.filter(item => item.status !== 'CANCELLED').flatMap(item => item.containerIds) ?? [])
-  const canCreateReturn = config.kind === 'shipping' && order?.transportType === 'VEHICLE' && order.comprehensiveServiceOrderId && order.containers.some(item => !returnedContainerIds.has(item.containerId))
-  const returnButton = canCreateReturn && !editing && <button type="button" className="secondary-button" onClick={() => setReturnDialogOpen(true)}>Создать возврат</button>
   const numberedContainers = order ? [...order.containers, ...order.railwayCarriages.flatMap(w => w.containers)] : []
   const canEditDefaultOwner = config.kind === 'receiving' && order?.status === 'DRAFT'
-  const canAddContainers = order?.status === 'DRAFT' && order.fillingType === 'ALL' && !order.comprehensiveServiceOrderId && !order.sourceReceivingOrderId && !order.sourceShippingOrderId
+  const canAddContainers = order?.status === 'DRAFT' && order.fillingType === 'ALL'
     && (order.transportType === 'VEHICLE' || (config.kind === 'shipping' && order.transportType === 'RAILWAY'))
   const canEditContainers = order?.status === 'DRAFT' && (numberedContainers.length > 0 || canAddContainers)
 
@@ -228,28 +220,21 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
 
   return (
     <section className="form-page view-page">
-      {!embedded && <div className="page-header form-page-header">
+      <div className="page-header form-page-header">
         <div className="view-title">
           <h1>{config.kind === 'receiving' ? 'Заявка на поставку' : 'Заявка на вывоз'}{order ? ` №${order.code}` : ''}</h1>
 
         </div>
-        <div className="view-header-actions">{returnButton}{editing && order && <div className="header-actions">            <button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelectedRouteId(''); setSaveError('') }}>Отмена</button>
+        <div className="view-header-actions">{editing && order && <div className="header-actions">            <button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelectedRouteId(''); setSaveError('') }}>Отмена</button>
             <button type="button" className="primary-button" disabled={saving} onClick={saveOrder}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && !editing && <button type="button" className="secondary-button icon-button" disabled={saving} onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}{order && !editing && !saving && statusAction}<Link className="close-button" to={config.listPath} aria-label="Вернуться в реестр" title="Закрыть"><ActionIcon name="close" /></Link></div>
       </div>
-
-      }
-      {returnDialogOpen && order && <CreateReturnDialog order={order} onClose={() => setReturnDialogOpen(false)} onCreated={result => { setReturnDialogOpen(false); setReturnNotice(result); getOrder(config.apiPath, orderId).then(setOrder).catch(e => setError(String(e))) }} />}
       {tosDialogOpen && order?.status === 'CONFIRMED' && <TosShipmentDialog order={order} vehicleNumber={assignedRoute?.vehicleNumber}
         onClose={() => setTosDialogOpen(false)} onSent={packetSent} />}
-      {returnNotice && <Notification kind="success">Созданы возвратные заявки: {returnNotice.returns.map((item, index) => <span key={item.receivingOrderId}>{index > 0 ? ', ' : ''}<Link to={`/receiving-orders/${item.receivingOrderId}`}>№{item.receivingOrderCode}</Link></span>)}. {returnNotice.createdService && <>Комплексная заявка на возврат <Link to={`/comprehensive-service-orders/${returnNotice.serviceOrderId}`}>№{returnNotice.serviceOrderCode}</Link>.</>}</Notification>}
-      <div className={embedded ? 'embedded-order' : 'form-workspace'}>
+      <div className="form-workspace">
         {loading && <div className="view-loading">Загружаем заявку…</div>}
         {error && <div className="view-error-state"><Notification kind="error">{error}</Notification><Link className="secondary-button" to={config.listPath}>← Вернуться в реестр</Link></div>}
 
         {order && !loading && <>
-          {embedded && editing && order && <div className="header-actions">            <button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelectedRouteId(''); setSaveError('') }}>Отмена</button>
-            <button type="button" className="primary-button" disabled={saving} onClick={saveOrder}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}
-          {embedded && !editing && <div className="view-header-actions">{returnButton}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && <button type="button" className="secondary-button icon-button" disabled={saving} onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}{statusAction}</div>}
           <div className="order-tabs-toolbar">
           <div className="stepper view-tabs" aria-label="Разделы заявки">
             {visibleTabs.map((label, index) => <button type="button" className={`step ${activeTab === index + 1 ? 'current' : ''}`} key={label} onClick={() => setActiveTab(index + 1)}>{label}</button>)}
@@ -285,10 +270,6 @@ function OrderCard({ config, orderId, embedded }: { config: OrderConfig; orderId
               })()}</dd></div>
               <div><dt>Номер транспортной накладной</dt><dd>{order.transportWaybillNumber || 'Не указан'}</dd></div>
               {config.kind === 'receiving' && <div><dt>Собственник КТК по умолчанию</dt><dd>{editing && canEditDefaultOwner ? <><UiSelect aria-label="Собственник КТК по умолчанию" value={defaultOwnerDraft} disabled={saving || !ownerClients.length} onChange={event => { const value=event.target.value; setDefaultOwnerDraft(value); setContainerAdditions(current=>current.map(row=>({...row,container:{...row.container,ownerClientId:value,ownerClientName:ownerClients.find(client=>client.id===value)?.name}}))); setContainerDraft(current => current.map(row => ({ ...row, ownerClientId:value, ownerClientName:ownerClients.find(client => client.id===value)?.name }))) }}>{ownerClients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</UiSelect><small>Смена значения обновит собственников всех КТК заявки.</small></> : order.defaultContainerOwnerName || 'Не указан'}</dd></div>}
-              {order.comprehensiveServiceOrderId && <div className="details-wide"><dt>Комплексная заявка</dt><dd><RelatedOrderLink kind="comprehensive-service-orders" id={order.comprehensiveServiceOrderId} /></dd></div>}
-              {order.sourceReceivingOrderId && <div className="details-wide"><dt>Исходная поставка</dt><dd><RelatedOrderLink kind="receiving-orders" id={order.sourceReceivingOrderId} /></dd></div>}
-              {order.sourceShippingOrderId && <div className="details-wide"><dt>Исходный вывоз</dt><dd><RelatedOrderLink kind="shipping-orders" id={order.sourceShippingOrderId} /></dd></div>}
-              {order.returnOrders?.map(item => <div className="details-wide" key={item.id}><dt>Заявка на возврат</dt><dd><Link to={`/receiving-orders/${item.id}`}>№{item.code}</Link> — {item.clientName}, {item.contractName}; КТК: {item.containerNames.join(', ')}. Комплексная заявка <Link to={`/comprehensive-service-orders/${item.comprehensiveServiceOrderId}`}>№{item.comprehensiveServiceOrderCode}</Link></dd></div>)}
               {config.kind === 'shipping' && <div className="details-wide"><dt>Наличие данных</dt><dd>{fillingTypeLabel(order.fillingType)}</dd></div>}
             </dl>
             {<>

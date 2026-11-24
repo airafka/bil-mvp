@@ -97,27 +97,8 @@ html { scrollbar-gutter: stable; }
 .app-shell table .record-row { cursor: pointer; }
 
 /* Receiving/shipping registries share column order and table geometry. */
-.app-shell .transport-order-registry { min-width: 1180px; }
+.app-shell .transport-order-registry { min-width: 1100px; }
 .transport-order-date { white-space: nowrap; }
 .transport-order-comment { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .app-shell table tbody tr.composition-data, .app-shell table tbody tr.composition-group, .app-shell table tbody tr.composition-subgroup { background:#fff; }
-
-/* Service creation and cards follow the receiving-order table layout. */
-.app-shell .service-table-page :is(.table-wrap, .order-container-scroll) {
-  border:1px solid var(--table-border); border-radius:var(--app-radius); overflow-x:auto;
-}
-.app-shell .service-table-page table tbody :is(th, td) {
-  border-right:1px solid var(--table-border); border-bottom:1px solid var(--table-border);
-}
-.app-shell .service-table-page table tbody tr > :last-child { border-right:0; }
-.app-shell .service-table-page .service-compact-table table { min-width:760px; }
-.app-shell .service-table-page .service-receiving-table table { min-width:940px; }
-.app-shell .service-table-page .service-cargo-item { display:block; margin:0; line-height:20px; white-space:normal; overflow-wrap:anywhere; }
-.app-shell .service-table-page .service-cargo-item + .service-cargo-item { margin-top:4px; }
-.app-shell .service-table-page .service-compact-table .order-code { font-weight:400; }
-
-/* Inline service order metadata keeps the same columns in view/edit modes. */
-.app-shell .service-table-page table.service-metadata-table { table-layout: fixed; min-width: 1144px; }
-.service-metadata-table .service-metadata-party { overflow: hidden; text-overflow: ellipsis; }
-.service-metadata-table .service-metadata-date { white-space: nowrap; }

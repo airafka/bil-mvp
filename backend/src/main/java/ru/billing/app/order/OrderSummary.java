@@ -14,11 +14,9 @@ public record OrderSummary(
         String status,
         UUID contractId,
         String contractName,
-        UUID comprehensiveServiceOrderId,
         LocalDateTime plannedAt,
         UUID routeId,
         Integer routeNumber,
-        Integer comprehensiveServiceOrderNumber,
         String comment
 ) {
 }

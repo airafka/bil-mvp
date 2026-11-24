@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.billing.app.error.ApiException;
 import ru.billing.app.order.PagedResponse;
-import ru.billing.app.comprehensiveserviceorder.ServiceOrderLock;
 import tools.jackson.databind.json.JsonMapper;
 
 @Service
@@ -27,7 +26,7 @@ public class WaybillPlacementService {
         @NotEmpty @Size(max=200) List<@NotNull UUID> wagonIds,@NotBlank String version,
         @NotEmpty @Size(max=2000) List<@NotNull @Valid Assignment> assignments) {}
     public record Bill(UUID id,String number,UUID receivingId,Integer receivingNumber,String status,
-        UUID parent,UUID route,String departure,String destination,String payer) {}
+        UUID route,String departure,String destination,String payer) {}
     public record Candidate(UUID id,String number,Integer receivingNumber,int wagonCount,int containerCount,String departure,String destination) {}
     public record Wagon(UUID id,String number,Integer feet,BigDecimal capacity) {}
     public record Container(UUID rowId,UUID containerId,String number,String type,BigDecimal grossWeight,
@@ -37,14 +36,14 @@ public class WaybillPlacementService {
     private static ApiException conflict(String code,String message){return new ApiException(HttpStatus.CONFLICT,code,message);}
     private static final String BILL_SQL="""
         select w.id,w.number,w.receiving_order_id,r.number as receiving_number,r.order_status,
-          r.comprehensive_service_order_id,r.route_id,ds.esr_code as departure,ts.esr_code as destination,p.name as payer
+          r.route_id,ds.esr_code as departure,ts.esr_code as destination,p.name as payer
         from waybill w left join receiving_order r on r.id=w.receiving_order_id
         join railway_station ds on ds.id=w.departure_station_id join railway_station ts on ts.id=w.destination_station_id
         join payer p on p.id=w.payer_id
         """;
     private List<Bill> bills(List<UUID> ids){return jdbc.query(BILL_SQL+" where w.id in ("+marks(ids)+") order by w.id",
         (rs,n)->new Bill(rs.getObject(1,UUID.class),rs.getString(2),rs.getObject(3,UUID.class),rs.getObject(4,Integer.class),rs.getString(5),
-          rs.getObject(6,UUID.class),rs.getObject(7,UUID.class),rs.getString(8),rs.getString(9),rs.getString(10)),ids.toArray());}
+          rs.getObject(6,UUID.class),rs.getString(7),rs.getString(8),rs.getString(9)),ids.toArray());}
     @Transactional(readOnly=true)
     public PagedResponse<Candidate> candidates(String query,int page,int size) {
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
@@ -85,7 +84,6 @@ public class WaybillPlacementService {
         jdbc.execute("select pg_advisory_xact_lock(1743125938)");
         var initial=bills(ids);
         if(initial.size()!=ids.size())throw conflict("WAYBILL_NOT_FOUND","Одна из накладных не найдена");
-        initial.stream().map(Bill::parent).filter(Objects::nonNull).distinct().sorted().forEach(id->ServiceOrderLock.lock(jdbc,id));
         initial.stream().map(Bill::route).filter(Objects::nonNull).distinct().sorted().forEach(id->jdbc.queryForList("select id from route where id=? for update",id));
         initial.stream().map(Bill::receivingId).filter(Objects::nonNull).distinct().sorted().forEach(id->jdbc.queryForList("select id from receiving_order where id=? for update",id));
         jdbc.queryForList("select id from waybill where id in ("+marks(ids)+") order by id for update",ids.toArray());

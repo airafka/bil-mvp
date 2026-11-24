@@ -9,7 +9,7 @@ type Result = { cleared: boolean; backupFile?: string }
 const endpoint = '/api/system/operational-reset'
 const groups = [
   ['Заявки на поставку', 'receiving_order'], ['Заявки на вывоз', 'shipping_order'],
-  ['Заявки на смену собственника', 'service_order'], ['Комплексные заявки', 'comprehensive_service_order'],
+  ['Заявки на смену собственника', 'service_order'],
   ['Рейсы', 'route'], ['Накладные', 'waybill'], ['Визиты КТК', 'container_visit'],
   ['Назначения собственников', 'container_period'], ['Остатки КТК', 'container_owner'],
   ['События истории КТК', 'container_owner_history'],

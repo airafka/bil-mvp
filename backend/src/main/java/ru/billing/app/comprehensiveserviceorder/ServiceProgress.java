@@ -1,6 +1,0 @@
-package ru.billing.app.comprehensiveserviceorder;
-
-public record ServiceProgress(
-        int accepted, int shippingCreated, int shippingCompleted,
-        int returnCreated, int returnCompleted, int total, int shippingMissing,
-        int shippingOrderCount, int shippingOrdersCompleted, int returnOrderCount, int returnOrdersCompleted, int returnMissing) {}

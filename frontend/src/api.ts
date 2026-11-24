@@ -1,7 +1,7 @@
 import { request } from './http'
 export { ApiError } from './http'
-import type { ContractOption, ComprehensiveServiceOrderSummary, ComprehensiveServiceOrderDetails } from './comprehensiveServiceOrder'
 import type {
+  ContractOption,
   CreatedOrder,
   CreatedWaybill,
   GroupedWaybillFilter,
@@ -74,17 +74,6 @@ export function getGroupedWaybills(
 
 
 export function getContracts() { return request<ContractOption[]>('/api/references/contracts') }
-export function getComprehensiveServiceOrders(page = 0, query = '', status = '') { return request<PagedResponse<ComprehensiveServiceOrderSummary>>('/api/comprehensive-service-orders?page=' + page + '&size=20&query=' + encodeURIComponent(query) + '&status=' + encodeURIComponent(status)) }
-export function getComprehensiveServiceOrder(id: string) { return request<ComprehensiveServiceOrderDetails>('/api/comprehensive-service-orders/' + id) }
-export function createComprehensiveServiceOrder(payload: { clientId: string; contractId: string; waybillIds: string[]; defaultRailwayCarriageOwnerId?: string; defaultContainerOwnerId?: string; containerOwners?: Array<{ containerId: string; ownerClientId: string }> }) {
-  return request<ComprehensiveServiceOrderDetails>('/api/comprehensive-service-orders', { method: 'POST', body: JSON.stringify(payload) })
-}
-export function createServiceShippingOrder(serviceId: string, containerIds: string[]) {
-  return request<ComprehensiveServiceOrderDetails>(`/api/comprehensive-service-orders/${serviceId}/shipping-orders`, {
-    method: 'POST', body: JSON.stringify({ containerIds }),
-  })
-}
-
 export function changeOrderStatus(apiPath: string, id: string, expectedStatus: string, status: string) {
   return request<CreatedOrder>(`${apiPath}/${id}/status`, { method: 'PATCH', body: JSON.stringify({ expectedStatus, status }) })
 }
@@ -175,36 +164,8 @@ export function updateRoute(id:string,payload:Pick<CreateRoutePayload,'departure
  return request<RouteDetails>('/api/routes/'+id,{method:'PUT',body:JSON.stringify(payload)})
 }
 
-export function updateServiceTransportMetadata(id:string,orders:import('./comprehensiveServiceOrder').ServiceTransportMetadataChange[]) {
- return request<ComprehensiveServiceOrderDetails>('/api/comprehensive-service-orders/'+id+'/transport-metadata',{method:'PATCH',body:JSON.stringify({orders})})
-}
-
 export function generateWaybill(standard20: number, standard40: number) { return request<CreatedWaybill>('/api/waybills/generate', { method: 'POST', body: JSON.stringify({ standard20, standard40 }) }) }
-
-export function prepareServiceTransport(id: string, section: 'INITIAL_RECEIVING' | 'SHIPPING' | 'RETURN_RECEIVING') {
-  return request<ComprehensiveServiceOrderDetails>('/api/comprehensive-service-orders/' + id + '/prepare-transport', { method: 'POST', body: JSON.stringify({ section }) })
-}
-
-export function completeServiceSection(id: string, section: 'INITIAL_RECEIVING' | 'SHIPPING' | 'RETURN_RECEIVING', action: 'CONFIRM_ROUTES' | 'COMPLETE_ORDERS') {
-  return request<ComprehensiveServiceOrderDetails>('/api/comprehensive-service-orders/' + id + '/complete-section', { method: 'POST', body: JSON.stringify({ section, action }) })
-}
-
-export type ReturnContract = { clientId: string; clientName: string; contractId: string; contractName: string }
-export type CreatedReturn = { receivingOrderId: string; receivingOrderCode: number; serviceOrderId: string; serviceOrderCode: number; createdService: boolean }
-export function getReturnContracts() { return request<ReturnContract[]>('/api/shipping-orders/return-contracts') }
-export type ReturnCandidate = { containerId: string; containerName: string; shippingOrderId: string; shippingOrderCode: number }
-export type CreatedReturns = { serviceOrderId: string; serviceOrderCode: number; createdService: boolean; returns: CreatedReturn[] }
-export function getServiceReturnCandidates(id: string) { return request<ReturnCandidate[]>(`/api/comprehensive-service-orders/${id}/returns/available-containers`) }
-export function createServiceReturns(id: string, payload: { containerIds: string[]; useCurrentClient: boolean; clientId?: string; contractId?: string; ownerClientId?: string }) {
-  return request<CreatedReturns>(`/api/comprehensive-service-orders/${id}/returns`, { method: 'POST', body: JSON.stringify(payload) })
-}
 
 export function cancelOrder(apiPath: string, id: string, expectedStatus: string) {
   return request<CreatedOrder>(apiPath + '/' + id + '/cancellation', { method: 'POST', body: JSON.stringify({ expectedStatus }) })
-}
-
-export type NoReturnCandidate = ReturnCandidate & { shippingStatus: string; returnRequired: boolean }
-export function getNoReturnCandidates(id: string) { return request<NoReturnCandidate[]>(`/api/comprehensive-service-orders/${id}/no-return/available-containers`) }
-export function selectNoReturnContainers(id: string, containerIds: string[]) {
-  return request<ComprehensiveServiceOrderDetails>(`/api/comprehensive-service-orders/${id}/no-return`, { method: 'POST', body: JSON.stringify({ containerIds }) })
 }

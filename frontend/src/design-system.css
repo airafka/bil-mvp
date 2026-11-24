@@ -229,24 +229,10 @@ tbody th { position: static; }
 .route-drawer-body label { display: grid; gap: 8px; font-size: 14px; }
 .route-drawer-body p { color: var(--muted); font-size: 14px; }
 
-.bulk-return-heading, .bulk-return-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px; }
-.bulk-return-heading { justify-content: space-between; }
-.bulk-return-heading h2 { margin: 0; padding: 0; }
-.bulk-return-actions { border-top: 1px solid var(--line); }
-.bulk-return-actions span { flex: 1 1 100%; font-size: 13px; color: var(--muted); }
 /* Three transport stages share the same metric-card presentation. */
 .service-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 12px; margin: 20px 0 0; }
 .service-progress > section { min-width: 0; padding: 16px; border: 1px solid #e4e7ec; border-radius: 6px; background: var(--app-surface); }
 .service-progress h2 { margin: 0; padding: 0 0 12px; border-bottom: 1px solid var(--app-border); font-size: 16px; line-height: 24px; font-weight: 500; }
-.service-progress-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 16px 0 0; }
-.service-progress-metrics > div { min-width: 0; padding: 0 8px; text-align: center; }
-.service-progress-metrics > div + div { border-left: 1px solid var(--app-border); }
-.service-progress-metrics dt { color: var(--muted); font-size: 14px; line-height: 20px; }
-.service-progress-metrics dd { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 8px; margin: 8px 0 0; font-variant-numeric: tabular-nums; }
-.service-progress-metrics strong { color: var(--blue); font-size: 28px; line-height: 34px; font-weight: 600; }
-.service-progress-metrics dd > span { color: var(--muted); font-size: 14px; line-height: 20px; }
-.service-progress-metrics dd > .service-progress-total { color: var(--blue); font-size: 16px; font-weight: 500; }
-.service-progress-missing { margin: 12px 0 0; padding: 6px 10px; border-left: 3px solid #f79009; border-radius: 3px; color: #92400e; background: #fffbeb; font-size: 12px; line-height: 18px; }
 
 
 /* Figma detail tabs: a shared header and an outline with one numbered cell per waybill. */
@@ -442,7 +428,6 @@ tbody th { position: static; }
 
 .status-badge[data-status="PAID"] { background: #e8f6ed; color: #23834d; }
 
-.bulk-return-actions { justify-content:flex-end; }
 .service-pending-containers { margin-top:16px; }
 
 .service-tabs-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:24px; }

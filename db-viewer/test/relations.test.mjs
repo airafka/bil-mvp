@@ -14,14 +14,10 @@ test('every exposed foreign key uses all its columns to find the related record'
     for (const table of tables) {
       const data = await page(new URLSearchParams({ name: table.name, limit: '100' }));
       if (['receiving_order', 'shipping_order'].includes(table.name)) {
-        for (const [column, target, parts] of [
-          ['contract_id', 'contract', ['contract_id', 'client_id']],
-          ['comprehensive_service_order_id', 'comprehensive_service_order', ['comprehensive_service_order_id', 'client_id', 'contract_id']],
-        ]) {
-          const relation = data.relations.find(r => r.column === column);
-          assert.equal(relation?.target.replace(/^public\./, ''), target);
-          assert.deepEqual(relation.columns, parts);
-        }
+        const contract = data.relations.find(r => r.column === 'contract_id');
+        assert.equal(contract?.target.replace(/^public\./, ''), 'contract');
+        assert.deepEqual(contract.columns, ['contract_id', 'client_id']);
+        assert.ok(!data.relations.some(r => ['receiving_order', 'shipping_order'].includes(r.target.replace(/^public\./, ''))));
         assert.equal(data.relations.find(r => r.column === 'client_id').target.replace(/^public\./, ''), 'client');
       }
       const checked = new Set();

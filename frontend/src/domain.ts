@@ -126,8 +126,6 @@ type OrderHeaderFields = {
   comment?: string | null
   contractId: string | null
   contractName: string | null
-  comprehensiveServiceOrderId: string | null
-  sourceReceivingOrderId?: string | null
   id: string
   code: number
   clientId: string
@@ -141,7 +139,6 @@ type OrderHeaderFields = {
 export type OrderSummary = OrderHeaderFields & {
   plannedAt?: string | null
   routeNumber?: number | null
-  comprehensiveServiceOrderNumber?: number | null
 }
 
 export type PagedResponse<T> = {
@@ -241,8 +238,6 @@ export type OrderDetails = OrderHeaderFields & {
   consignor: string | null
   departureAt: string | null
   consignee: string | null
-  sourceShippingOrderId?: string | null
-  returnOrders?: ReturnReceivingOrder[]
   containers: OrderContainerDetails[]
   waybills: OrderWaybillDetails[]
   railwayCarriages: ShippingOrderRailwayCarriageDetails[]
@@ -295,9 +290,4 @@ export function transportTypeLabel(transportType: TransportType | null) {
 
 export type DangerProductOption = { id: string; identifier: number; name: string; dangerClassId: string; dangerClassName: string; dangerClassCode: string | null }
 
-export type ReturnReceivingOrder = {
-  id: string; code: number; status: string; containerNames: string[]; containerIds: string[]
-  plannedAt?: string | null; consignor?: string | null
-  comprehensiveServiceOrderId: string; comprehensiveServiceOrderCode: number
-  clientName: string; contractName: string
-}
+export type ContractOption = { id: string; clientId: string; name: string; contractType?: string; validFrom?: string | null }

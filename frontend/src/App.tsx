@@ -14,8 +14,6 @@ const RouteCreatePage = lazy(() => import('./pages/RoutePages').then(module => (
 const RouteViewPage = lazy(() => import('./pages/RoutePages').then(module => ({ default: module.RouteViewPage })))
 const RailwayCarriageRegistryPage = lazy(() => import('./pages/RailwayCarriageRegistryPage').then(module => ({ default: module.RailwayCarriageRegistryPage })))
 const ContainerRegistryPage = lazy(() => import('./pages/ContainerRegistryPage').then(module => ({ default: module.ContainerRegistryPage })))
-const ComprehensiveServiceOrderRegistryPage = lazy(() => import('./pages/ComprehensiveServiceOrderRegistryPage').then(module => ({ default: module.ComprehensiveServiceOrderRegistryPage })))
-const ComprehensiveServiceOrderViewPage = lazy(() => import('./pages/ComprehensiveServiceOrderViewPage').then(module => ({ default: module.ComprehensiveServiceOrderViewPage })))
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
 import { orderConfigs } from './domain'
@@ -43,9 +41,6 @@ function App() {
           <Route path="/service-orders" element={<OwnershipOrderRegistryPage />} />
           <Route path="/service-orders/new" element={<OwnershipOrderCreatePage />} />
           <Route path="/service-orders/:ownershipOrderId" element={<OwnershipOrderViewPage />} />
-          <Route path="/comprehensive-service-orders" element={<ComprehensiveServiceOrderRegistryPage />} />
-          <Route path="/comprehensive-service-orders/new" element={<CreateOrderPage key="service" config={orderConfigs.receiving} serviceMode />} />
-          <Route path="/comprehensive-service-orders/:comprehensiveServiceOrderId" element={<ComprehensiveServiceOrderViewPage />} />
           <Route path="/receiving-orders" element={<OrderListPage key="receiving" config={orderConfigs.receiving} />} />
           <Route path="/receiving-orders/new" element={<CreateOrderPage key="receiving" config={orderConfigs.receiving} />} />
           <Route path="/receiving-orders/:orderId" element={<OrderViewPage key="receiving" config={orderConfigs.receiving} />} />
@@ -66,7 +61,7 @@ function App() {
           <Route path="/waybills/edit-placement" element={<WaybillPlacementPage />} />
           <Route path="/waybills/generate" element={<WaybillGeneratePage />} />
           <Route path="/waybills/create" element={<WaybillCreatePage />} />
-          <Route path="*" element={<section className="table-card empty-state"><h1>Страница не найдена</h1><p>Проверьте адрес или откройте реестр заявок.</p><Link className="primary-button" to="/comprehensive-service-orders">К комплексным заявкам</Link></section>} />
+          <Route path="*" element={<section className="table-card empty-state"><h1>Страница не найдена</h1><p>Проверьте адрес или откройте реестр заявок.</p><Link className="primary-button" to="/receiving-orders">К заявкам на поставку</Link></section>} />
         </Routes></Suspense>
       </AppLayout></ApplicationClockProvider></NotificationProvider>
     </BrowserRouter>

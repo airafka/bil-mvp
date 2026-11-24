@@ -50,10 +50,9 @@ public class OrderStatusService {
             throw new ApiException(HttpStatus.CONFLICT,"TOS_ORDER_STATUS","Заявка не подтверждена");
         if (doc.status().equals("COMPLETED") && !receiving && doc.mode()==FillingType.NONE_CONTAINER)
             throw new ApiException(HttpStatus.CONFLICT,"TOS_ORDER_COMPLETED","Новая строка для выполненной заявки недопустима");
-        validateSource(resource,order);
         tos.process(event,receiving,doc.mode());
         if (!doc.status().equals("COMPLETED") && stock.allTasksFinished(order,receiving))
-            complete(resource,order,table,"order_status");
+            complete(resource,order,table);
     }
 
     public enum Status { DRAFT, CONFIRMED, COMPLETED }
@@ -62,9 +61,8 @@ public class OrderStatusService {
     @Transactional
     public CreatedOrderResponse change(String resource, UUID id,
             ChangeStatusRequest request) {
-        if (!resource.equals("comprehensive-service-orders") && request.status() == Status.CONFIRMED)
+        if (request.status() == Status.CONFIRMED)
             throw new ApiException(HttpStatus.CONFLICT, "CONFIRM_THROUGH_ROUTE", "Подтвердите заявку через рейс");
-        if(resource.equals("comprehensive-service-orders")) throw new ApiException(HttpStatus.CONFLICT,"SERVICE_STATUS_AUTOMATIC","Статус комплексной заявки меняется автоматически после выполнения связанных заявок");
         lockOrderRoute(resource, id);
         return changeInternal(resource, id, request,null,false);
     }
@@ -73,12 +71,9 @@ public class OrderStatusService {
         String table = switch (resource) {
             case "receiving-orders" -> "receiving_order";
             case "shipping-orders" -> "shipping_order";
-            case "comprehensive-service-orders" -> "comprehensive_service_order";
             default -> throw new ApiException(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Заявка не найдена");
         };
-        String numberColumn = "comprehensive-service-orders".equals(resource) ? "code" : "number";
-        String statusColumn = "comprehensive-service-orders".equals(resource) ? "status" : "order_status";
-        var rows = jdbc.query("select " + numberColumn + " as code, " + statusColumn + " as status from " + table + " where id = ? for update",
+        var rows = jdbc.query("select number as code, order_status as status from " + table + " where id = ? for update",
                 (rs, row) -> new CreatedOrderResponse(id, rs.getInt("code"), rs.getString("status")), id);
         if (rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Заявка не найдена");
         var current = rows.getFirst();
@@ -93,29 +88,6 @@ public class OrderStatusService {
                 || request.expectedStatus() == Status.CONFIRMED && request.status() == Status.COMPLETED;
         if (!allowed) throw new ApiException(HttpStatus.CONFLICT, "INVALID_STATUS_TRANSITION",
                 "Допустимы только переходы: Черновик → Подтверждено → Выполнено");
-        validateSource(resource,id);
-        if ("comprehensive-service-orders".equals(resource) && request.status() == Status.COMPLETED) {
-            Integer unfinishedReceiving = jdbc.queryForObject("select count(*) from receiving_order where comprehensive_service_order_id = ? and order_status <> 'COMPLETED'", Integer.class, id);
-            Integer unfinishedShipping = jdbc.queryForObject("select count(*) from shipping_order where comprehensive_service_order_id = ? and order_status <> 'COMPLETED'", Integer.class, id);
-            if ((unfinishedReceiving != null && unfinishedReceiving > 0) || (unfinishedShipping != null && unfinishedShipping > 0)) {
-                throw new ApiException(HttpStatus.CONFLICT, "SERVICE_CHILD_ORDERS_UNFINISHED",
-                        "Завершите связанные поставки и вывозы перед выполнением комплексной заявки");
-            }
-            Integer remaining = jdbc.queryForObject("""
-                    select count(distinct wc.container_id)
-                    from receiving_order r
-                    join waybill_details w on w.receiving_order_id = r.id
-                    join waybill_railway_carriage rc on rc.waybill_id = w.id
-                    join waybill_container_details wc on wc.waybill_railway_carriage_id = rc.id
-                    where r.comprehensive_service_order_id = ? and not exists (
-                        select 1 from shipping_order_source_container link
-                        where link.comprehensive_service_order_id = r.comprehensive_service_order_id
-                          and link.container_id = wc.container_id
-                    )
-                    """, Integer.class, id);
-            if (remaining != null && remaining > 0) throw new ApiException(HttpStatus.CONFLICT,
-                    "SERVICE_CONTAINERS_UNASSIGNED", "Создайте заявки на вывоз для всех КТК перед выполнением комплексной заявки");
-        }
         if(request.status()==Status.CONFIRMED) {
             stock.reserve(resource,id);
             wagons.confirm(resource.equals("receiving-orders"),id);
@@ -125,38 +97,19 @@ public class OrderStatusService {
                 throw new ApiException(HttpStatus.CONFLICT,"TOS_RESULT_REQUIRED","Для безномерного вывоза нужны фактические номера из пакета TOS");
             if (!stock.finishContainers(resource,id,containerId,null)) return current;
         }
-        if (request.status() == Status.COMPLETED) complete(resource,id,table,statusColumn);
-        else jdbc.update("update " + table + " set " + statusColumn + " = ? where id = ?", request.status().name(), id);
+        if (request.status() == Status.COMPLETED) complete(resource,id,table);
+        else jdbc.update("update " + table + " set order_status = ? where id = ?", request.status().name(), id);
         return new CreatedOrderResponse(id, current.code(), request.status().name());
     }
-    private void validateSource(String resource,UUID id) {
-        if ("receiving-orders".equals(resource)) {
-            var sourceCompleted = jdbc.query("""
-                    select sh.order_status = 'COMPLETED' from receiving_order r
-                    join shipping_order sh on sh.id = r.source_shipping_order_id
-                    where r.id = ? and r.service_role = 'RETURN_RECEIVING'
-                    """, (rs, row) -> rs.getBoolean(1), id);
-            if (!sourceCompleted.isEmpty() && Boolean.FALSE.equals(sourceCompleted.getFirst())) throw new ApiException(HttpStatus.CONFLICT,
-                    "SOURCE_SHIPPING_NOT_COMPLETED", "Сначала выполните исходный вывоз");
-        }
-    }
-
-    private void complete(String resource,UUID id,String table,String statusColumn) {
-        if (!resource.equals("comprehensive-service-orders")) wagons.complete(resource.equals("receiving-orders"),id);
-        jdbc.update("update " + table + " set " + statusColumn + " = ? where id = ?", Status.COMPLETED.name(), id);
-        if (!resource.equals("comprehensive-service-orders")) {
-            jdbc.update("""
+    private void complete(String resource,UUID id,String table) {
+        wagons.complete(resource.equals("receiving-orders"),id);
+        jdbc.update("update " + table + " set order_status = ? where id = ?", Status.COMPLETED.name(), id);
+        jdbc.update("""
                 update route r set status='COMPLETED'
                 where r.id=(select route_id from %s where id=?) and r.status='CONFIRMED'
                   and not exists (select 1 from receiving_order where route_id=r.id and order_status not in ('COMPLETED','CANCELLED'))
                   and not exists (select 1 from shipping_order where route_id=r.id and order_status not in ('COMPLETED','CANCELLED'))
                 """.formatted(table), id);
-        }
-        if (!resource.equals("comprehensive-service-orders")) {
-            jdbc.query("select comprehensive_service_order_id from "+table+" where id=? union select source_service_order_id from comprehensive_service_order where id=(select comprehensive_service_order_id from "+table+" where id=?)",
-                (rs,n)->rs.getObject(1,UUID.class),id,id).stream().filter(java.util.Objects::nonNull)
-                .forEach(parent->ru.billing.app.comprehensiveserviceorder.ServiceCompletion.refresh(jdbc,parent));
-        }
     }
 
     // All lifecycle operations lock the route before its orders, including concurrent completions.
@@ -166,7 +119,6 @@ public class OrderStatusService {
             case "shipping-orders" -> "shipping_order";
             default -> null;
         };
-        if(table != null) jdbc.query("select comprehensive_service_order_id from " + table + " where id=?", (rs,n)->rs.getObject(1,UUID.class),id).stream().filter(java.util.Objects::nonNull).forEach(parent -> ru.billing.app.comprehensiveserviceorder.ServiceOrderLock.lock(jdbc,parent));
         if (table != null) jdbc.query("select r.id from route r join " + table + " o on o.route_id=r.id where o.id=? for update of r", (rs,n)->rs.getObject(1, UUID.class), id);
     }
 

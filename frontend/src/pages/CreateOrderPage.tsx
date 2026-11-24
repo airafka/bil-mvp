@@ -1,7 +1,6 @@
 import { containerTypeOptions, fillingTypeOptions, type FillingType } from '../domain'
 import { CreationSteps } from '../components/CreationSteps'
-import { businessDateLabel, useApplicationClock, useBusinessDateTime } from '../applicationClock'
-import { catalogDate } from '../transportCatalogs'
+import { useBusinessDateTime } from '../applicationClock'
 import { WaybillFilterFields } from '../components/WaybillFilterFields'
 import { validateWaybillSelection } from '../waybillSelection'
 import { Notification } from '../components/Notification'
@@ -15,7 +14,7 @@ import { UiInput, UiSelect } from '../components/FormControls'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { StockOwnerSelect } from '../components/StockOwnerSelect'
-import { createOrder, createComprehensiveServiceOrder, getContracts, getRoutes, getReferenceOptions, getTerminalAreas, getTransportTypes } from '../api'
+import { createOrder, getContracts, getRoutes, getReferenceOptions, getTerminalAreas, getTransportTypes } from '../api'
 import { WaybillSelectionTable } from '../components/WaybillSelectionTable'
 import type {
   GroupedWaybillFilter,
@@ -45,20 +44,18 @@ const vehicleSteps = ['Основное', 'КТК', 'Груз']
 const receivingRailwaySteps = ['Основное', 'Накладные ЭТРАН', 'Вагоны', 'КТК', 'Груз']
 const shippingRailwaySteps = ['Основное', 'Вагоны', 'КТК', 'Груз']
 
-export function CreateOrderPage({ config, serviceMode = false }: { config: OrderConfig; serviceMode?: boolean }) {
-  const { clock } = useApplicationClock()
-  const creationDate = businessDateLabel(clock.date)
+export function CreateOrderPage({ config }: { config: OrderConfig }) {
   const [containerOwners, setContainerOwners] = useState<Record<string, string>>({})
   const [waybillFilter, setWaybillFilter] = useState<GroupedWaybillFilter>({})
   const [ownerActionTarget, setOwnerActionTarget] = useState<HTMLDivElement | null>(null)
   const [step, setStep] = useState(1)
-  const [formDraft, setForm] = useState<OrderFormState>(() => ({ ...initialOrderFormState, transportType: serviceMode ? 'RAILWAY' as const : '' as const }))
+  const [formDraft, setForm] = useState<OrderFormState>(() => ({ ...initialOrderFormState }))
   const [plannedAt, setPlannedAt] = useBusinessDateTime()
   const form = { ...formDraft, [config.kind === 'receiving' ? 'arrivalAt' : 'departureAt']: plannedAt }
   const [routes, setRoutes] = useState<RouteSummary[]>([])
   const [routeLoadError, setRouteLoadError] = useState('')
   const [routesLoading,setRoutesLoading]=useState(true)
-  const [contracts, setContracts] = useState<import('../comprehensiveServiceOrder').ContractOption[]>([])
+  const [contracts, setContracts] = useState<import('../domain').ContractOption[]>([])
   const [clients, setClients] = useState<ReferenceOption[]>([])
   const [containers, setContainers] = useState<ReferenceOption[]>([])
   const [cargoOptions, setCargoOptions] = useState<ReferenceOption[]>([])
@@ -111,9 +108,8 @@ const navigate = useNavigate()
   }, [])
 
   useEffect(() => {
-    if (serviceMode) return
     getRoutes().then(setRoutes).catch(() => setRouteLoadError('Не удалось загрузить рейсы')).finally(()=>setRoutesLoading(false))
-  }, [serviceMode])
+  }, [])
 
   const loadedContainers = form.containers.filter(container => !container.empty)
   const loadedRailwayContainers = form.railwayCarriages.flatMap((carriage, carriageIndex) =>
@@ -131,9 +127,9 @@ const navigate = useNavigate()
     : isRailwayShipping
       ? shippingRailwaySteps
       : isUnnumberedVehicleShipping ? vehicleSteps.slice(0,2) : vehicleSteps
-  const visibleSteps = serviceMode ? steps : [steps[0], 'Рейс', ...steps.slice(1)]
+  const visibleSteps = [steps[0], 'Рейс', ...steps.slice(1)]
   const lastStep = visibleSteps.length
-  const contentStep = serviceMode ? step : step === 2 ? 0 : step > 2 ? step - 1 : step
+  const contentStep = step === 2 ? 0 : step > 2 ? step - 1 : step
   const availableTransportTypes = transportTypes
   const generalErrors = errors
 
@@ -145,7 +141,7 @@ const navigate = useNavigate()
     || !form.contractId
     || !form.terminalAreaId
     || !form.transportType
-    || ((config.kind === 'receiving' || serviceMode) && !form.defaultContainerOwnerId)
+    || (config.kind === 'receiving' && !form.defaultContainerOwnerId)
 
   const goNext = () => {
     const validationErrors = [
@@ -193,7 +189,7 @@ const navigate = useNavigate()
   const submit = async () => {
     if (submitLock.current) return
     const validationErrors = [
-      ...validateStep(form, serviceMode ? lastStep : lastStep - 1, config.kind),
+      ...validateStep(form, lastStep - 1, config.kind),
     ]
     setErrors(validationErrors)
     if (validationErrors.length > 0) return
@@ -202,11 +198,6 @@ const navigate = useNavigate()
     setSubmitting(true)
     setRequestError('')
     try {
-      if (serviceMode) {
-        const created = await createComprehensiveServiceOrder({ clientId: form.clientId, contractId: form.contractId, waybillIds: form.waybills.map(item => item.id), defaultContainerOwnerId: form.defaultContainerOwnerId || '', defaultRailwayCarriageOwnerId: form.defaultRailwayCarriageOwnerId || form.clientId, containerOwners: receivingWaybillRows(form.waybills, form.defaultContainerOwnerId, clients, containerOwners).filter(row => containerOwners[row.containerId]).map(row => ({ containerId: row.containerId, ownerClientId: containerOwners[row.containerId] })) })
-        navigate('/comprehensive-service-orders/' + created.order.id)
-        return
-      }
       const created = await createOrder(config.apiPath, { ...buildPayload(form, config.kind), ...(isRailwayReceiving ? {
         containerOwners: receivingWaybillRows(form.waybills, form.defaultContainerOwnerId, clients, containerOwners).filter(row => containerOwners[row.containerId]).map(row => ({ containerId: row.containerId, ownerClientId: containerOwners[row.containerId] }))
       } : {}) })
@@ -291,12 +282,12 @@ const changeFillingType = (fillingType: FillingType) => {
   }
 
   return (
-    <section className={`form-page${serviceMode ? ' service-table-page' : ''}`}>
+    <section className="form-page">
       <div className="page-header form-page-header">
-        <h1>{serviceMode ? 'Новая комплексная заявка' : config.createTitle}</h1>
+        <h1>{config.createTitle}</h1>
         <div className="header-actions">
           {step > 1 && (<button className="secondary-button" onClick={goBack} disabled={submitting}>← Назад</button>)}
-          <Link className="close-button" to={serviceMode ? '/comprehensive-service-orders' : config.listPath} aria-label="Закрыть форму" title="Закрыть">×</Link>
+          <Link className="close-button" to={config.listPath} aria-label="Закрыть форму" title="Закрыть">×</Link>
           {step < lastStep ? (
             <button
               className="primary-button"
@@ -330,13 +321,12 @@ const changeFillingType = (fillingType: FillingType) => {
 {step === 1 && (
           <div className="form-section ui-form-section">
             <div className="form-section-heading"><h2>Основная информация</h2></div>
-            <div className={`form-fields-grid${serviceMode ? ' service-order-main-grid' : ''}`}>
+            <div className="form-fields-grid">
               <div className="form-fields-column">
                 <label className="field horizontal-field"><span>Номер заявки:</span><UiInput value="" placeholder="Присваивается автоматически" disabled /></label>
-                {serviceMode && <div className="field horizontal-field"><span>Дата создания:</span><div className="ui-readonly-value">{creationDate}</div></div>}
                 <label className="field horizontal-field">
                   <span>Клиент:<b>*</b></span><span className="field-control">
-                    <UiSelect required value={form.clientId} onChange={event => setForm(current => ({ ...current, clientId: event.target.value, contractId: '', ...(serviceMode ? { defaultContainerOwnerId: event.target.value } : {}) }))} disabled={loadingReferences}>
+                    <UiSelect required value={form.clientId} onChange={event => setForm(current => ({ ...current, clientId: event.target.value, contractId: '' }))} disabled={loadingReferences}>
                       <option value="" hidden disabled />{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
                     </UiSelect>
                     {!loadingReferences && clients.length === 0 && <small>В справочнике пока нет клиентов.</small>}
@@ -350,26 +340,20 @@ const changeFillingType = (fillingType: FillingType) => {
                     {form.clientId && !loadingReferences && !contracts.some(item => item.clientId === form.clientId) && <small>У клиента нет договоров.</small>}
                   </span>
                 </label>
-                {serviceMode && <label className="field horizontal-field"><span>Собственник КТК:<b>*</b></span><UiSelect aria-label="Собственник КТК" required value={form.defaultContainerOwnerId || ''} disabled={loadingReferences || !form.clientId} onChange={event => setForm(current => ({ ...current, defaultContainerOwnerId: event.target.value }))}><option value="" hidden disabled />{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</UiSelect></label>}
               </div>
               <div className="form-fields-column">
-                {!serviceMode && <div className="field horizontal-field"><span>Статус:</span><div className="ui-readonly-value"><StatusBadge status="DRAFT" /></div></div>}
+                <div className="field horizontal-field"><span>Статус:</span><div className="ui-readonly-value"><StatusBadge status="DRAFT" /></div></div>
                 {<div className="field horizontal-field"><span>Вид договора:</span><div className="ui-readonly-value">{selectedContract?.contractType || 'Выберите договор'}</div></div>}
-                {serviceMode && <>
-                  <div className="field horizontal-field"><span>Действует с:</span><div className="ui-readonly-value">{selectedContract ? catalogDate(selectedContract.validFrom) : 'Выберите договор'}</div></div>
-                  <div className="field horizontal-field"><span>Статус:</span><div className="ui-readonly-value"><StatusBadge status="DRAFT" /></div></div>
-                </>}
 
               </div>
             </div>
             {isRailwayReceiving && <label className="field horizontal-field"><span>Собственник вагонов по умолчанию</span><UiSelect value={form.defaultRailwayCarriageOwnerId || form.clientId} onChange={e => setForm(state => ({ ...state, defaultRailwayCarriageOwnerId: e.target.value }))}><option value="">Выберите собственника</option>{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</UiSelect></label>}
-            {isRailwayReceiving && <WaybillFilterFields title={serviceMode ? 'Накладные ЭТРАН' : undefined} value={waybillFilter} disabled={submitting} onChange={value => {
+            {isRailwayReceiving && <WaybillFilterFields value={waybillFilter} disabled={submitting} onChange={value => {
               setWaybillFilter(value)
               setForm(state => ({ ...state, waybills: [] }))
               setContainerOwners({})
               setErrors([])
             }} />}
-            {!serviceMode && <>
               <div className="form-section-heading ui-section-divider"><h2>Параметры заявки</h2></div>
               <div className="form-fields-grid">
                 <div className="form-fields-column">
@@ -396,11 +380,10 @@ const changeFillingType = (fillingType: FillingType) => {
                 <div className="form-section-heading ui-section-divider"><h2>Дополнительная информация</h2></div>
                 <label className="field horizontal-field"><span>Комментарий:</span><textarea className="receiving-comment-input" maxLength={4000} rows={3} value={form.comment} onChange={event => setForm(state => ({ ...state, comment: event.target.value }))} /></label>
               </>}
-            </>}
           </div>
         )}
 
-        {!serviceMode && step === 2 && <div className="form-section"><RoutePicker routes={routes} routeType={config.kind.toUpperCase() as RouteType} transportType={form.transportType as TransportType} terminalAreaId={form.terminalAreaId}
+        {step === 2 && <div className="form-section"><RoutePicker routes={routes} routeType={config.kind.toUpperCase() as RouteType} transportType={form.transportType as TransportType} terminalAreaId={form.terminalAreaId}
           selectedId={form.routeId} onSelect={id=>setForm(state=>({...state,routeId:id}))} loading={routesLoading} error={routeLoadError}
           onCreated={route=>setRoutes(current=>[route,...current])}
           /></div>}
@@ -467,7 +450,7 @@ const changeFillingType = (fillingType: FillingType) => {
         {contentStep === 2 && isRailwayReceiving && <WaybillSelectionTable filter={waybillFilter} selected={form.waybills} disabled={submitting}
           onChange={waybills => { setForm(state => ({ ...state, waybills })); const ids = new Set(receivingWaybillRows(waybills, form.defaultContainerOwnerId, clients).map(row => row.containerId)); setContainerOwners(current => Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id)))); setErrors([]) }} />}
 
-        {isRailwayReceiving && contentStep === 4 && <div className="form-section"><OrderContainerTable bulkOwnerActionTarget={ownerActionTarget} showPhysicalAttributes attributesReadOnly ownerOptions={clients} bulkOwnerDisabled={submitting} onBulkOwnerChange={(ids, owner) => setContainerOwners(current => ({ ...current, ...Object.fromEntries(ids.map(id => [id, owner.id])) }))} columnWidths={serviceMode ? [44,145,125,90,90,120,210,100,130,70,145,85] : undefined} onChange={!submitting ? (id, change) => { if (change.ownerClientId) setContainerOwners(current => ({ ...current, [id]: change.ownerClientId! })) } : undefined} rows={receivingWaybillRows(form.waybills,form.defaultContainerOwnerId,clients,containerOwners)} groups={form.waybills.map(bill => ({ key:bill.id,label:"Накладная № "+bill.number,rows:[],children:(bill.railwayCarriages ?? []).map(wagon => ({ key:bill.id+"-"+wagon.id,label:"Вагон № "+wagon.number,rows:receivingWaybillRows([{...bill,railwayCarriages:[wagon]}],form.defaultContainerOwnerId,clients,containerOwners) })) }))} /></div>}
+        {isRailwayReceiving && contentStep === 4 && <div className="form-section"><OrderContainerTable bulkOwnerActionTarget={ownerActionTarget} showPhysicalAttributes attributesReadOnly ownerOptions={clients} bulkOwnerDisabled={submitting} onBulkOwnerChange={(ids, owner) => setContainerOwners(current => ({ ...current, ...Object.fromEntries(ids.map(id => [id, owner.id])) }))} onChange={!submitting ? (id, change) => { if (change.ownerClientId) setContainerOwners(current => ({ ...current, [id]: change.ownerClientId! })) } : undefined} rows={receivingWaybillRows(form.waybills,form.defaultContainerOwnerId,clients,containerOwners)} groups={form.waybills.map(bill => ({ key:bill.id,label:"Накладная № "+bill.number,rows:[],children:(bill.railwayCarriages ?? []).map(wagon => ({ key:bill.id+"-"+wagon.id,label:"Вагон № "+wagon.number,rows:receivingWaybillRows([{...bill,railwayCarriages:[wagon]}],form.defaultContainerOwnerId,clients,containerOwners) })) }))} /></div>}
         {isRailwayReceiving && (contentStep === 3 || contentStep === 5) && (
           <WaybillCompositionTable key={contentStep} waybills={form.waybills} tab={contentStep === 3 ? 'wagons' : 'cargo'} wagonAttributes />
         )}

@@ -76,15 +76,13 @@ public class ShippingOrderStore {
                 """
                 select o.id, o.number as code, o.client_id, c.name as client_name,
                        o.planned_shipping_date_time as planned_at,
-                       r.number as route_number, cs.code as service_number, o.comment,
+                       r.number as route_number, o.comment,
                        a.id as area_id, a.code as area_code, a.name as area_name,
-                       o.transport_type, o.filling_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.comprehensive_service_order_id, o.route_id,
-                       o.source_receiving_order_id as source_receiving_order_id
+                       o.transport_type, o.filling_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.route_id
                 from shipping_order o
                 join client c on c.id = o.client_id
                 left join contract ct on ct.id = o.contract_id
                 left join route r on r.id = o.route_id
-                left join comprehensive_service_order cs on cs.id = o.comprehensive_service_order_id
                 join terminal_area_catalog a on a.id = o.terminal_area_catalog_id
                  where (? = '' or position(lower(?) in lower(concat_ws(' ', o.number::text, c.name, ct.name))) > 0) and (? = '' or o.order_status = ?)
                 order by o.number desc
@@ -102,8 +100,8 @@ public class ShippingOrderStore {
                 """
                 select o.id, o.number as code, o.client_id, c.name as client_name,
                        a.id as area_id, a.code as area_code, a.name as area_name,
-                       o.transport_type, o.filling_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.comprehensive_service_order_id, o.route_id,
-                       o.source_receiving_order_id as source_receiving_order_id, o.planned_shipping_date_time as departure_at, (select name from client_related_entity where id=o.consignee_id) as consignee,
+                       o.transport_type, o.filling_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.route_id,
+                       o.planned_shipping_date_time as departure_at, (select name from client_related_entity where id=o.consignee_id) as consignee,
                        o.authorized_representative, o.phone, o.email, o.comment, ct.contract_type, o.created_at, o.transport_waybill_number
                 from shipping_order o
                 join client c on c.id = o.client_id
@@ -122,8 +120,6 @@ public class ShippingOrderStore {
                         resultSet.getString("status"),
                         resultSet.getObject("contract_id", UUID.class),
                         resultSet.getString("contract_name"),
-                        resultSet.getObject("comprehensive_service_order_id", UUID.class),
-                        resultSet.getObject("source_receiving_order_id", UUID.class),
                         resultSet.getObject("route_id", UUID.class),
                         resultSet.getObject("departure_at", LocalDateTime.class),
                         resultSet.getString("consignee"), resultSet.getString("authorized_representative"), resultSet.getString("phone"), resultSet.getString("email"), resultSet.getString("comment"), resultSet.getString("contract_type"), resultSet.getObject("created_at", java.time.OffsetDateTime.class), resultSet.getString("transport_waybill_number")
@@ -139,13 +135,12 @@ public class ShippingOrderStore {
         List<ShippingOrderRailwayCarriageDetails> railwayCarriages = header.transportType()==TransportType.RAILWAY ? loadRailwayCarriages(id) : List.of();
         List<ContainerQuantityDetails> containerQuantities=loadContainerQuantities(id);
 
-        List<ReturnReceivingOrder> returns = ReturnReceivingOrder.find(jdbcTemplate, "r.source_shipping_order_id=?", id);
         return new OrderDetails(
                 header.id(), header.code(), header.clientId(), header.clientName(),
                 header.terminalArea(), header.transportType(),
                 header.fillingType(), header.status(),
                 containers, List.of(), railwayCarriages, containerQuantities,
-                header.contractId(), header.contractName(), header.comprehensiveServiceOrderId(), header.sourceReceivingOrderId(), header.routeId(), null, returns,
+                header.contractId(), header.contractName(), header.routeId(),
                 null, null, header.departureAt(), header.consignee(), null, null, header.authorizedRepresentative(), header.phone(), header.email(), header.comment(), header.contractType(), header.createdAt(), header.transportWaybillNumber()
         );
     }
@@ -335,8 +330,6 @@ public class ShippingOrderStore {
             String status,
             UUID contractId,
             String contractName,
-            UUID comprehensiveServiceOrderId,
-            UUID sourceReceivingOrderId,
             UUID routeId,
             LocalDateTime departureAt,
             String consignee, String authorizedRepresentative, String phone, String email, String comment, String contractType, java.time.OffsetDateTime createdAt, String transportWaybillNumber

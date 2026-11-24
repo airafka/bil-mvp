@@ -30,9 +30,8 @@ public class OrderContainerAdditionService {
         if(locked.isEmpty()) throw error(HttpStatus.NOT_FOUND,"ORDER_NOT_FOUND","Заявка не найдена");
         OrderDetails order=incoming?receiving.findById(id):shipping.findById(id);
         if(!"DRAFT".equals(order.status())) throw error(HttpStatus.CONFLICT,"CONTAINER_ATTRIBUTES_NOT_EDITABLE","Добавлять КТК можно только в черновике");
-        if(order.comprehensiveServiceOrderId()!=null || order.sourceReceivingOrderId()!=null || order.sourceShippingOrderId()!=null
-                || incoming && order.transportType()!=TransportType.VEHICLE)
-            throw error(HttpStatus.CONFLICT,"CONTAINER_COMPOSITION_FROM_SOURCE","Состав КТК этой заявки изменяется через исходную поставку или накладные");
+        if(incoming && order.transportType()!=TransportType.VEHICLE)
+            throw error(HttpStatus.CONFLICT,"CONTAINER_COMPOSITION_FROM_SOURCE","Состав КТК железнодорожной поставки задаётся накладными");
 
         if (!incoming && order.fillingType()!=FillingType.ALL) throw error(HttpStatus.CONFLICT,"UNNUMBERED_COMPOSITION","Фактические номера поступают из TOS");
         boolean railway=order.transportType()==TransportType.RAILWAY;

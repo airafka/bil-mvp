@@ -66,9 +66,9 @@ export function OrderListPage({ config }: { config: OrderConfig }) {
 
       <TableReveal loading={loading}>
         <div className="table-wrap">
-          <table className="transport-order-registry" data-responsive-min-width={1180}>
+          <table className="transport-order-registry" data-responsive-min-width={1100}>
             <colgroup>
-              {[44, 105, 200, 165, 205, 120, 80, 80, 130, 120, 44].map((width, index) => <col key={index} style={{ width }} />)}
+              {[44, 105, 200, 165, 205, 120, 80, 130, 120, 44].map((width, index) => <col key={index} style={{ width }} />)}
             </colgroup>
             <thead>
               <tr>
@@ -79,18 +79,17 @@ export function OrderListPage({ config }: { config: OrderConfig }) {
                 <th>Площадка</th>
                 <th>Вид транспорта</th>
                 <th>Рейс</th>
-                <th>Комплексная заявка</th>
                 <th>Комментарий</th>
                 <th>Статус</th><th className="registry-actions" scope="col" aria-label="Действия" />
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={11} className="table-message">Загружаем заявки…</td></tr>
+                <tr><td colSpan={10} className="table-message">Загружаем заявки…</td></tr>
               )}
               {!loading && !error && data?.items.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="empty-state">
+                  <td colSpan={10} className="empty-state">
                     <span className="empty-icon">◇</span>
                     <strong>Заявок пока нет</strong>
                     <p>Создайте первую заявку с помощью кнопки «Создать».</p>
@@ -110,7 +109,6 @@ export function OrderListPage({ config }: { config: OrderConfig }) {
                   <td>{order.terminalArea?.name ?? '—'}</td>
                   <td>{transportTypeLabel(order.transportType)}</td>
                   <td>{order.routeId && order.routeNumber != null ? <Link to={'/routes/' + order.routeId}>{order.routeNumber}</Link> : '—'}</td>
-                  <td>{order.comprehensiveServiceOrderId && order.comprehensiveServiceOrderNumber != null ? <Link to={'/comprehensive-service-orders/' + order.comprehensiveServiceOrderId}>{order.comprehensiveServiceOrderNumber}</Link> : '—'}</td>
                   <td className="transport-order-comment" title={order.comment || undefined}>{order.comment || '—'}</td>
                   <td><StatusBadge status={order.status} /></td><td className="registry-actions"><RowActions label={'Действия с заявкой ' + order.code} actions={[{ label: 'Открыть', to: config.listPath + '/' + order.id }]} /></td>
                 </RecordRow>

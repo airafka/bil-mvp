@@ -122,15 +122,13 @@ public class ReceivingOrderStore {
                 """
                 select o.id, o.number as code, o.client_id, c.name as client_name,
                        o.plan_receiving_date_time as planned_at,
-                       r.number as route_number, cs.code as service_number, o.comment,
+                       r.number as route_number, o.comment,
                        a.id as area_id, a.code as area_code, a.name as area_name,
-                       o.transport_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.comprehensive_service_order_id, o.route_id,
-                       null::uuid as source_receiving_order_id
+                       o.transport_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.route_id
                 from receiving_order o
                 join client c on c.id = o.client_id
                 left join contract ct on ct.id = o.contract_id
                 left join route r on r.id = o.route_id
-                left join comprehensive_service_order cs on cs.id = o.comprehensive_service_order_id
                 join terminal_area_catalog a on a.id = o.terminal_area_catalog_id
                  where (? = '' or position(lower(?) in lower(concat_ws(' ', o.number::text, c.name, ct.name))) > 0) and (? = '' or o.order_status = ?)
                 order by o.number desc
@@ -148,8 +146,8 @@ public class ReceivingOrderStore {
                 """
                 select o.id, o.number as code, o.client_id, c.name as client_name,
                        a.id as area_id, a.code as area_code, a.name as area_name,
-                       o.transport_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.comprehensive_service_order_id, o.route_id,
-                       o.source_shipping_order_id, o.plan_receiving_date_time as arrival_at, o.consignor, o.default_container_owner_id, default_owner.name as default_container_owner_name,
+                       o.transport_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.route_id,
+                       o.plan_receiving_date_time as arrival_at, o.consignor, o.default_container_owner_id, default_owner.name as default_container_owner_name,
                        o.authorized_representative, o.phone, o.email, o.comment, ct.contract_type, o.created_at, o.transport_waybill_number
                 from receiving_order o
                 join client c on c.id = o.client_id
@@ -168,9 +166,7 @@ public class ReceivingOrderStore {
                         resultSet.getString("status"),
                         resultSet.getObject("contract_id", UUID.class),
                         resultSet.getString("contract_name"),
-                        resultSet.getObject("comprehensive_service_order_id", UUID.class),
                         resultSet.getObject("route_id", UUID.class),
-                        resultSet.getObject("source_shipping_order_id", UUID.class),
                         resultSet.getObject("arrival_at", LocalDateTime.class),
                         resultSet.getString("consignor"), resultSet.getObject("default_container_owner_id", UUID.class), resultSet.getString("default_container_owner_name"),
                         resultSet.getString("authorized_representative"), resultSet.getString("phone"), resultSet.getString("email"), resultSet.getString("comment"), resultSet.getString("contract_type"), resultSet.getObject("created_at", java.time.OffsetDateTime.class), resultSet.getString("transport_waybill_number")
@@ -209,8 +205,7 @@ public class ReceivingOrderStore {
                 header.terminalArea(), header.transportType(),
                 FillingType.ALL, header.status(),
                 OrderContainerDetails.merge(containers), waybills, List.of(), List.of(),
-                header.contractId(), header.contractName(), header.comprehensiveServiceOrderId(), null, header.routeId(),
-                header.sourceShippingOrderId(), List.of(),
+                header.contractId(), header.contractName(), header.routeId(),
                 header.arrivalAt(), header.consignor(), null, null, header.defaultContainerOwnerId(), header.defaultContainerOwnerName(),
                 header.authorizedRepresentative(), header.phone(), header.email(), header.comment(), header.contractType(), header.createdAt(), header.transportWaybillNumber()
         );
@@ -447,9 +442,7 @@ public class ReceivingOrderStore {
             String status,
             UUID contractId,
             String contractName,
-            UUID comprehensiveServiceOrderId,
             UUID routeId,
-            UUID sourceShippingOrderId,
             LocalDateTime arrivalAt,
             String consignor, UUID defaultContainerOwnerId, String defaultContainerOwnerName,
             String authorizedRepresentative, String phone, String email, String comment, String contractType, java.time.OffsetDateTime createdAt, String transportWaybillNumber

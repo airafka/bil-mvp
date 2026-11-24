@@ -20,13 +20,12 @@ import ru.billing.app.error.ApiException;
 @Service
 public class OperationalResetService {
     static final List<String> CLEARED = List.of(
-        "comprehensive_service_order",
         "container_owner", "container_owner_history", "container_period", "container_visit",
         "railway_carriage_owner_history", "inbound_event", "shipping_order_container_qty",
         "receiving_order", "receiving_order_container",
         "receiving_order_container_item", "route", "service_order", "service_order_container",
         "shipping_order", "shipping_order_container", "shipping_order_container_item", "shipping_order_railway_carriage",
-        "shipping_order_source_container", "waybill", "waybill_container", "waybill_container_relocation",
+        "waybill", "waybill_container", "waybill_container_relocation",
         "waybill_product", "waybill_railway_carriage", "waybill_zpu");
     static final List<String> PRESERVED = List.of(
         "application_clock", "client", "client_driver", "client_related_entity", "client_vehicle", "inbound_event_config",

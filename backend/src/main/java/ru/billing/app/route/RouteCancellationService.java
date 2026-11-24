@@ -14,24 +14,16 @@ public class RouteCancellationService {
     private final JdbcTemplate jdbc;
     private final OrderCancellationService orders;
     public RouteCancellationService(JdbcTemplate jdbc,OrderCancellationService orders){this.jdbc=jdbc;this.orders=orders;}
-    private record Member(UUID id,String resource,String status,UUID parent) {}
+    private record Member(UUID id,String resource,String status) {}
     private List<Member> members(UUID id) {
         return jdbc.query("""
-            select id,'receiving-orders',order_status,comprehensive_service_order_id from receiving_order where route_id=?
-            union all select id,'shipping-orders',order_status,comprehensive_service_order_id from shipping_order where route_id=? order by id
-            """,(rs,n)->new Member(rs.getObject(1,UUID.class),rs.getString(2),rs.getString(3),rs.getObject(4,UUID.class)),id,id);
+            select id,'receiving-orders',order_status from receiving_order where route_id=?
+            union all select id,'shipping-orders',order_status from shipping_order where route_id=? order by id
+            """,(rs,n)->new Member(rs.getObject(1,UUID.class),rs.getString(2),rs.getString(3)),id,id);
     }
     @Transactional
     public CreatedOrderResponse cancel(UUID id,OrderCancellationService.Request request) {
         var initial=members(id);
-        Set<UUID> parents=new HashSet<>();initial.stream().map(Member::parent).filter(Objects::nonNull).forEach(parents::add);
-        // Same global order as transport lifecycle: original services, child services, route, orders, KTK.
-        if(!parents.isEmpty()) {
-            String params=String.join(",",Collections.nCopies(parents.size(),"?"));
-            List<Object> args=new ArrayList<>(parents);args.addAll(parents);
-            jdbc.query("select id from comprehensive_service_order where id in ("+params+") or id in (select source_service_order_id from comprehensive_service_order where id in ("+params+")) order by source_service_order_id nulls first,id for update",
-                (rs,n)->rs.getObject(1,UUID.class),args.toArray());
-        }
         var routes=jdbc.query("select number,status from route where id=? for update",(rs,n)->new CreatedOrderResponse(id,rs.getInt(1),rs.getString(2)),id);
         if(routes.isEmpty())throw new ApiException(HttpStatus.NOT_FOUND,"ROUTE_NOT_FOUND","Рейс не найден");
         var route=routes.getFirst();if(route.status().equals("CANCELLED"))return route;

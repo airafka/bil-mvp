@@ -12,7 +12,7 @@ public class OrderStatusController {
     public CreatedOrderResponse event(@PathVariable String resource,@PathVariable UUID id,@Valid @RequestBody ManualEvent request) {
         return service.finish(resource,id,request.eventCode(),request.containerId());
     }
-    @PatchMapping("/api/{resource:receiving-orders|shipping-orders|comprehensive-service-orders}/{id}/status")
+    @PatchMapping("/api/{resource:receiving-orders|shipping-orders}/{id}/status")
     public CreatedOrderResponse change(@PathVariable String resource, @PathVariable UUID id,
             @Valid @RequestBody OrderStatusService.ChangeStatusRequest request) {
         return service.change(resource, id, request);

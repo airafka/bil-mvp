@@ -1,6 +1,6 @@
 # MVP контейнерной площадки ЛКДС
 
-Приложение оформляет поставки, вывозы и возвраты КТК, ведёт накладные и историю собственников и считает дни хранения. Разработка и публикация идут в ветке **main** на GitHub. [airafka/bil-mvp](https://github.com/airafka/bil-mvp)
+Приложение оформляет поставки и вывозы КТК, ведёт накладные и историю собственников и считает дни хранения. Разработка и публикация идут в ветке **main** на GitHub. [airafka/bil-mvp](https://github.com/airafka/bil-mvp)
 
 MVP принимает результаты TOS по каждому КТК. При подтверждении безномерного автовывоза проверяется остаток КТК у выбранного собственника. Для ЖД-вывоза указываются номера вагонов и размещённых на них КТК. [Формат пакета и виды заявок](BACKEND_ALIGNMENT.md#входящие-результаты-tos)
 
@@ -17,7 +17,7 @@ MVP принимает результаты TOS по каждому КТК. Пр
 | Документ | Назначение |
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Правила разработки, проверки, автоматические commit/push между компьютерами |
-| [BACKEND_ALIGNMENT.md](BACKEND_ALIGNMENT.md) | Заявки, возвраты, складские события и карта backend |
+| [BACKEND_ALIGNMENT.md](BACKEND_ALIGNMENT.md) | Заявки, складские события и карта backend |
 | [CONTAINER_STOCK.md](CONTAINER_STOCK.md) | Собственники КТК, остатки, складские события и смена собственника |
 | [FRONTEND_STANDARD.md](FRONTEND_STANDARD.md) | Компоненты, формы, таблицы и поведение интерфейса |
 | [database/README.md](database/README.md) | Установка, запуск, обновление, резервные копии и перенос БД |
@@ -58,13 +58,12 @@ MVP принимает результаты TOS по каждому КТК. Пр
 
 ## Разделы приложения
 
-Комплексная заявка объединяет ЖД-поставку по накладным, автовывозы и возвраты. Документы сохраняют собственные номера и ссылки друг на друга.
+В разделе «Заявки» есть поставка и вывоз. Каждый документ имеет свой номер и состав. Складской учёт и дни хранения определяются по операциям с каждым КТК.
 
 | Раздел | Путь UI |
 | --- | --- |
 | Поставка / вывоз, отмена заявок | /receiving-orders, /shipping-orders |
-| Комплексные заявки | /comprehensive-service-orders |
-| Заявки на смену собственника | /service-orders |
+| Остатки → Смена собственника | /service-orders |
 | Рейсы | /routes |
 | Регистр и история КТК | /container-owners |
 | Хранение КТК: периоды, собственники, выгрузка | /container-storage |
@@ -73,7 +72,6 @@ MVP принимает результаты TOS по каждому КТК. Пр
 | Перевозчики / водители / ТС | /transport-carriers, /transport-drivers, /transport-vehicles |
 | Образцы UI | /ui-kit |
 
-Для отдельных КТК можно отметить «Возврат не нужен» в карточке комплексной заявки. Остальные КТК доступны для оформления возврата.
 
 ## Редактирование накладных
 
@@ -83,7 +81,7 @@ MVP принимает результаты TOS по каждому КТК. Пр
 
 - Frontend: React, TypeScript, React Router, Vite; зависимости фиксирует [package-lock.json](frontend/package-lock.json).
 - Backend: Java 21, Spring Boot 4.1.0, Spring JDBC, Bean Validation.
-- БД: PostgreSQL 16, Flyway. Активные миграции V1–V73 находятся в [db/baseline](backend/src/main/resources/db/baseline).
+- БД: PostgreSQL 16, Flyway. Активные миграции V1–V74 находятся в [db/baseline](backend/src/main/resources/db/baseline).
 - Сборка и запуск: Docker Compose; frontend раздаёт Nginx.
 
 [Backend Dockerfile](backend/Dockerfile) выполняет Maven package с тестами; [frontend Dockerfile](frontend/Dockerfile) — ESLint, Vitest и TypeScript/Vite build. Локально: mvn test из backend; npm ci, npm run lint, npm run test, npm run build из frontend. Для frontend dev доступен npm run dev.

@@ -12,7 +12,6 @@ const modules: Record<string, () => Promise<unknown>> = {
   '/receiving-orders': () => import('./pages/OrderListPage'),
   '/shipping-orders': () => import('./pages/OrderListPage'),
   '/service-orders': () => import('./pages/OwnershipOrderPages'),
-  '/comprehensive-service-orders': () => import('./pages/ComprehensiveServiceOrderRegistryPage'),
 }
 const pending = new Map<string, Promise<unknown>>()
 export function preloadNavigation(path: string) {
