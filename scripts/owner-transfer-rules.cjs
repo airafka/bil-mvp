@@ -33,13 +33,13 @@ async function main() {
     assert.equal(draft.sourceClientId, x.a);
     assert.equal(await available(x.a, day), false, 'Another draft holds this container');
     const edit = {id:draft.id, service:'CHANGE_OWNER', clientId:x.b, effectiveDate:next, comment:'revised', containerOwnerIds:[aId]};
-    await api(endpoint, 'PUT', {...edit, containerOwnerIds:[bId]}, 409);
+    assert.equal((await api(endpoint, 'PUT', {...edit, containerOwnerIds:[bId]}, 400)).code, 'OWNERSHIP_DATE_UNAVAILABLE');
     assert.equal((await api(endpoint)).order.effectiveDate, day, 'Failed edit rolls back header');
     const changed = await api(endpoint, 'PUT', edit);
     assert.equal(changed.order.clientId, x.b);
     assert.equal(changed.order.sourceClientId, x.a);
     const shipping = await x.ship(a.ktk, false);
-    await api(endpoint + '/accept', 'POST', undefined, 409);
+    assert.equal((await api(endpoint + '/accept', 'POST', undefined, 400)).code, 'OWNERSHIP_DATE_UNAVAILABLE');
     assert.equal((await api(endpoint)).order.status, 'DRAFT');
     await x.cancel('shipping', shipping);
     await api(endpoint + '/accept', 'POST');
@@ -54,6 +54,8 @@ async function main() {
     await api('/service-orders/'+revoked+'/withdraw','POST');
     const early = await x.arrival();
     const shipped = await x.transfer(early.ktk,x.b,'2026-09-18');
+    await assert.rejects(x.ship(early.ktk), error => error.message.includes('OWNERSHIP_TRANSFER_PLANNED'));
+    await api('/service-orders/'+shipped+'/withdraw','POST');
     await x.ship(early.ktk);
     assert.equal(events(second), 0);
     const periods = () => Number(sql(`select count(*) from container_period p join container_visit v on v.id=p.container_visit_id where v.container_id='${a.ktk}'`));
@@ -80,7 +82,8 @@ async function main() {
     for (const [id,date,from,to] of [[draft.id,next,x.a,x.b],[second,'2026-09-18',x.b,x.c]]) {
         assert.equal(events(id), 1);
         assert.equal(sql(`select count(*) from container_owner_history h join container_period p
-          on p.start_container_owner_history_id=h.id where h.order_id='${id}' and h.container_period_id=p.id
+          on p.start_container_owner_history_id=h.id where h.order_id='${id}' and p.id in
+          (select container_period_id from service_order_container where service_order_id=h.order_id and container_id=h.container_id)
           and (h.occurred_at at time zone 'Europe/Moscow')::date='${date}' and h.old_client_id='${from}' and h.new_client_id='${to}'`),'1');
     }
     assert.equal(events(revoked), 0);
@@ -114,6 +117,31 @@ async function main() {
     assert.equal(await available(x.b, next), false, 'Departed container is ineligible');
     await x.cancel('shipping', departure);
     assert.equal(visitFacts(a.receiving), '2026-09-15|open|f');
+    const allHistory = id => api('/containers/'+id+'/owner-history?includeReservations=true');
+    const recorded = await allHistory(a.ktk);
+    const link = (rows, order, operation) => {
+        const event = rows.find(row => row.orderId === order && row.operationType === operation);
+        assert.ok(event, operation);
+        return event.containerPeriodId ?? null;
+    };
+    const closedPeriod = link(recorded, departure, 'DEPARTURE');
+    const repeatedPeriod = link(recorded, repeat.receiving, 'ARRIVAL');
+    assert.ok(closedPeriod && repeatedPeriod && closedPeriod !== repeatedPeriod);
+    assert.equal(link(recorded, departure, 'CANCEL_DEPARTURE'), closedPeriod);
+    assert.equal(link(recorded, repeat.receiving, 'CANCEL_ARRIVAL'), repeatedPeriod);
+    assert.equal(link(recorded, repeat.receiving, 'RESERVE_RECEIVING'), null);
+
+    const original = await x.arrival();
+    const start = link(await allHistory(original.ktk), original.receiving, 'ARRIVAL');
+    await clock('2026-09-22');
+    const reservation = await x.ship(original.ktk, false);
+    await x.cancel('shipping', reservation);
+    const retroactive = await x.transfer(original.ktk, x.b, '2026-09-20');
+    const updated = await allHistory(original.ktk);
+    const backdatedPeriod = link(updated, retroactive, 'OWNER_CHANGE');
+    assert.ok(start && backdatedPeriod && backdatedPeriod !== start);
+    assert.equal(link(updated, reservation, 'RESERVE_SHIPPING'), start);
+    assert.equal(link(updated, reservation, 'CANCEL_SHIPPING_RESERVATION'), start);
     const visits = await api('/container-periods/visits?periodId='+firstChange.containerPeriodId);
     assert.equal(visits.items.length, 1);
     assert.equal(visits.items[0].shippingAt ?? null, null);
