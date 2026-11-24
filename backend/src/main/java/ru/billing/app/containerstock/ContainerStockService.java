@@ -78,7 +78,8 @@ public class ContainerStockService {
     public void reserve(String resource, UUID order) {
         boolean receiving=resource.equals("receiving-orders");
         var rows=tasks.rowsForStockOperation(order,receiving);
-        lockContainers(rows.stream().map(ContainerTaskRows.Row::container).toList());
+        var containerIds = rows.stream().map(ContainerTaskRows.Row::container).toList();
+        lockContainers(containerIds);
         var conflicts = new StockViolations();
         for (var row : rows) {
             var old = state(row.container());
@@ -87,6 +88,7 @@ public class ContainerStockService {
         }
         if (!conflicts.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "CONTAINER_RESERVATION_CONFLICT",
                 conflicts.detail(), conflicts.originalMessage());
+        if (!receiving) requireNoPlannedOwnershipTransfers(containerIds);
         for(var row:rows) {
             tasks.change(row,null,"UPLOADED");
             State old=state(row.container());
@@ -95,6 +97,27 @@ public class ContainerStockService {
                 jdbc.update("update shipping_order_container set owner_container_id=? where id=?",old.client(),row.id());
                 transition(row.container(),old.client(),"RESERVED_OUT",old.receiving(),order,order,"SHIPPING_ORDER");
             }
+        }
+    }
+
+    /** Caller holds the physical container locks and has applied any transfers due today. */
+    void requireNoPlannedOwnershipTransfers(Collection<UUID> lockedContainerIds) {
+        if (lockedContainerIds.isEmpty()) return;
+        String placeholders = String.join(",", Collections.nCopies(lockedContainerIds.size(), "?"));
+        var conflicts = jdbc.query("""
+                select s.number, string_agg(c.code, ', ' order by c.code) as container_codes
+                from service_order_container sc
+                join service_order s on s.id = sc.service_order_id
+                join container c on c.id = sc.container_id
+                where s.status = 'CONFIRMED' and sc.result_status = 'PLANNED'
+                  and sc.container_id in (%s)
+                group by s.id, s.number order by s.number
+                """.formatted(placeholders), (rs, n) -> "По КТК " + rs.getString("container_codes")
+                        + " ожидает выполнения заявка на смену собственника №" + rs.getLong("number") + ".",
+                lockedContainerIds.toArray());
+        if (!conflicts.isEmpty()) {
+            throw error("OWNERSHIP_TRANSFER_PLANNED", String.join(" ", conflicts)
+                    + " Отмените запланированную передачу действием «Вернуть в черновик» и повторите операцию.");
         }
     }
 

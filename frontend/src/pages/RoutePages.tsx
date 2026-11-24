@@ -2,7 +2,7 @@ import { useBusinessDateTime, businessDateTimeToInstant, instantToBusinessDateTi
 import { TableReveal } from '../components/TableReveal'
 import { RouteLogisticsFields } from '../components/RouteLogisticsFields'
 import { OrderCancellationDialog } from '../components/OrderCancellationDialog'
-import { confirmRoute, updateRoute } from '../api'
+import { ApiError, confirmRoute, updateRoute } from '../api'
 import { RecordRow } from '../components/RecordRow'
 import { Notification } from '../components/Notification'
 import { RowActions } from '../components/RowActions'
@@ -118,7 +118,8 @@ export function RouteViewPage() {
   const [cancelling, setCancelling] = useState(false)
   const { routeId = '' } = useParams()
   const [details, setDetails] = useState<RouteDetails | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | ApiError>('')
+  const transferConflict = error instanceof ApiError && error.code === 'OWNERSHIP_TRANSFER_PLANNED'
   const [available, setAvailable] = useState<RouteOrder[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
@@ -142,7 +143,7 @@ export function RouteViewPage() {
     setSaving(true)
     setError('')
     try { setDetails(await confirmRoute(routeId)) }
-    catch (e) { setError(e instanceof Error ? e.message : 'Не удалось подтвердить рейс') }
+    catch (e) { setError(e instanceof ApiError ? e : e instanceof Error ? e.message : 'Не удалось подтвердить рейс') }
     finally { setSaving(false) }
   }
   async function addOrders() {
@@ -160,7 +161,10 @@ export function RouteViewPage() {
   }
   return <section className="form-page route-page">
     <div className="page-header"><h1>Рейс {route?.code ?? ''}</h1><div className="view-header-actions"><Link className="close-button" to="/routes" aria-label="Закрыть" title="Закрыть">×</Link>{route && <>{!editing && route.status !== 'CANCELLED' && <button type="button" className="secondary-button" disabled={saving} onClick={() => setCancelling(true)}>Отменить рейс</button>}{cancelling && <OrderCancellationDialog apiPath="/api/routes" id={routeId} status={route.status} onClose={() => setCancelling(false)} onChanged={() => { getRoute(routeId).then(setDetails).catch(e => setError(String(e))) }} />}{editing && <><button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelected([]); setError('') }}>Отмена</button><button type="button" className="primary-button" disabled={saving || loadingAvailable} onClick={addOrders}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></>}{route.status === 'DRAFT' && !editing && <button type="button" className="primary-button" disabled={saving} onClick={confirm}>{saving ? 'Сохраняем…' : 'Подтвердить'}</button>}{route.status === 'DRAFT' && !editing && <button type="button" className="secondary-button icon-button" aria-label="Редактировать" title="Редактировать" onClick={() => { setSelected([]); setAvailable([]); setLoadingAvailable(true); setError(''); setEditTab('main'); setDate(instantToBusinessDateTime(route.departureAt)); setCarrier(route.carrierId??''); setDriver(route.driverId??''); setVehicle(route.vehicleId??''); setComment(route.comment??''); setEditing(true) }}><ActionIcon name="edit" /></button>}</>}</div></div>
-    {error && <Notification kind="error">{error}</Notification>}
+    {error && <Notification kind="error" persistent={transferConflict} title={transferConflict ? 'Рейс не подтверждён' : undefined}>
+      {error instanceof ApiError ? error.message : error}
+      {transferConflict && <span><Link to="/service-orders">Открыть заявки на смену собственника</Link></span>}
+    </Notification>}
     {!details && !error && <div className="service-loading" role="status">Загружаем рейс…</div>}
     {route && <><div className="stepper view-tabs" aria-label="Разделы рейса"><button type="button" className={`step ${editTab === 'main' ? 'current' : ''}`} onClick={() => setEditTab('main')}>Основное</button><button type="button" className={`step ${editTab === 'orders' ? 'current' : ''}`} onClick={() => setEditTab('orders')}>Заявки</button></div><section hidden={editTab !== 'main'} className="service-main-panel">{editing?<form id="route-edit-main" onSubmit={event=>{event.preventDefault();void addOrders()}}>
  <section className="form-section ui-form-section"><h2 className="form-section-heading">Основная информация</h2><div className="form-fields-grid"><div className="form-fields-column">

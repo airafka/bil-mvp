@@ -119,6 +119,7 @@ export function TosShipmentDialog({ order, vehicleNumber, onClose, onSent }: Pro
         <button type="button" className="close-button" aria-label="Закрыть форму пакета" disabled={busy} onClick={onClose}>×</button>
       </div></header>
       <div className="route-drawer-body">
+        {error && <p className="error-message" role="alert">{error}</p>}
         <p>Пакет зафиксирует вывоз одного КТК по заявке №{order.code}.</p>
         {group && <p>{group.ownerName && group.ownerName + ' · '}{containerTypeLabel(group.type)} · Порожний</p>}
         <label>Поиск по номеру КТК<UiInput type="search" disabled={busy || !type} autoComplete="off"
@@ -142,7 +143,6 @@ export function TosShipmentDialog({ order, vehicleNumber, onClose, onSent }: Pro
           </fieldset>}
         <label>Номер автомобиля<UiInput required disabled={busy} value={transport} onChange={e => setTransport(e.target.value)} /></label>
         <label>Время вывоза (МСК)<UiInput required type="datetime-local" step="any" disabled={busy} value={operationTime} onChange={e => setTime(e.target.value)} /></label>
-        {error && <p className="error-message" role="alert">{error}</p>}
       </div>
     </form>
   </dialog></AppOverlay>

@@ -29,6 +29,7 @@ type NotificationProps = {
   title?: string
   children: ReactNode
   onDismiss?: () => void
+  persistent?: boolean
 }
 
 export function Notification(props: NotificationProps) {
@@ -36,19 +37,19 @@ export function Notification(props: NotificationProps) {
   return <NotificationCard key={props.kind + ':' + props.title + ':' + contentText(props.children)} {...props} />
 }
 
-function NotificationCard({ kind, title, children, onDismiss }: NotificationProps) {
+function NotificationCard({ kind, title, children, onDismiss, persistent }: NotificationProps) {
   const host = useContext(NotificationHost)
   const [dismissed, setDismissed] = useState(false)
   const dismissCallback = useRef(onDismiss)
   useEffect(() => { dismissCallback.current = onDismiss }, [onDismiss])
   useEffect(() => {
-    if (!host || dismissed) return
+    if (!host || dismissed || persistent) return
     const timer = window.setTimeout(() => {
       setDismissed(true)
       dismissCallback.current?.()
     }, 3000)
     return () => window.clearTimeout(timer)
-  }, [host, dismissed])
+  }, [host, dismissed, persistent])
   if (!host || dismissed) return null
   return createPortal(<div className={'notification-card notification-' + kind} role={kind === 'error' ? 'alert' : 'status'} aria-atomic="true">
     <svg className="notification-symbol" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

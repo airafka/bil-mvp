@@ -1,9 +1,12 @@
-type ApiProblem = { detail?: string; title?: string }
+type ApiProblem = { detail?: string; title?: string; code?: string }
 
 export class ApiError extends Error {
-  constructor(message: string) {
+  readonly code?: string
+
+  constructor(message: string, code?: string) {
     super(message)
     this.name = 'ApiError'
+    this.code = code
   }
 }
 
@@ -13,7 +16,7 @@ async function sendRequest<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...options, headers })
   if (!response.ok) {
     const problem = (await response.json().catch(() => ({}))) as ApiProblem
-    throw new ApiError(problem.detail ?? problem.title ?? 'Не удалось выполнить запрос')
+    throw new ApiError(problem.detail ?? problem.title ?? 'Не удалось выполнить запрос', problem.code)
   }
   return response.status === 204 ? undefined as T : response.json() as Promise<T>
 }
