@@ -26,7 +26,7 @@ export function ContainerStockPage() {
     <TableReveal loading={!data && !error}><div className="table-wrap"><table><thead><tr><th>Номер КТК</th><th>Тип</th><th>Собственник</th><th>Состояние</th><th>История</th></tr></thead><tbody>
       {!data && !error && <tr><td colSpan={5}>Загружаем остатки…</td></tr>}
       {data?.items.length === 0 && <tr><td colSpan={5}>КТК не найдены. Для начала учёта подтвердите поставку и завершите разгрузку.</td></tr>}
-      {data?.items.map(row => <tr key={row.id}><td>{row.containerName}</td><td>{containerTypeLabel(row.containerType as Parameters<typeof containerTypeLabel>[0])}</td><td>{row.clientName || '—'}</td><td><ContainerStatusBadge status={row.status} /></td><td><Link to={'/container-owners/' + row.containerId + '/history'}>История</Link></td></tr>)}
+      {data?.items.map(row => <tr key={row.id}><td><Link to={'/containers/' + row.containerId}>{row.containerName}</Link></td><td>{containerTypeLabel(row.containerType as Parameters<typeof containerTypeLabel>[0])}</td><td>{row.clientName || '—'}</td><td><ContainerStatusBadge status={row.status} /></td><td><Link to={'/container-owners/' + row.containerId + '/history'}>История</Link></td></tr>)}
     </tbody></table></div>{data && data.totalPages > 1 && <div className="pagination"><button disabled={page === 0} onClick={() => { setPage(page - 1); setData(null) }}>Назад</button><span>{page + 1} / {data.totalPages}</span><button disabled={page + 1 >= data.totalPages} onClick={() => { setPage(page + 1); setData(null) }}>Далее</button></div>}</TableReveal>
   </section>
 }

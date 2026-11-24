@@ -6,7 +6,18 @@ import ru.billing.app.order.PagedResponse;
 @RestController
 public class ContainerStockController {
     private final ContainerStockService service;
-    public ContainerStockController(ContainerStockService service){this.service=service;}
+    private final ContainerCardHistory cardHistory;
+
+    public ContainerStockController(ContainerStockService service, ContainerCardHistory cardHistory) {
+        this.service = service;
+        this.cardHistory = cardHistory;
+    }
+
+    @GetMapping("/api/containers/{id}/card")
+    public ContainerCardHistory.Card card(@PathVariable UUID id, @ModelAttribute ContainerCardHistory.Filter filter,
+            @RequestParam(defaultValue="0") int page, @RequestParam(defaultValue="20") int size) {
+        return cardHistory.get(id, filter, page, size);
+    }
     public record LookupRequest(@jakarta.validation.constraints.NotEmpty @jakarta.validation.constraints.Size(max=1000)
         List<@jakarta.validation.constraints.NotNull UUID> containerIds) {}
     @PostMapping("/api/container-owners/lookup")

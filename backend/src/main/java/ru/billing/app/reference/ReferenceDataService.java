@@ -57,18 +57,21 @@ public class ReferenceDataService {
         return findNamed("client", query, limit);
     }
 
+    private static final String CONTAINER_SELECT = "select id, code, container_type, weight, lifting_capacity from container ";
+    private static final org.springframework.jdbc.core.RowMapper<ContainerReferenceOption> CONTAINER_ROW =
+            (rs, row) -> new ContainerReferenceOption(rs.getObject("id", UUID.class), rs.getString("code"),
+                    rs.getString("container_type"), rs.getBigDecimal("weight"), rs.getBigDecimal("lifting_capacity"));
+
+    public ContainerReferenceOption getContainer(UUID id) {
+        return jdbcTemplate.query(CONTAINER_SELECT + "where id = ?", CONTAINER_ROW, id).stream().findFirst()
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CONTAINER_NOT_FOUND", "КТК не найден"));
+    }
+
     public List<ContainerReferenceOption> findContainers(String query, Integer requestedLimit) {
         int limit = normalizedLimit(requestedLimit);
         String search = query == null ? "" : query.trim();
         return jdbcTemplate.query(
-                "select id, code, container_type, weight, lifting_capacity from container "
-                        + "where lower(code) like lower(?) order by code limit ?",
-                (resultSet, rowNumber) -> new ContainerReferenceOption(
-                        resultSet.getObject("id", UUID.class),
-                        resultSet.getString("code"),
-                        resultSet.getString("container_type"),
-                        resultSet.getBigDecimal("weight"), resultSet.getBigDecimal("lifting_capacity")
-                ),
+                CONTAINER_SELECT + "where lower(code) like lower(?) order by code limit ?", CONTAINER_ROW,
                 "%" + search + "%",
                 limit
         );
@@ -82,8 +85,7 @@ public class ReferenceDataService {
         if (Boolean.TRUE.equals(invalid)) throw new ApiException(HttpStatus.BAD_REQUEST, "TARE_EXCEEDS_GROSS", "Тара превышает брутто КТК в существующей накладной");
         int updated = jdbcTemplate.update("update container set weight = ? where id = ?", tareWeight, id);
         if (updated == 0) throw new ApiException(HttpStatus.NOT_FOUND, "CONTAINER_NOT_FOUND", "КТК не найден");
-        return jdbcTemplate.queryForObject("select id, code, container_type, weight, lifting_capacity from container where id = ?",
-                (rs, row) -> new ContainerReferenceOption(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("container_type"), rs.getBigDecimal("weight"), rs.getBigDecimal("lifting_capacity")), id);
+        return getContainer(id);
     }
 
     @org.springframework.transaction.annotation.Transactional

@@ -13,6 +13,7 @@ const RouteRegistryPage = lazy(() => import('./pages/RoutePages').then(module =>
 const RouteCreatePage = lazy(() => import('./pages/RoutePages').then(module => ({ default: module.RouteCreatePage })))
 const RouteViewPage = lazy(() => import('./pages/RoutePages').then(module => ({ default: module.RouteViewPage })))
 const RailwayCarriageRegistryPage = lazy(() => import('./pages/RailwayCarriageRegistryPage').then(module => ({ default: module.RailwayCarriageRegistryPage })))
+const ContainerCardPage = lazy(() => import('./pages/ContainerCardPage'))
 const ContainerRegistryPage = lazy(() => import('./pages/ContainerRegistryPage').then(module => ({ default: module.ContainerRegistryPage })))
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
@@ -57,6 +58,7 @@ function App() {
           <Route path="/routes/:routeId" element={<RouteViewPage />} />
           <Route path="/railway-carriages" element={<RailwayCarriageRegistryPage />} />
           <Route path="/containers" element={<ContainerRegistryPage />} />
+          <Route path="/containers/:containerId" element={<ContainerCardPage />} />
           <Route path="/waybills" element={<WaybillRegistryPage />} />
           <Route path="/waybills/edit-placement" element={<WaybillPlacementPage />} />
           <Route path="/waybills/generate" element={<WaybillGeneratePage />} />

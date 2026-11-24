@@ -71,6 +71,7 @@ MVP принимает результаты TOS по каждому КТК. Пр
 | Хранение КТК: периоды, собственники, выгрузка | /container-storage |
 | Накладные / генератор / размещение КТК | /waybills, /waybills/generate, /waybills/edit-placement |
 | Вагоны / КТК | /railway-carriages, /containers |
+| Карточка КТК и [история с фильтрами](CONTAINER_STOCK.md#история-в-карточке-ктк) | /containers/{id} |
 | Перевозчики / водители / ТС | /transport-carriers, /transport-drivers, /transport-vehicles |
 | Образцы UI | /ui-kit |
 

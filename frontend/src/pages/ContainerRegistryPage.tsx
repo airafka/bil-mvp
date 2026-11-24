@@ -1,3 +1,5 @@
+import { Link } from 'react-router'
+import { RecordRow } from '../components/RecordRow'
 import { TableReveal } from '../components/TableReveal'
 import { Notification } from '../components/Notification'
 import { RowActions } from '../components/RowActions'
@@ -9,18 +11,29 @@ import { containerTypeLabel } from '../domain'
 import { massInGrams } from '../waybillForm'
 
 export function ContainerRegistryPage() {
+  const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
   const [rows, setRows] = useState<ReferenceOption[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     let active = true
-    getReferenceOptions('containers').then(value => { if (active) setRows(value) })
+    getReferenceOptions('containers', query).then(value => { if (active) setRows(value) })
       .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : 'Ошибка загрузки КТК') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [])
+  }, [query])
   return <section className="registry-page">
     <div className="page-header"><h1>Справочник КТК</h1></div>
+    <form className="registry-filters" onSubmit={event => {
+      event.preventDefault()
+      if (search.trim() !== query) { setLoading(true); setError(''); setRows([]); setQuery(search.trim()) }
+    }}>
+      <label className="field horizontal-field"><span>Номер КТК</span>
+        <UiInput type="search" value={search} onChange={event => setSearch(event.target.value)} />
+      </label>
+      <div className="filter-actions"><button className="secondary-button" type="submit">Найти</button></div>
+    </form>
     {error && <Notification kind="error">{error}</Notification>}
     <TableReveal loading={loading}><div className="table-wrap"><table><thead><tr><th className="registry-index" scope="col">№</th><th>Номер КТК</th><th>Типоразмер</th><th>Масса тары, кг</th><th>Грузоподъёмность, кг</th><th className="registry-actions" scope="col" aria-label="Действия" /></tr></thead><tbody>
       {loading && <tr><td colSpan={6} className="table-message">Загружаем КТК…</td></tr>}
@@ -46,8 +59,9 @@ function ContainerRow({ row, index }: { row: ReferenceOption; index: number }) {
     catch (e) { setMessage(e instanceof Error ? e.message : 'Ошибка сохранения') }
     finally { setSaving(false) }
   }
-  return <tr><td className="registry-index">{index + 1}</td><td>{row.name}</td><td>{row.type ? containerTypeLabel(row.type) : '—'}</td><td>
+  const cardPath = '/containers/' + row.id
+  return <RecordRow to={cardPath}><td className="registry-index">{index + 1}</td><td><Link to={cardPath}>{row.name}</Link></td><td>{row.type ? containerTypeLabel(row.type) : '—'}</td><td>
     {editing ? <div className="container-tare-editor"><UiInput aria-label={'Масса тары ' + row.name} inputMode="decimal" value={tare} disabled={saving} onChange={e => { setTare(e.target.value); setMessage('') }} /><button type="button" className="primary-button" disabled={saving || (tare === savedTare && capacity === savedCapacity)} onClick={save}>{saving ? 'Сохраняем…' : 'Сохранить'}</button><button type="button" className="secondary-button" disabled={saving} onClick={() => { setTare(savedTare); setCapacity(savedCapacity); setMessage(''); setEditing(false) }}>Отмена</button></div> : <span>{savedTare ? Number(savedTare.replace(',', '.')).toLocaleString('ru-RU', { maximumFractionDigits: 3 }) : '—'}</span>}
     {message && <Notification kind={message === 'Сохранено' ? 'success' : 'error'} onDismiss={() => setMessage('')}>{message}</Notification>}
-    </td><td>{editing ? <UiInput aria-label={'Грузоподъёмность ' + row.name} inputMode="decimal" value={capacity} disabled={saving} onChange={e => { setCapacity(e.target.value); setMessage('') }} /> : savedCapacity ? Number(savedCapacity.replace(',', '.')).toLocaleString('ru-RU') : '—'}</td><td className="registry-actions"><RowActions label={'Действия с КТК ' + row.name} disabled={editing} actions={[{ label: 'Редактировать', onClick: () => { setMessage(''); setEditing(true) } }]} /></td></tr>
+    </td><td>{editing ? <UiInput aria-label={'Грузоподъёмность ' + row.name} inputMode="decimal" value={capacity} disabled={saving} onChange={e => { setCapacity(e.target.value); setMessage('') }} /> : savedCapacity ? Number(savedCapacity.replace(',', '.')).toLocaleString('ru-RU') : '—'}</td><td className="registry-actions"><RowActions label={'Действия с КТК ' + row.name} disabled={editing} actions={[{ label: 'Открыть', to: cardPath }, { label: 'Редактировать', onClick: () => { setMessage(''); setEditing(true) } }]} /></td></RecordRow>
 }
