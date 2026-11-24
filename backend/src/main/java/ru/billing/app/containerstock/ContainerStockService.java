@@ -88,7 +88,7 @@ public class ContainerStockService {
         }
         if (!conflicts.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "CONTAINER_RESERVATION_CONFLICT",
                 conflicts.detail(), conflicts.originalMessage());
-        if (!receiving) requireNoPlannedOwnershipTransfers(containerIds);
+        if (!receiving) requireNoPlannedOwnershipTransfers(containerIds, "");
         for(var row:rows) {
             tasks.change(row,null,"UPLOADED");
             State old=state(row.container());
@@ -101,7 +101,7 @@ public class ContainerStockService {
     }
 
     /** Caller holds the physical container locks and has applied any transfers due today. */
-    void requireNoPlannedOwnershipTransfers(Collection<UUID> lockedContainerIds) {
+    void requireNoPlannedOwnershipTransfers(Collection<UUID> lockedContainerIds, String recoveryHint) {
         if (lockedContainerIds.isEmpty()) return;
         String placeholders = String.join(",", Collections.nCopies(lockedContainerIds.size(), "?"));
         var conflicts = jdbc.query("""
@@ -116,8 +116,8 @@ public class ContainerStockService {
                         + " ожидает выполнения заявка на смену собственника №" + rs.getLong("number") + ".",
                 lockedContainerIds.toArray());
         if (!conflicts.isEmpty()) {
-            throw error("OWNERSHIP_TRANSFER_PLANNED", String.join(" ", conflicts)
-                    + " Отмените запланированную передачу действием «Вернуть в черновик» и повторите операцию.");
+            String reason = String.join(" ", conflicts);
+            throw error("OWNERSHIP_TRANSFER_PLANNED", recoveryHint.isEmpty() ? reason : reason + " " + recoveryHint);
         }
     }
 

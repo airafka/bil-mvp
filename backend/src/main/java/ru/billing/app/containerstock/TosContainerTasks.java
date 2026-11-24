@@ -67,7 +67,8 @@ public class TosContainerTasks {
                 "Для КТК отсутствует запись в регистре собственников", result.cargoNumber()+".TosShipmentResult.ContainerOwnerNotFound");
         String conflict = ContainerStockPolicy.reservationConflict(false, state.status());
         if (conflict != null) throw invalid(result.cargoNumber()+": "+conflict);
-        stock.requireNoPlannedOwnershipTransfers(List.of(container));
+        stock.requireNoPlannedOwnershipTransfers(List.of(container),
+                "Отмените запланированную передачу действием «Вернуть в черновик» и повторите операцию.");
         jdbc.update("""
                 insert into shipping_order_container(id,shipping_order_id,container_id,owner_container_id,empty,seal_numbers,status,actual_quantity)
                 values(?,?,?,?,true,?,'UPLOADED',?)

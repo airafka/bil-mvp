@@ -185,7 +185,7 @@ async function run(name) {
     async function checkRefusal(route, holdNumber, containerName) {
         const refused = await api(route + '/confirm', 'POST', {}, 409);
         assert.equal(refused.code, 'OWNERSHIP_TRANSFER_PLANNED');
-        assert.ok(refused.detail.includes(String(holdNumber)) && refused.detail.includes(containerName), refused.detail);
+        assert.equal(refused.detail, `По КТК ${containerName} ожидает выполнения заявка на смену собственника №${holdNumber}.`);
         const rejectedRoute = await api(route);
         assert.equal(rejectedRoute.route.status, 'DRAFT');
         assert.ok(rejectedRoute.orders.every(row => row.status === 'DRAFT'));
