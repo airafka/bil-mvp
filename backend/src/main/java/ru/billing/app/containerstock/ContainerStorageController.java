@@ -100,8 +100,8 @@ public class ContainerStorageController {
         // Retain the legacy client filter; only this optional filter needs the original arrival chain.
         if(clientId!=null){sql+=" and exists(select 1 from container_storage_period_origin o join receiving_order r on r.id=o.receiving_order_id where o.id=p.id and r.client_id=?)";args.add(clientId);}
         if(periodId!=null){sql+=" and p.id=?";args.add(periodId);}
-        if(from!=null){sql+=" and (h.occurred_at at time zone 'Europe/Moscow')::date>=?";args.add(from);}
-        if(to!=null){sql+=" and (h.occurred_at at time zone 'Europe/Moscow')::date<=?";args.add(to);}
+        if(from!=null){sql+=" and (h.occurred_at at time zone 'UTC')::date>=?";args.add(from);}
+        if(to!=null){sql+=" and (h.occurred_at at time zone 'UTC')::date<=?";args.add(to);}
         sql+=" and (h.occurred_at at time zone 'Europe/Moscow')::date<=?";args.add(asOf);
         sql+=switch(status){case "ACTIVE"->" and p.status<>'CANCELLED'";
             case "ALL"->"";default->" and p.status=?";};
@@ -190,8 +190,8 @@ public class ContainerStorageController {
             if(!trimmed.isEmpty() && "=+-@".indexOf(trimmed.charAt(0))>=0)s="'"+s;
             cells.add("\""+s.replace("\"","\"\"")+"\"");}out.append(String.join(";",cells)).append("\r\n");
     }
-    private static String format(OffsetDateTime value){return value==null?"":value.atZoneSameInstant(ZoneId.of("Europe/Moscow"))
-        .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));}
+    static String format(OffsetDateTime value){return value==null?"":value.withOffsetSameInstant(ZoneOffset.UTC)
+        .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm 'UTC'"));}
     private static String boundary(String s){return s==null?"":switch(s){case "RECEIVING_ORDER"->"Поставка";case "SHIPPING_ORDER"->"Вывоз";case "SERVICE_ORDER"->"Смена собственника";default->s;};}
     private static String clientOwner(String client,String owner) {
         return client==null && owner==null?"":(client==null?"—":client)+" / "+(owner==null?"—":owner);

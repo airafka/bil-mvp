@@ -1,7 +1,9 @@
 package ru.billing.app.containerstock;
 
 import java.util.*;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -32,7 +34,7 @@ public class ContainerStockService {
     }
     public record History(UUID id, UUID containerId, UUID oldClientId, String oldClientName,
             UUID newClientId, String newClientName, String oldStatus, String newStatus,
-            UUID orderId, String orderType, Long orderNumber, LocalDateTime createdAt, boolean cancellation, String operationType, java.time.OffsetDateTime occurredAt,
+            UUID orderId, String orderType, Long orderNumber, Instant createdAt, boolean cancellation, String operationType, java.time.OffsetDateTime occurredAt,
             UUID containerPeriodId, UUID previousContainerPeriodId) {}
     record State(UUID id, UUID client, String status, UUID receiving, UUID shipping) {}
     record Reservation(UUID container, UUID previousOwner) {}
@@ -291,7 +293,7 @@ public class ContainerStockService {
             order by h.created_at desc,h.id desc
             """,(rs,n)->new History(rs.getObject("id",UUID.class),container,rs.getObject("timeline_old_client_id",UUID.class),rs.getString("old_name"),
                 rs.getObject("new_client_id",UUID.class),rs.getString("new_name"),rs.getString("old_status"),rs.getString("new_status"),
-                rs.getObject("order_id",UUID.class),rs.getString("order_type"),rs.getObject("order_number",Long.class),rs.getObject("created_at",LocalDateTime.class),rs.getBoolean("cancellation"),rs.getString("operation_type"),rs.getObject("occurred_at",java.time.OffsetDateTime.class),
+                rs.getObject("order_id",UUID.class),rs.getString("order_type"),rs.getObject("order_number",Long.class),rs.getObject("created_at",LocalDateTime.class).toInstant(ZoneOffset.UTC),rs.getBoolean("cancellation"),rs.getString("operation_type"),rs.getObject("occurred_at",java.time.OffsetDateTime.class),
                 rs.getObject("container_period_id",UUID.class),rs.getObject("previous_container_period_id",UUID.class)),container,all,all);
     }
     ApiException error(String code,String message){return new ApiException(HttpStatus.CONFLICT,code,message);}

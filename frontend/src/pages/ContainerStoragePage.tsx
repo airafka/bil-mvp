@@ -15,7 +15,7 @@ export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   return <table className="storage-table"><colgroup>{columns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
     <thead><tr><th aria-label="Раскрытие визита" /><th>Номер КТК</th><th>Собственник КТК</th><th>Дней хранения</th>
-      <th>Начало периода</th><th>Событие</th><th>Заявка</th><th>Конец периода</th><th>Событие</th><th>Заявка</th>
+      <th>Начало периода (UTC)</th><th>Событие</th><th>Заявка</th><th>Конец периода (UTC)</th><th>Событие</th><th>Заявка</th>
       <th>Клиент/Собственник поставки</th><th>Транспорт поставки</th><th>Грузоперевозчик/грузоотправитель поставки</th><th>Груз поставки</th>
       <th>Клиент/Собственник вывоза</th><th>Транспорт вывоза</th><th>Грузоперевозчик/грузополучатель вывоза</th><th>Груз вывоза</th></tr></thead>
     <tbody>{rows.length ? rows.map(visit => {

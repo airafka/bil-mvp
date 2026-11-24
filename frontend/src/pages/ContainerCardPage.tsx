@@ -103,10 +103,10 @@ function ContainerCard({ id }: { id: string }) {
         onInput={event => (event.currentTarget.elements.namedItem('createdTo') as HTMLInputElement).setCustomValidity('')}
         onSubmit={event => { event.preventDefault(); applyDates(event.currentTarget) }}>
         {select('orderType')}{select('orderNumber')}{select('oldClientId')}{select('newClientId')}
-        <label className="field horizontal-field"><span>Дата записи с</span>
+        <label className="field horizontal-field"><span>Дата записи с (UTC)</span>
           <UiInput type="date" name="createdFrom" defaultValue={params.get('createdFrom') ?? ''} />
         </label>
-        <label className="field horizontal-field"><span>Дата записи по</span>
+        <label className="field horizontal-field"><span>Дата записи по (UTC)</span>
           <UiInput type="date" name="createdTo" defaultValue={params.get('createdTo') ?? ''} />
         </label>
         <div className="filter-actions">
@@ -120,7 +120,7 @@ function ContainerCard({ id }: { id: string }) {
       </form>
       {error && <div role="alert">{error} <button className="secondary-button" onClick={() => setAttempt(value => value + 1)}>Повторить</button></div>}
       <div className="table-wrap"><table><thead><tr>
-        <th>Дата записи</th><th>Дата операции</th><th>Заявка</th><th>Прежний собственник</th>
+        <th>Дата записи (UTC)</th><th>Дата операции (UTC)</th><th>Заявка</th><th>Прежний собственник</th>
         <th>Новый собственник</th><th>Прежнее состояние</th><th>Новое состояние</th>
       </tr></thead><tbody>
         {loading && <tr><td colSpan={7} className="table-message" role="status">Загружаем историю…</td></tr>}

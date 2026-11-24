@@ -51,7 +51,7 @@ async function main() {
     assert.equal(page.options.orderNumber.length, 3, 'Filter options include all pages');
 
     const entry = result.history.items.find(row => row.orderId === transfer);
-    const recorded = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date(entry.createdAt));
+    const recorded = new Date(entry.createdAt).toISOString().slice(0, 10);
     const filters = { orderNumber: entry.orderNumber, orderType: 'SERVICE_ORDER', oldClientId: test.a,
         newClientId: test.b, createdFrom: recorded, createdTo: recorded };
     const filtered = await card(container, filters);

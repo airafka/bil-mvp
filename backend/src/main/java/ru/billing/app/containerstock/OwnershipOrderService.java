@@ -1,7 +1,7 @@
 package ru.billing.app.containerstock;
 
 import java.util.*;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.LocalDate;
 import org.springframework.stereotype.Service;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,16 +24,16 @@ public class OwnershipOrderService {
     public record Link(UUID id,UUID containerOwnerId,UUID containerId,String containerName,String containerType,
             UUID clientId,String clientName,String status,UUID containerVisitId,UUID expectedClientId,String resultStatus,String resultReason) {}
     public record Header(UUID id,long number,UUID clientId,String clientName,String service,String comment,
-            String status,LocalDateTime completionAt,long containerQuantity,LocalDate effectiveDate,UUID sourceClientId,String sourceClientName) {}
+            String status,OffsetDateTime completionAt,long containerQuantity,LocalDate effectiveDate,UUID sourceClientId,String sourceClientName) {}
     public record Details(Header order,List<Link> containers) {}
     private static final String HEADER="""
-        select s.*,c.name as client_name,src.name as source_client_name,(select count(*) from service_order_container_current sc where sc.service_order_id=s.id) as quantity
+        select s.*,s.completion_at at time zone 'UTC' as confirmation_instant,c.name as client_name,src.name as source_client_name,(select count(*) from service_order_container_current sc where sc.service_order_id=s.id) as quantity
         from service_order_current s join client c on c.id=s.client_id
         left join client src on src.id=s.source_client_id
         """;
     private Header header(java.sql.ResultSet rs)throws java.sql.SQLException {
         return new Header(rs.getObject("id",UUID.class),rs.getLong("number"),rs.getObject("client_id",UUID.class),rs.getString("client_name"),
-            rs.getString("service"),rs.getString("comment"),rs.getString("status"),rs.getObject("completion_at",LocalDateTime.class),rs.getLong("quantity"),rs.getObject("effective_date",LocalDate.class),
+            rs.getString("service"),rs.getString("comment"),rs.getString("status"),rs.getObject("confirmation_instant",OffsetDateTime.class),rs.getLong("quantity"),rs.getObject("effective_date",LocalDate.class),
             rs.getObject("source_client_id",UUID.class),rs.getString("source_client_name"));
     }
     private Header locked(UUID id){

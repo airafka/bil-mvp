@@ -15,7 +15,7 @@ import '../ownership-order.css'
 
 const resultLabels: Record<string, string> = { PLANNED: 'Передача запланирована', APPLIED: 'Передача выполнена', SKIPPED: 'Передача не выполнена', CANCELLED: 'Передача отменена', BLOCKED: 'Требует проверки' }
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error)
-const completedAt = (value: string | null) => value ? new Date(value + 'Z').toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—'
+const completedAt = (value: string | null) => value ? new Date(value).toLocaleString('ru-RU', { timeZone: 'UTC' }) : '—'
 function OwnershipStatus({ status }: { status: string }) {
   return <span className={'ownership-status ' + (status === 'DONE' ? 'ownership-status-done' : status === 'SCHEDULED' ? 'ownership-status-scheduled' : '')}>{status === 'DONE' ? 'Выполнено' : status === 'SCHEDULED' ? 'Ожидает даты передачи' : status === 'PARTIAL' ? 'Выполнено частично' : status === 'CANCELLED' ? 'Отменено' : 'Черновик'}</span>
 }
@@ -55,7 +55,7 @@ export function OwnershipOrderRegistryPage() {
     <div className="page-header"><h1>Смена собственника КТК</h1><div className="header-actions"><Link className="secondary-button" to="/container-owners">К остаткам</Link><Link className="primary-button create-action-button" to="/service-orders/new"><ActionIcon name="plus" /> Создать</Link></div></div>
     {error && <Notification kind="error">{error}</Notification>}{message && <Notification kind="success">{message}</Notification>}
     <TableReveal loading={!data && !error}>
-      <div className="table-wrap"><table className="ownership-registry-table"><thead><tr><th className="registry-index">№</th><th>Номер заявки</th><th>Новый собственник</th><th>Количество КТК</th><th>Статус</th><th>Дата передачи</th><th>Подтверждено</th><th>Комментарий</th><th className="registry-actions" aria-label="Действия" /></tr></thead><tbody>
+      <div className="table-wrap"><table className="ownership-registry-table"><thead><tr><th className="registry-index">№</th><th>Номер заявки</th><th>Новый собственник</th><th>Количество КТК</th><th>Статус</th><th>Дата передачи</th><th>Подтверждено (UTC)</th><th>Комментарий</th><th className="registry-actions" aria-label="Действия" /></tr></thead><tbody>
         {!data && !error && <tr><td colSpan={9}>Загружаем заявки…</td></tr>}{data?.items.length === 0 && <tr><td colSpan={9}>Заявок пока нет</td></tr>}
         {data?.items.map((row, index) => <RecordRow to={'/service-orders/' + row.id} key={row.id}><td className="registry-index">{data.page * data.size + index + 1}</td><td><Link className="order-code" to={'/service-orders/' + row.id}>{row.number}</Link></td><td>{row.clientName}</td><td>{row.containerQuantity}</td><td><OwnershipStatus status={row.status} /></td><td>{row.effectiveDate ? businessDateLabel(row.effectiveDate) : '—'}</td><td>{completedAt(row.completionAt)}</td><td>{row.comment || '—'}</td><td className="registry-actions"><RowActions label={'Действия с заявкой ' + row.number} disabled={busy} actions={[{ label: 'Открыть', to: '/service-orders/' + row.id }, ...(row.status === 'DRAFT' ? [{ label: 'Изменить', to: '/service-orders/' + row.id + '?edit=1' }, { label: 'Удалить', onClick: () => setDeleting(row) }] : [])]} /></td></RecordRow>)}
       </tbody></table></div>{data && <Pagination data={data} change={value => { setPage(value); setData(null) }} />}
@@ -203,7 +203,7 @@ export function OwnershipOrderViewPage() {
     <div className="form-workspace"><div className="ownership-tabs-toolbar"><OwnershipTabs tab={tab} change={changeTab} disabled={busy} />{editing && tab === 'containers' && selected.size > 0 && <button type="button" className="secondary-button" disabled={busy} onClick={() => setSelected(new Set())}>Снять выбор КТК</button>}</div>
       {tab === 'main' && <><section className="form-section ui-form-section"><div className="form-section-heading"><h2>Основная информация</h2></div><dl className="details-grid">
         <div><dt>Номер заявки</dt><dd>{data.order.number}</dd></div><div><dt>Статус</dt><dd><OwnershipStatus status={data.order.status} /></dd></div>
-        <div><dt>Количество КТК</dt><dd>{editing ? selected.size : data.order.containerQuantity}</dd></div><div><dt>Подтверждено</dt><dd>{completedAt(data.order.completionAt)}</dd></div>
+        <div><dt>Количество КТК</dt><dd>{editing ? selected.size : data.order.containerQuantity}</dd></div><div><dt>Подтверждено (UTC)</dt><dd>{completedAt(data.order.completionAt)}</dd></div>
         <div><dt><label htmlFor="ownership-effective-date">Дата передачи</label></dt><dd>{editing ? <UiInput id="ownership-effective-date" type="date" required max="9999-12-31" disabled={busy} value={effectiveDate} onChange={e => { setEffectiveDate(e.target.value); clearSelection() }} /> : data.order.effectiveDate ? businessDateLabel(data.order.effectiveDate) : '—'}</dd></div>
         <div><dt>Прежний собственник</dt><dd>{data.order.sourceClientName || '—'}</dd></div>
         <div><dt><label htmlFor="ownership-new-client">Новый собственник</label></dt><dd>{editing ? <UiSelect id="ownership-new-client" required disabled={busy} value={client} onChange={e => { setClient(e.target.value); clearSelection() }}>

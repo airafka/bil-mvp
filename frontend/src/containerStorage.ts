@@ -12,7 +12,7 @@ export type StorageVisit = {
   storageDays: number; periods: StoragePeriod[];
 }
 export const storageDate = (value?: string) => value ? new Date(value).toLocaleString('ru-RU', {
-  timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
 }) : '—'
 export const storageClientOwner = (client?: string, owner?: string) => !client && !owner ? '' : (client || '—') + ' / ' + (owner || '—')
 export const storageTransport = (value?: string) => ({ VEHICLE: 'Авто', RAILWAY: 'ЖД' }[value ?? ''] ?? '')

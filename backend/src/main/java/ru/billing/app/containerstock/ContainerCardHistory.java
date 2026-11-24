@@ -96,11 +96,11 @@ public class ContainerCardHistory {
             addFilter(sql, params, "old_client_id", filter.oldClientId, ignored);
             addFilter(sql, params, "new_client_id", filter.newClientId, ignored);
             if (filter.createdFrom != null) {
-                sql.append(" and (created_at at time zone 'Europe/Moscow')::date >= :createdFrom");
+                sql.append(" and (created_at at time zone 'UTC')::date >= :createdFrom");
                 params.put("createdFrom", filter.createdFrom);
             }
             if (filter.createdTo != null) {
-                sql.append(" and (created_at at time zone 'Europe/Moscow')::date <= :createdTo");
+                sql.append(" and (created_at at time zone 'UTC')::date <= :createdTo");
                 params.put("createdTo", filter.createdTo);
             }
             return jdbc.sql(sql.append(tail).toString()).params(params);

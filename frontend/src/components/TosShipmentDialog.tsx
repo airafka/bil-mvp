@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { getContainerStock, lookupContainerStock } from '../api'
-import { businessDateTimeToInstant, useApplicationClock, businessDateTime } from '../applicationClock'
+import { useApplicationClock } from '../applicationClock'
 import type { StockOwner } from '../containerStock'
 import { containerTypeLabel, type OrderDetails, type PagedResponse } from '../domain'
 import { request } from '../http'
@@ -33,7 +33,7 @@ export function TosShipmentDialog({ order, vehicleNumber, onClose, onSent }: Pro
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [enteredTime, setTime] = useState<string>()
-  const operationTime = enteredTime ?? businessDateTime(clock) + new Date(clock.now).toISOString().slice(16, 23)
+  const operationTime = enteredTime ?? new Date(clock.now).toISOString().slice(0, -1)
   const result = stockResult?.filter === filter ? stockResult : null
   const stock = result && 'data' in result ? result.data : null
   const selected = stock?.items.find(row => row.containerId === selectedId)
@@ -91,7 +91,7 @@ export function TosShipmentDialog({ order, vehicleNumber, onClose, onSent }: Pro
         method: 'POST', headers: { Prefer: 'return=representation' },
         body: JSON.stringify({
           _id: taskId, _order: order.id, orderNumber: String(order.code), source: 'TOS', site: order.terminalArea.name,
-          eventName: 'Погрузка завершена', eventCode: 'LOAD_FINISH', eventDateTime: businessDateTimeToInstant(operationTime),
+          eventName: 'Погрузка завершена', eventCode: 'LOAD_FINISH', eventDateTime: new Date(operationTime + 'Z').toISOString(),
           cargoResult: [{
             cargoNumber, cargoType: type === 'STANDARD_40' ? 'Контейнер 40' : 'Контейнер 20', qty: 1, active: true,
             transportType: 'АВТО', transportNumber: transport.trim(),
@@ -142,7 +142,7 @@ export function TosShipmentDialog({ order, vehicleNumber, onClose, onSent }: Pro
             </div>}
           </fieldset>}
         <label>Номер автомобиля<UiInput required disabled={busy} value={transport} onChange={e => setTransport(e.target.value)} /></label>
-        <label>Время вывоза (МСК)<UiInput required type="datetime-local" step="any" disabled={busy} value={operationTime} onChange={e => setTime(e.target.value)} /></label>
+        <label>Время вывоза (UTC)<UiInput required type="datetime-local" step="any" disabled={busy} value={operationTime} onChange={e => setTime(e.target.value)} /></label>
       </div>
     </form>
   </dialog></AppOverlay>

@@ -16,7 +16,7 @@ export const connection = {
 };
 export const quote = name => '"' + name.replaceAll('"', '""') + '"';
 export class InputError extends Error {}
-export const pool = new pg.Pool({ ...connection, max: 4, options: '-c default_transaction_read_only=on -c TimeZone=Europe/Moscow' });
+export const pool = new pg.Pool({ ...connection, max: 4, options: '-c default_transaction_read_only=on -c TimeZone=UTC' });
 pool.on('error', () => console.error('Database pool connection lost'));
 
 export async function read(work) {

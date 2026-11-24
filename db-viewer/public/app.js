@@ -22,7 +22,7 @@ const app = { tables: [], paused: false, connected: false, events: [], changed: 
 const panels = [];
 let active;
 let nextPanel = 1;
-const stamp = date => new Date(date).toLocaleTimeString('ru-RU', { hour12: false });
+const stamp = date => new Date(date).toLocaleTimeString('ru-RU', { timeZone: 'UTC', hour12: false, timeZoneName: 'short' });
 const count = value => Number(value).toLocaleString('ru-RU');
 function element(tag, text, className) {
   const node = document.createElement(tag);
