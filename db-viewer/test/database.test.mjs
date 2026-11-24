@@ -24,17 +24,19 @@ test('observer sends committed INSERT/UPDATE/DELETE/TRUNCATE; rollback is silent
     try {
       await writer.connect(); await listener.connect();
       await writer.query('CREATE TABLE IF NOT EXISTS viewer_test_record (id bigint PRIMARY KEY, note text)');
+      await writer.query('ALTER TABLE viewer_test_record ADD COLUMN IF NOT EXISTS occurred_at timestamptz');
       await writer.query('TRUNCATE viewer_test_record');
       await installObserver(writer); await installObserver(writer);
       await listener.query(`LISTEN ${CHANNEL}`);
       await writer.query('BEGIN');
-      await writer.query("INSERT INTO viewer_test_record VALUES (9007199254740993, 'new row')");
+      await writer.query("INSERT INTO viewer_test_record (id, note, occurred_at) VALUES (9007199254740993, 'new row', '2026-11-29 21:00:00.123456+00')");
       await new Promise(resolve => setTimeout(resolve, 100));
       assert.equal(events.length, 0, 'Uncommitted changes must not be delivered');
       await writer.query('COMMIT'); await until(() => events.length === 1);
       assert.equal(events[0].operation, 'INSERT');
       const page = await tablePage(new URLSearchParams({ name: 'viewer_test_record' }));
       assert.equal(page.rows[0].id, '9007199254740993', 'BIGINT must retain precision');
+      assert.equal(page.rows[0].occurred_at, '2026-11-30 00:00:00.123456+03');
       await writer.query("UPDATE viewer_test_record SET note='updated'"); await until(() => events.length === 2);
       assert.equal(events[1].operation, 'UPDATE');
       await writer.query('BEGIN'); await writer.query('DELETE FROM viewer_test_record'); await writer.query('ROLLBACK');
