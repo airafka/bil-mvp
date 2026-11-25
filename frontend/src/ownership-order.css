@@ -12,9 +12,10 @@
 .ownership-status-scheduled { color: #175cd3; background: #eff8ff; }
 .ownership-status-field { min-height: 40px; display: flex; align-items: center; }
 .ownership-registry-table { min-width: 980px; }
-.ownership-container-table { min-width: 760px; }
-.ownership-visit-period + .ownership-visit-period { margin-top: 8px; }
-.ownership-visit-period :is(time, a) { white-space: nowrap; }
+.app-shell .ownership-container-table th[scope="rowgroup"] { background: inherit; vertical-align: top; }
+.ownership-container-controls { display: flex; align-items: center; gap: 8px; }
+.ownership-container-controls .link-button { white-space: nowrap; }
+.ownership-container-controls .row-actions-button { margin: 0; flex-shrink: 0; }
 @media (max-width: 760px) {
   .ownership-tabs-toolbar { flex-wrap: wrap; }
   .ownership-page .ownership-comment { grid-template-columns: 1fr; }

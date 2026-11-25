@@ -241,12 +241,15 @@ export function OwnershipOrderViewPage() {
   </section>
 }
 
-function VisitPeriodCell({ periods }: { periods: OwnershipVisitPeriod[] }) {
-  return <td>{periods.length ? periods.map(period => <div className="ownership-visit-period" key={period.orderId}>
-    <time dateTime={period.occurredAt}>{businessDateLabel(period.date)}</time>{' · '}
-    <Link to={historyOrderPath(period)}>№ {period.orderNumber}</Link>
-    <div>{period.ownerName}</div>
-  </div>) : '—'}</td>
+function VisitPeriodCells({ period }: { period?: OwnershipVisitPeriod }) {
+  if (!period) return <><td>—</td><td>—</td><td>—</td></>
+  return <>
+    <td>{period.orderType === 'RECEIVING_ORDER' ? 'Поставка' : 'Смена собственника'}
+      {period.transferStatus === 'PLANNED' && <> <span className="ownership-status ownership-status-scheduled">Запланирована</span></>}
+    </td>
+    <td><Link to={historyOrderPath(period)}>{period.orderNumber}</Link></td>
+    <td><time dateTime={period.occurredAt}>{businessDateLabel(period.date)}</time></td>
+  </>
 }
 
 function OwnershipContainerTable({ rows, loading, selected, busy, onToggle }: { rows: OwnershipContainer[]; loading: boolean; selected?: Set<string>; busy: boolean; onToggle?: (id: string, checked: boolean) => void }) {
@@ -254,16 +257,37 @@ function OwnershipContainerTable({ rows, loading, selected, busy, onToggle }: { 
   const [preview, setPreview] = useState<OwnershipContainer | null>(null)
   function showPreview(row: OwnershipContainer) { setPreview(row); previewDialog.current?.showModal() }
   const selectable = Boolean(onToggle)
-  return <><div className="table-wrap"><table className="ownership-container-table"><thead><tr><th className="registry-index">{selectable ? '' : '№'}</th><th>КТК</th><th>Поставка</th><th>Выполненные передачи</th><th>Запланированные передачи</th><th className="registry-actions" aria-label="Действия" /></tr></thead><tbody>
-        {selectable && loading && <tr><td colSpan={6}>Загружаем доступные КТК…</td></tr>}{rows.length === 0 && (!loading) && <tr><td colSpan={6}>{selectable ? 'Доступных КТК не найдено' : 'КТК не выбраны'}</td></tr>}
-        {rows.map((row, index) => <tr key={row.containerId}><td className="registry-index">{selectable ? <UiInput aria-label={'Выбрать КТК ' + row.containerName} type="checkbox" disabled={busy} checked={selected?.has(row.containerOwnerId)} onChange={e => onToggle?.(row.containerOwnerId, e.target.checked)} /> : index + 1}</td><td><button type="button" className="link-button" onClick={() => showPreview(row)}>{row.containerName}</button>{!selectable && row.resultStatus && row.resultStatus !== 'DRAFT' && <div>{resultLabels[row.resultStatus] ?? row.resultStatus}{row.resultReason && <p>{row.resultReason}</p>}</div>}</td>
-          <VisitPeriodCell periods={row.visitPeriods.filter(period => period.orderType === 'RECEIVING_ORDER')} />
-          <VisitPeriodCell periods={row.visitPeriods.filter(period => period.transferStatus === 'APPLIED')} />
-          <VisitPeriodCell periods={row.visitPeriods.filter(period => period.transferStatus === 'PLANNED')} />
-          <td className="registry-actions"><RowActions label={'Действия с КТК ' + row.containerName} actions={[{ label: 'Предпросмотр', onClick: () => showPreview(row) }, { label: 'История собственников', to: '/container-owners/' + row.containerId + '/history' }]} /></td></tr>)}
-      </tbody></table></div>
+  return <><div className="table-wrap"><table className="ownership-container-table">
+    <thead><tr>
+      <th scope="col" style={{ width: 200 }}>КТК</th><th scope="col" style={{ width: 190 }}>Тип заявки</th>
+      <th scope="col">Номер заявки</th><th scope="col">Дата события, МСК</th>
+    </tr></thead>
+    {!rows.length && <tbody><tr><td colSpan={4}>
+      {loading ? 'Загружаем доступные КТК…' : selectable ? 'Доступных КТК не найдено' : 'КТК не выбраны'}
+    </td></tr></tbody>}
+    {rows.map(row => <tbody key={row.containerId}>
+      <tr>
+        <th scope="rowgroup" rowSpan={Math.max(1, row.visitPeriods.length)}>
+          <div className="ownership-container-controls">
+            {onToggle && <UiInput type="checkbox" aria-label={'Выбрать КТК ' + row.containerName} disabled={busy}
+              checked={selected?.has(row.containerOwnerId)} onChange={e => onToggle(row.containerOwnerId, e.target.checked)} />}
+            <button type="button" className="link-button" onClick={() => showPreview(row)}>{row.containerName}</button>
+            <RowActions label={'Действия с КТК ' + row.containerName} actions={[
+              { label: 'Предпросмотр', onClick: () => showPreview(row) },
+              { label: 'История собственников', to: '/container-owners/' + row.containerId + '/history' },
+            ]} />
+          </div>
+        </th>
+        <VisitPeriodCells period={row.visitPeriods[0]} />
+      </tr>
+      {row.visitPeriods.slice(1).map(period => <tr key={period.orderId}><VisitPeriodCells period={period} /></tr>)}
+    </tbody>)}
+  </table></div>
     <dialog ref={previewDialog} className="ownership-preview" aria-labelledby="ownership-preview-title">
       <div className="page-header"><h2 id="ownership-preview-title">КТК {preview?.containerName}</h2><button type="button" className="close-button" aria-label="Закрыть предпросмотр" onClick={() => previewDialog.current?.close()}><ActionIcon name="close" /></button></div>
-      {preview && <dl className="details-grid"><div><dt>Номер КТК</dt><dd>{preview.containerName}</dd></div><div><dt>Тип</dt><dd>{containerTypeLabel(preview.containerType as Parameters<typeof containerTypeLabel>[0])}</dd></div><div><dt>{selectable ? 'Собственник на дату передачи' : 'Текущий собственник'}</dt><dd>{preview.clientName || '—'}</dd></div><div><dt>Состояние</dt><dd><ContainerStatusBadge status={preview.status} /></dd></div></dl>}
+      {preview && <dl className="details-grid"><div><dt>Номер КТК</dt><dd>{preview.containerName}</dd></div><div><dt>Тип</dt><dd>{containerTypeLabel(preview.containerType as Parameters<typeof containerTypeLabel>[0])}</dd></div><div><dt>{selectable ? 'Собственник на дату передачи' : 'Текущий собственник'}</dt><dd>{preview.clientName || '—'}</dd></div><div><dt>Состояние</dt><dd><ContainerStatusBadge status={preview.status} /></dd></div>
+        {!selectable && preview.resultStatus && preview.resultStatus !== 'DRAFT' && <div><dt>Результат передачи</dt>
+          <dd>{resultLabels[preview.resultStatus] ?? preview.resultStatus}{preview.resultReason && <p>{preview.resultReason}</p>}</dd></div>}
+      </dl>}
     </dialog></>
 }
