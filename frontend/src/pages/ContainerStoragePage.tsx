@@ -62,21 +62,21 @@ function StorageFilterForm({ initial, containers, onApply, onReset }: {
     onApply({ query: draft.query, month: mode === 'month' ? draft.month : '',
       storedFrom: mode === 'range' ? draft.storedFrom : '', storedTo: mode === 'range' ? draft.storedTo : '' })
   }}>
-    <label className="field"><span>Номер КТК</span><UiSelect value={draft.query} onChange={e => change('query', e.target.value)}>
+    <label className="field">Номер КТК<UiSelect value={draft.query} onChange={e => change('query', e.target.value)}>
       <option value="">Все КТК</option>
       {draft.query && !containers.some(item => item.name === draft.query) && <option>{draft.query}</option>}
       {containers.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
     </UiSelect></label>
-    <label className="field"><span>Период</span><UiSelect value={mode} onChange={e => setMode(e.target.value)}>
+    <label className="field">Период<UiSelect value={mode} onChange={e => setMode(e.target.value)}>
       <option value="all">За всё время</option><option value="month">Месяц</option><option value="range">Диапазон дат</option>
     </UiSelect></label>
-    {mode === 'month' && <label className="field"><span>Месяц хранения</span>
+    {mode === 'month' && <label className="field">Месяц хранения
       <UiInput type="month" required min="0001-01" max="9999-12" value={draft.month} onChange={e => change('month', e.target.value)} />
     </label>}
     {mode === 'range' && <>
-      <label className="field"><span>С даты</span><UiInput type="date" required value={draft.storedFrom}
+      <label className="field">С даты<UiInput type="date" required value={draft.storedFrom}
         max={draft.storedTo || '9999-12-31'} onChange={e => change('storedFrom', e.target.value)} /></label>
-      <label className="field"><span>По дату</span><UiInput type="date" required value={draft.storedTo}
+      <label className="field">По дату<UiInput type="date" required value={draft.storedTo}
         min={draft.storedFrom || '0001-01-01'} max="9999-12-31" onChange={e => change('storedTo', e.target.value)} /></label>
     </>}
     <div className="storage-actions"><button type="submit" className="primary-button">Сформировать</button>
