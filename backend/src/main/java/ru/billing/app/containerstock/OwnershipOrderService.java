@@ -43,7 +43,7 @@ public class OwnershipOrderService {
         }
     }
     public record Selection(UUID id,UUID containerOwnerId) {}
-    public record VisitPeriod(LocalDate date, UUID orderId, String orderType, long orderNumber, String ownerName, String transferStatus) {}
+    public record VisitPeriod(LocalDate date, OffsetDateTime occurredAt, UUID orderId, String orderType, long orderNumber, String ownerName, String transferStatus) {}
     public record Link(UUID id,UUID containerOwnerId,UUID containerId,String containerName,String containerType,
             UUID clientId,String clientName,String status,UUID containerVisitId,UUID expectedClientId,String resultStatus,String resultReason,List<VisitPeriod> visitPeriods) {}
     public record Header(UUID id,long number,UUID clientId,String clientName,String service,String comment,
@@ -157,7 +157,7 @@ public class OwnershipOrderService {
         if (periodsByVisit.isEmpty()) return rows;
 
         jdbc.query("""
-            select p.container_visit_id, (h.occurred_at at time zone 'Europe/Moscow')::date as effective_date,
+            select p.container_visit_id, h.occurred_at, (h.occurred_at at time zone 'Europe/Moscow')::date as effective_date,
                    h.order_id, h.order_type, coalesce(r.number, s.number) as order_number,
                    owner.name as owner_name, transfer.result_status
             from active_container_period p
@@ -171,8 +171,9 @@ public class OwnershipOrderService {
               and (h.id=v.receiving_container_owner_history_id or transfer.result_status in ('PLANNED','APPLIED'))
             order by p.container_visit_id,h.occurred_at,h.created_at,h.id
             """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
-                var period = new VisitPeriod(rs.getObject("effective_date", LocalDate.class), rs.getObject("order_id", UUID.class),
-                        rs.getString("order_type"), rs.getLong("order_number"), rs.getString("owner_name"), rs.getString("result_status"));
+                var period = new VisitPeriod(rs.getObject("effective_date", LocalDate.class), rs.getObject("occurred_at", OffsetDateTime.class),
+                        rs.getObject("order_id", UUID.class), rs.getString("order_type"), rs.getLong("order_number"),
+                        rs.getString("owner_name"), rs.getString("result_status"));
                 periodsByVisit.get(rs.getObject("container_visit_id", UUID.class)).add(period);
             }, (Object) periodsByVisit.keySet().toArray(UUID[]::new));
         return rows;

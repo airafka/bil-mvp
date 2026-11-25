@@ -243,7 +243,7 @@ export function OwnershipOrderViewPage() {
 
 function VisitPeriodCell({ periods }: { periods: OwnershipVisitPeriod[] }) {
   return <td>{periods.length ? periods.map(period => <div className="ownership-visit-period" key={period.orderId}>
-    <time dateTime={period.date}>{businessDateLabel(period.date)}</time>{' · '}
+    <time dateTime={period.occurredAt}>{businessDateLabel(period.date)}</time>{' · '}
     <Link to={historyOrderPath(period)}>№ {period.orderNumber}</Link>
     <div>{period.ownerName}</div>
   </div>) : '—'}</td>

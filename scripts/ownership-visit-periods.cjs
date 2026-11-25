@@ -18,6 +18,14 @@ async function main() {
         assert.equal(row.containerId, containerId);
         assert.deepEqual(row.visitPeriods.map(p => [p.date, p.orderId, p.transferStatus || p.orderType]), expected);
         assert.ok(row.visitPeriods.every(p => p.orderNumber > 0 && p.ownerName));
+        const expectedTimes = JSON.parse(sql(`select json_object_agg(h.order_id, to_char(h.occurred_at at time zone 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) from active_container_period p
+            join container_owner_history h on h.id=p.start_container_owner_history_id
+            where p.container_visit_id='${row.containerVisitId}'`));
+        for (const period of row.visitPeriods) {
+            const [seconds, fraction = ''] = period.occurredAt.replace(/Z$/, '').split('.');
+            assert.equal(seconds + '.' + fraction.padEnd(6, '0') + 'Z', expectedTimes[period.orderId]);
+        }
     }
     const receipt = ['2026-09-15', first.receiving, 'RECEIVING_ORDER'];
     assert.deepEqual(await candidates('2026-09-14', x.a, x.b), []);
