@@ -125,17 +125,52 @@ public class ContainerStorageController {
     public record Visit(UUID id,UUID containerId,String containerName,OffsetDateTime receivingAt,OffsetDateTime shippingAt,
         UUID receivingOrderId,Long receivingOrderNumber,UUID shippingOrderId,Long shippingOrderNumber,
         long storageDays,List<Row> periods) {}
+    public record StayPeriod(YearMonth month, LocalDate storedFrom, LocalDate storedTo) {
+        boolean specified() { return month!=null || storedFrom!=null || storedTo!=null; }
+
+        Filter visits(String query, UUID periodId, LocalDate asOf) {
+            if (month!=null && (storedFrom!=null || storedTo!=null))
+                throw bad("Выберите месяц или диапазон дат");
+            LocalDate from=month==null ? storedFrom : month.atDay(1);
+            LocalDate to=month==null ? storedTo : month.atEndOfMonth();
+            if (from!=null && to!=null && from.isAfter(to))
+                throw bad("Дата начала позже даты окончания");
+
+            var args=new ArrayList<Object>();
+            String sql=" from container_visit_facts v join container c on c.id=v.container_id"
+                +" where not v.is_cancelled and v.receiving_date<=?";
+            args.add(to==null || to.isAfter(asOf) ? asOf : to);
+            if (from!=null) {
+                // PostgreSQL LEAST uses asOf for an open visit and caps a later departure at asOf.
+                sql+=" and least(v.shipping_date,?::date)>=?";
+                args.add(asOf);
+                args.add(from);
+            }
+            if (!query.isBlank()) {
+                sql+=" and position(lower(?) in lower(c.code))>0";
+                args.add(query.trim());
+            }
+            if (periodId!=null) {
+                sql+=" and exists(select 1 from active_container_period ap"
+                    +" join container_owner_history h on h.id=ap.start_container_owner_history_id"
+                    +" where ap.container_visit_id=v.id and ap.id=?"
+                    +" and (h.occurred_at at time zone 'Europe/Moscow')::date<=?)";
+                args.add(periodId);
+                args.add(asOf);
+            }
+            return new Filter(sql,args);
+        }
+    }
     @GetMapping("/visits")
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public PagedResponse<Visit> visits(@RequestParam(defaultValue="")String query,@RequestParam(required=false)UUID periodId,
-            @RequestParam(required=false)LocalDate asOf,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="20")int size) {
+            @ModelAttribute StayPeriod stay,@RequestParam(required=false)LocalDate asOf,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="20")int size) {
         var reportDate=date(asOf);
-        var f=filter(query,"ACTIVE",null,periodId,null,null,reportDate);
+        var f=stay.visits(query,periodId,reportDate);
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
-        String visitsFrom=FROM+" join container_period op on op.id=p.id join container_visit_facts v on v.id=op.container_visit_id ";
-        long count=jdbc.queryForObject("select count(distinct v.id) "+visitsFrom+f.sql(),Long.class,f.args().toArray());
+        long count=jdbc.queryForObject("select count(*)"+f.sql(),Long.class,f.args().toArray());
         var args=new ArrayList<>(f.args());args.add(size);args.add((long)page*size);
-        var ids=jdbc.query("select v.id "+visitsFrom+f.sql()+" group by v.id,v.receiving_date order by v.receiving_date desc,v.id limit ? offset ?",
+        var ids=jdbc.query("select v.id"+f.sql()+" order by v.receiving_date desc,v.id limit ? offset ?",
             (rs,n)->rs.getObject(1,UUID.class),args.toArray());
         if(ids.isEmpty())return PagedResponse.of(List.of(),page,size,count);
         // Page complete visits first, then load every visible ownership period for those visits.
@@ -160,16 +195,25 @@ public class ContainerStorageController {
     public List<ContainerOption> containers() {
         return jdbc.query("""
             select c.id,c.code from container c
-            where exists(select 1 from container_storage_period p where p.container_id=c.id and p.status in ('OPEN','CLOSED'))
+            where exists(select 1 from container_visit_facts v where v.container_id=c.id and not v.is_cancelled
+                         and v.receiving_date<=billing_today())
             order by c.code,c.id
             """, (rs,n)->new ContainerOption(rs.getObject(1,UUID.class),rs.getString(2)));
     }
     @GetMapping(value="/export",produces="text/csv")
     public ResponseEntity<byte[]> export(@RequestParam(defaultValue="")String query,@RequestParam(defaultValue="ACTIVE")String status,
             @RequestParam(required=false)UUID clientId,@RequestParam(required=false)UUID periodId,@RequestParam(required=false)LocalDate arrivalFrom,
-            @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf) {
+            @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf,
+            @ModelAttribute StayPeriod stay,@RequestParam(required=false)UUID visitPeriodId) {
         var reportDate=date(asOf);
         var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,reportDate);
+        if (stay.specified() || visitPeriodId!=null) {
+            var visits=stay.visits("",visitPeriodId,reportDate);
+            var args=new ArrayList<>(f.args());
+            args.addAll(visits.args());
+            f=new Filter(f.sql()+" and p.id in (select op.id from container_period op"
+                +" where op.container_visit_id in (select v.id"+visits.sql()+"))",args);
+        }
         var out=new StringBuilder("\uFEFF");
         csv(out,"Номер КТК","Собственник КТК","Дней хранения","Начало периода","Событие","Заявка",
             "Конец периода","Событие","Заявка","Клиент/Собственник поставки","Транспорт поставки",

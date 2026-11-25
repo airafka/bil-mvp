@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { request } from '../http'
 import type { PagedResponse, ReferenceOption } from '../domain'
-import { UiSelect } from '../components/FormControls'
+import { UiInput, UiSelect } from '../components/FormControls'
 import { TableReveal } from '../components/TableReveal'
 import { storageBoundaryLabel, storageDate, storageClientOwner, storageTransport, type StorageVisit } from '../containerStorage'
 import './ContainerStoragePage.css'
@@ -46,31 +46,88 @@ export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows
   </table>
 }
 
+type StorageFilters = { query: string; month: string; storedFrom: string; storedTo: string }
+const emptyFilters: StorageFilters = { query: '', month: '', storedFrom: '', storedTo: '' }
+
+function StorageFilterForm({ initial, containers, onApply, onReset }: {
+  initial: StorageFilters; containers: ReferenceOption[]; onApply: (filters: StorageFilters) => void; onReset: () => void
+}) {
+  const [draft, setDraft] = useState(initial)
+  const [mode, setMode] = useState(initial.month ? 'month' : initial.storedFrom || initial.storedTo ? 'range' : 'all')
+  function change(field: keyof StorageFilters, value: string) {
+    setDraft(current => ({ ...current, [field]: value }))
+  }
+  return <form className="storage-filters" aria-label="Фильтры хранения" onSubmit={event => {
+    event.preventDefault()
+    onApply({ query: draft.query, month: mode === 'month' ? draft.month : '',
+      storedFrom: mode === 'range' ? draft.storedFrom : '', storedTo: mode === 'range' ? draft.storedTo : '' })
+  }}>
+    <label className="field"><span>Номер КТК</span><UiSelect value={draft.query} onChange={e => change('query', e.target.value)}>
+      <option value="">Все КТК</option>
+      {draft.query && !containers.some(item => item.name === draft.query) && <option>{draft.query}</option>}
+      {containers.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+    </UiSelect></label>
+    <label className="field"><span>Период</span><UiSelect value={mode} onChange={e => setMode(e.target.value)}>
+      <option value="all">За всё время</option><option value="month">Месяц</option><option value="range">Диапазон дат</option>
+    </UiSelect></label>
+    {mode === 'month' && <label className="field"><span>Месяц хранения</span>
+      <UiInput type="month" required min="0001-01" max="9999-12" value={draft.month} onChange={e => change('month', e.target.value)} />
+    </label>}
+    {mode === 'range' && <>
+      <label className="field"><span>С даты</span><UiInput type="date" required value={draft.storedFrom}
+        max={draft.storedTo || '9999-12-31'} onChange={e => change('storedFrom', e.target.value)} /></label>
+      <label className="field"><span>По дату</span><UiInput type="date" required value={draft.storedTo}
+        min={draft.storedFrom || '0001-01-01'} max="9999-12-31" onChange={e => change('storedTo', e.target.value)} /></label>
+    </>}
+    <div className="storage-actions"><button type="submit" className="primary-button">Сформировать</button>
+      <button type="button" className="secondary-button" onClick={() => {
+        setDraft(emptyFilters); setMode('all'); onReset()
+      }}>Сбросить</button></div>
+  </form>
+}
+
 export default function ContainerStoragePage() {
   const { clock } = useApplicationClock()
   const [params, setParams] = useSearchParams()
-  const query = params.get('query') || ''
-  const page = Math.max(0, Number(params.get('page')) || 0)
-  const [draftSearch, setDraftSearch] = useState({ query, value: query })
-  const search = draftSearch.query === query ? draftSearch.value : query
   const [attempt, setAttempt] = useState(0)
+  const [optionsAttempt, setOptionsAttempt] = useState(0)
+  const [containers, setContainers] = useState<ReferenceOption[]>([])
+  const [optionsError, setOptionsError] = useState(false)
+  const periodId = params.get('periodId') || ''
+  const initial = { query: params.get('query') || '', month: params.get('month') || '',
+    storedFrom: params.get('storedFrom') || '', storedTo: params.get('storedTo') || '' }
+  const applied = new URLSearchParams()
+  for (const [name, value] of Object.entries(initial)) if (value) applied.set(name, value)
+  const generated = params.has('report') || !!periodId || applied.size > 0
+  const page = Math.max(0, Number(params.get('page')) || 0)
   const pageSize = 20
-  const filter = new URLSearchParams({ query, status: params.has('periodId') ? 'ALL' : 'ACTIVE' })
-  if(params.get('periodId')) filter.set('periodId',params.get('periodId')!)
-  const url = '/api/container-periods/visits?' + filter + '&page=' + page + '&size=' + pageSize
+  const exportFilter = new URLSearchParams(applied)
+  if (periodId) { applied.set('periodId', periodId); exportFilter.set('visitPeriodId', periodId) }
+  const url = '/api/container-periods/visits?' + applied + '&page=' + page + '&size=' + pageSize
   const requestKey = url + ':' + attempt + ':' + clock.date + ':' + clock.version
-  const [result, setResult] = useState<{ key: string; data: PagedResponse<StorageVisit>; containers: ReferenceOption[] } | null>(null)
+  const [result, setResult] = useState<{ key: string; data: PagedResponse<StorageVisit> } | null>(null)
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null)
   const error = failure?.key === requestKey ? failure.message : ''
-  const loading = result?.key !== requestKey && !error
-  const data = result?.key === requestKey ? result.data : null
+  const loading = generated && result?.key !== requestKey && !error
+  const data = generated && result?.key === requestKey ? result.data : null
+
   useEffect(() => {
     let active = true
-    Promise.all([request<PagedResponse<StorageVisit>>(url), request<ReferenceOption[]>('/api/container-periods/containers')])
-      .then(([data, containers]) => { if (active) { setResult({ key: requestKey, data, containers }); setFailure(null) } })
-      .catch((cause: unknown) => { if (active) setFailure({ key: requestKey, message: cause instanceof Error ? cause.message : 'Не удалось загрузить хранение' }) })
+    request<ReferenceOption[]>('/api/container-periods/containers')
+      .then(rows => { if (active) { setContainers(rows); setOptionsError(false) } })
+      .catch(() => { if (active) setOptionsError(true) })
     return () => { active = false }
-  }, [url, requestKey])
+  }, [clock.date, clock.version, optionsAttempt])
+
+  useEffect(() => {
+    if (!generated) return
+    const controller = new AbortController()
+    request<PagedResponse<StorageVisit>>(url, { signal: controller.signal })
+      .then(data => { if (!controller.signal.aborted) { setResult({ key: requestKey, data }); setFailure(null) } })
+      .catch((cause: unknown) => { if (!controller.signal.aborted) setFailure({ key: requestKey, message: cause instanceof Error ? cause.message : 'Не удалось загрузить хранение' }) })
+    return () => controller.abort()
+  }, [generated, url, requestKey])
+
   useEffect(() => {
     if (!data || page < Math.max(1, data.totalPages)) return
     setParams(current => {
@@ -79,29 +136,32 @@ export default function ContainerStoragePage() {
       return next
     }, { replace: true })
   }, [data, page, setParams])
-  function change(name: string, value: string) {
-    const next = new URLSearchParams(params); if (value) next.set(name, value); else next.delete(name)
-    if (name !== 'page') next.delete('page')
+
+  function apply(filters: StorageFilters) {
+    const next = new URLSearchParams({ report: '1' })
+    for (const [name, value] of Object.entries(filters)) if (value) next.set(name, value)
+    setParams(next)
+    setAttempt(a => a + 1)
+  }
+  function goToPage(value: number) {
+    const next = new URLSearchParams(params)
+    if (value) next.set('page', String(value)); else next.delete('page')
     setParams(next)
   }
-  return <section className="registry-page storage-page">
-    <div className="page-header"><h1>Хранение КТК</h1><div className="storage-actions"><button className="secondary-button" onClick={() => setAttempt(a => a + 1)}>Обновить</button>
-      <a className="secondary-button" href={'/api/container-periods/export?' + filter}>Выгрузить CSV</a></div></div>
-    <form className="storage-filters" onSubmit={e => { e.preventDefault(); change('query', search) }}>
-      <label className="field horizontal-field"><span>Номер КТК</span><UiSelect value={search} disabled={loading || !!error} onChange={e => setDraftSearch({ query, value: e.target.value })}>
-        <option value="">{loading ? 'Загрузка…' : 'Все КТК'}</option>
-        {search && !result?.containers.some(item => item.name === search) && <option value={search}>{search}</option>}
-        {result?.containers.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
-      </UiSelect></label>
-      <button className="secondary-button" type="submit" disabled={loading || !!error}>Найти</button>
-      {params.size > 0 && <button type="button" className="secondary-button" onClick={() => { setParams({}); setDraftSearch({ query: '', value: '' }) }}>Сбросить</button>}
-    </form>
-    {params.has('periodId') && <p>Показан визит с выбранным периодом хранения.</p>}
-    {error && <div role="alert" className="storage-review">{error} <button onClick={() => setAttempt(a => a + 1)}>Повторить</button></div>}
 
-    <TableReveal loading={loading}><div className="table-wrap" data-page-size={pageSize}><StorageVisitsTable key={query + (params.get('periodId') || '')} rows={data?.items || []} selectedPeriodId={params.get('periodId') || undefined} emptyText={error ? 'Данные не загружены' : 'Визиты хранения не найдены'} /></div></TableReveal>
-    <div className="pagination"><span>Всего визитов: {data?.totalElements ?? result?.data.totalElements ?? '—'}</span>
-      <button disabled={loading || page === 0} onClick={() => change('page', String(page - 1))}>Назад</button><span>{page + 1} / {Math.max(1, data?.totalPages ?? result?.data.totalPages ?? 1)}</span>
-      <button disabled={loading || !data || page + 1 >= data.totalPages} onClick={() => change('page', String(page + 1))}>Далее</button></div>
+  return <section className="registry-page storage-page">
+    <div className="page-header"><h1>Хранение КТК</h1>
+      {data && <a className="secondary-button" href={'/api/container-periods/export?' + exportFilter}>Выгрузить CSV</a>}
+    </div>
+    <StorageFilterForm key={String(generated) + applied.toString()} initial={initial} containers={containers} onApply={apply} onReset={() => setParams({})} />
+    {optionsError && <div role="alert" className="storage-review">Не удалось загрузить номера КТК. <button onClick={() => setOptionsAttempt(a => a + 1)}>Повторить</button></div>}
+    {periodId && <p>Показан визит с выбранным периодом хранения.</p>}
+    {generated && <>
+      {error && <div role="alert" className="storage-review">{error} <button onClick={() => setAttempt(a => a + 1)}>Повторить</button></div>}
+      <TableReveal loading={loading}><div className="table-wrap" data-page-size={pageSize}><StorageVisitsTable key={applied.toString()} rows={data?.items || []} selectedPeriodId={periodId || undefined} emptyText={error ? 'Данные не загружены' : 'Визиты хранения не найдены'} /></div></TableReveal>
+      <div className="pagination"><span>Всего визитов: {data?.totalElements ?? '—'}</span>
+        <button disabled={loading || page === 0} onClick={() => goToPage(page - 1)}>Назад</button><span>{page + 1} / {Math.max(1, data?.totalPages ?? 1)}</span>
+        <button disabled={loading || !data || page + 1 >= data.totalPages} onClick={() => goToPage(page + 1)}>Далее</button></div>
+    </>}
   </section>
 }
