@@ -13,18 +13,11 @@
 .ownership-status-field { min-height: 40px; display: flex; align-items: center; }
 .ownership-registry-table { min-width: 980px; }
 .app-shell .ownership-container-table th[scope="rowgroup"] { background: inherit; vertical-align: top; }
-.ownership-container-controls { display: flex; align-items: center; gap: 8px; }
-.ownership-container-controls .link-button { white-space: nowrap; }
-.ownership-container-controls .row-actions-button { margin: 0; flex-shrink: 0; }
+.ownership-container-choice { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 @media (max-width: 760px) {
   .ownership-tabs-toolbar { flex-wrap: wrap; }
   .ownership-page .ownership-comment { grid-template-columns: 1fr; }
 }
-.ownership-preview { width: min(800px, calc(100vw - 48px)); max-height: calc(100vh - 48px); overflow: auto; padding: 24px; border: 1px solid var(--app-border); border-radius: var(--app-radius); color: var(--text); }
-.ownership-preview::backdrop { background: rgb(16 24 40 / 35%); }
-.ownership-preview h2 { margin: 0; font-size: 20px; }
-.ownership-page .link-button { display: inline; padding: 0; margin: 0; border: 0; background: none; color: var(--blue); font: inherit; line-height: 20px; cursor: pointer; }
-.ownership-page .link-button:hover { text-decoration: underline; }
 .ownership-page .ownership-comment { width: 100%; max-width: none; }
 .ownership-page .ownership-comment textarea { width: 100%; max-width: none; }
 .ownership-page .ownership-service-field { grid-column: 1; }
