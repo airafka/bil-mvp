@@ -43,7 +43,7 @@ class OwnershipOrderServiceTest {
         withOrder("DRAFT");
         UUID linkId = UUID.randomUUID();
         var existing = new Link(linkId, UUID.randomUUID(), UUID.randomUUID(), "КТК", "STANDARD_20",
-                previousOwner, "А", "ON_TERMINAL", UUID.randomUUID(), null, "DRAFT", null);
+                previousOwner, "А", "ON_TERMINAL", UUID.randomUUID(), null, "DRAFT", null, List.of());
         when(jdbc.query(contains("from service_order_container_current sc join container c"),
                 ArgumentMatchers.<RowMapper<Link>>any(), eq(orderId)))
                 .thenReturn(List.of(existing)).thenReturn(List.of());

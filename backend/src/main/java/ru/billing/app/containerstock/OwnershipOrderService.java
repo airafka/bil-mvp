@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
 import ru.billing.app.error.ApiException;
@@ -42,8 +43,9 @@ public class OwnershipOrderService {
         }
     }
     public record Selection(UUID id,UUID containerOwnerId) {}
+    public record VisitPeriod(LocalDate date, UUID orderId, String orderType, long orderNumber, String ownerName, String transferStatus) {}
     public record Link(UUID id,UUID containerOwnerId,UUID containerId,String containerName,String containerType,
-            UUID clientId,String clientName,String status,UUID containerVisitId,UUID expectedClientId,String resultStatus,String resultReason) {}
+            UUID clientId,String clientName,String status,UUID containerVisitId,UUID expectedClientId,String resultStatus,String resultReason,List<VisitPeriod> visitPeriods) {}
     public record Header(UUID id,long number,UUID clientId,String clientName,String service,String comment,
             String status,OffsetDateTime completionAt,long containerQuantity,LocalDate effectiveDate,UUID sourceClientId,String sourceClientName,
             String executionError,boolean exportQueued,OffsetDateTime exportSentAt,String exportError,UUID outboundDataId,boolean exportExhausted,boolean isDeferred) {
@@ -133,15 +135,47 @@ public class OwnershipOrderService {
     private List<Selection> asSelections(List<UUID> ownerIds){
         return ownerIds.stream().map(ownerId -> new Selection(null,ownerId)).toList();
     }
-    @Transactional(readOnly=true)public Details details(UUID id){
+    private Header header(UUID id){
         var rows=jdbc.query(HEADER+" where s.id=?",(rs,n)->header(rs),id);
         if(rows.isEmpty())throw ApiException.fromSourceCode(HttpStatus.NOT_FOUND,"SERVICE_ORDER_NOT_FOUND","Заявка не найдена","NotFound");
-        return new Details(rows.getFirst(),links(id));
+        return rows.getFirst();
+    }
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Details details(UUID id){
+        return new Details(header(id),withVisitPeriods(links(id)));
     }
     private Link link(java.sql.ResultSet rs)throws java.sql.SQLException {
         return new Link(rs.getObject("link_id",UUID.class),rs.getObject("owner_id",UUID.class),rs.getObject("container_id",UUID.class),
             rs.getString("container_name"),rs.getString("container_type"),rs.getObject("client_id",UUID.class),rs.getString("client_name"),rs.getString("status"),rs.getObject("container_visit_id",UUID.class),
-            rs.getObject("expected_client_id",UUID.class),rs.getString("result_status"),rs.getString("result_reason"));
+            rs.getObject("expected_client_id",UUID.class),rs.getString("result_status"),rs.getString("result_reason"),new ArrayList<>());
+    }
+    private List<Link> withVisitPeriods(List<Link> rows) {
+        var periodsByVisit = new HashMap<UUID, List<VisitPeriod>>();
+        for (Link row : rows) {
+            if (row.containerVisitId() != null) periodsByVisit.put(row.containerVisitId(), row.visitPeriods());
+        }
+        if (periodsByVisit.isEmpty()) return rows;
+
+        jdbc.query("""
+            select p.container_visit_id, (h.occurred_at at time zone 'Europe/Moscow')::date as effective_date,
+                   h.order_id, h.order_type, coalesce(r.number, s.number) as order_number,
+                   owner.name as owner_name, transfer.result_status
+            from active_container_period p
+            join container_visit v on v.id=p.container_visit_id
+            join container_owner_history h on h.id=p.start_container_owner_history_id
+            join client owner on owner.id=p.client_id
+            left join receiving_order r on h.order_type='RECEIVING_ORDER' and r.id=h.order_id
+            left join service_order s on s.id=p.service_order_id
+            left join service_order_container transfer on transfer.container_period_id=p.id
+            where p.container_visit_id=any (?::uuid[]) and v.cancellation_container_owner_history_id is null
+              and (h.id=v.receiving_container_owner_history_id or transfer.result_status in ('PLANNED','APPLIED'))
+            order by p.container_visit_id,h.occurred_at,h.created_at,h.id
+            """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                var period = new VisitPeriod(rs.getObject("effective_date", LocalDate.class), rs.getObject("order_id", UUID.class),
+                        rs.getString("order_type"), rs.getLong("order_number"), rs.getString("owner_name"), rs.getString("result_status"));
+                periodsByVisit.get(rs.getObject("container_visit_id", UUID.class)).add(period);
+            }, (Object) periodsByVisit.keySet().toArray(UUID[]::new));
+        return rows;
     }
     private List<Link> links(UUID id){
         return jdbc.query("""
@@ -175,11 +209,13 @@ public class OwnershipOrderService {
             throw error(HttpStatus.CONFLICT,"SERVICE_ORDER_HAS_HISTORY","Ранее подтверждённая заявка сохраняется для истории; её можно изменить и подтвердить повторно");
         jdbc.update("delete from service_order_container where service_order_id=?",id);jdbc.update("delete from service_order where id=?",id);
     }
-    @Transactional(readOnly=true)public PagedResponse<Link> available(UUID id,UUID clientId,LocalDate effectiveDate,String query,int page,int size){
-        var h=details(id).order();draft(h);
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PagedResponse<Link> available(UUID id,UUID clientId,LocalDate effectiveDate,String query,int page,int size){
+        var h=header(id);draft(h);
         return candidates(id,clientId==null?h.clientId():clientId,h.sourceClientId(),date(effectiveDate==null?h.effectiveDate():effectiveDate),query,page,size);
     }
-    @Transactional(readOnly=true)public PagedResponse<Link> availableForCreate(UUID clientId,UUID sourceClientId,LocalDate effectiveDate,String query,int page,int size){
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PagedResponse<Link> availableForCreate(UUID clientId,UUID sourceClientId,LocalDate effectiveDate,String query,int page,int size){
         return candidates(null,clientId,sourceClientId,date(effectiveDate),query,page,size);
     }
     private PagedResponse<Link> candidates(UUID id,UUID clientId,UUID sourceClientId,LocalDate effectiveDate,String query,int page,int size){
@@ -196,7 +232,7 @@ public class OwnershipOrderService {
         long count=jdbc.queryForObject("select count(*) "+from,Long.class,args.toArray());
         args.add(size);args.add(page*size);
         var rows=jdbc.query("select sc.id as link_id,o.id as owner_id,o.container_id,c.code as container_name,c.container_type,candidate.previous_client_id as client_id,cl.name as client_name,o.status,candidate.container_visit_id,null::uuid as expected_client_id,null::text as result_status,null::text as result_reason "+from+" order by (sc.id is not null) desc,c.code limit ? offset ?",(rs,n)->link(rs),args.toArray());
-        return PagedResponse.of(rows,page,size,count);
+        return PagedResponse.of(withVisitPeriods(rows),page,size,count);
     }
     record Candidate(UUID visit,UUID previousClient,java.time.OffsetDateTime instant) {}
     /** The caller holds the order and all selected container locks. */

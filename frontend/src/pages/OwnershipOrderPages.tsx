@@ -8,7 +8,7 @@ import { RowActions } from '../components/RowActions'
 import { UiInput, UiSelect, UiTextarea } from '../components/FormControls'
 import { getReferenceOptions, getOwnershipOrders, getOwnershipOrder, createOwnershipOrder, updateOwnershipOrder, getOwnershipAvailable, getOwnershipAvailableForCreate, acceptOwnershipOrder, cancelOwnershipOrder, deleteOwnershipOrder, resendOutboundData } from '../api'
 import { businessDateLabel, shiftBusinessDate, useApplicationClock } from '../applicationClock'
-import type { OwnershipContainer, OwnershipDetails, OwnershipHeader } from '../containerStock'
+import { historyOrderPath, type OwnershipContainer, type OwnershipDetails, type OwnershipHeader, type OwnershipVisitPeriod } from '../containerStock'
 import { containerTypeLabel, type PagedResponse, type ReferenceOption } from '../domain'
 import { ContainerStatusBadge } from '../components/ContainerStatusBadge'
 import '../ownership-order.css'
@@ -241,14 +241,26 @@ export function OwnershipOrderViewPage() {
   </section>
 }
 
+function VisitPeriodCell({ periods }: { periods: OwnershipVisitPeriod[] }) {
+  return <td>{periods.length ? periods.map(period => <div className="ownership-visit-period" key={period.orderId}>
+    <time dateTime={period.date}>{businessDateLabel(period.date)}</time>{' · '}
+    <Link to={historyOrderPath(period)}>№ {period.orderNumber}</Link>
+    <div>{period.ownerName}</div>
+  </div>) : '—'}</td>
+}
+
 function OwnershipContainerTable({ rows, loading, selected, busy, onToggle }: { rows: OwnershipContainer[]; loading: boolean; selected?: Set<string>; busy: boolean; onToggle?: (id: string, checked: boolean) => void }) {
   const previewDialog = useRef<HTMLDialogElement>(null)
   const [preview, setPreview] = useState<OwnershipContainer | null>(null)
   function showPreview(row: OwnershipContainer) { setPreview(row); previewDialog.current?.showModal() }
   const selectable = Boolean(onToggle)
-  return <><div className="table-wrap"><table className="ownership-container-table"><thead><tr><th className="registry-index">{selectable ? '' : '№'}</th><th>КТК</th><th className="registry-actions" aria-label="Действия" /></tr></thead><tbody>
-        {selectable && loading && <tr><td colSpan={3}>Загружаем доступные КТК…</td></tr>}{rows.length === 0 && (!loading) && <tr><td colSpan={3}>{selectable ? 'Доступных КТК не найдено' : 'КТК не выбраны'}</td></tr>}
-        {rows.map((row, index) => <tr key={row.containerId}><td className="registry-index">{selectable ? <UiInput aria-label={'Выбрать КТК ' + row.containerName} type="checkbox" disabled={busy} checked={selected?.has(row.containerOwnerId)} onChange={e => onToggle?.(row.containerOwnerId, e.target.checked)} /> : index + 1}</td><td><button type="button" className="link-button" onClick={() => showPreview(row)}>{row.containerName}</button>{!selectable && row.resultStatus && row.resultStatus !== 'DRAFT' && <div>{resultLabels[row.resultStatus] ?? row.resultStatus}{row.resultReason && <p>{row.resultReason}</p>}</div>}</td><td className="registry-actions"><RowActions label={'Действия с КТК ' + row.containerName} actions={[{ label: 'Предпросмотр', onClick: () => showPreview(row) }, { label: 'История собственников', to: '/container-owners/' + row.containerId + '/history' }]} /></td></tr>)}
+  return <><div className="table-wrap"><table className="ownership-container-table"><thead><tr><th className="registry-index">{selectable ? '' : '№'}</th><th>КТК</th><th>Поставка</th><th>Выполненные передачи</th><th>Запланированные передачи</th><th className="registry-actions" aria-label="Действия" /></tr></thead><tbody>
+        {selectable && loading && <tr><td colSpan={6}>Загружаем доступные КТК…</td></tr>}{rows.length === 0 && (!loading) && <tr><td colSpan={6}>{selectable ? 'Доступных КТК не найдено' : 'КТК не выбраны'}</td></tr>}
+        {rows.map((row, index) => <tr key={row.containerId}><td className="registry-index">{selectable ? <UiInput aria-label={'Выбрать КТК ' + row.containerName} type="checkbox" disabled={busy} checked={selected?.has(row.containerOwnerId)} onChange={e => onToggle?.(row.containerOwnerId, e.target.checked)} /> : index + 1}</td><td><button type="button" className="link-button" onClick={() => showPreview(row)}>{row.containerName}</button>{!selectable && row.resultStatus && row.resultStatus !== 'DRAFT' && <div>{resultLabels[row.resultStatus] ?? row.resultStatus}{row.resultReason && <p>{row.resultReason}</p>}</div>}</td>
+          <VisitPeriodCell periods={row.visitPeriods.filter(period => period.orderType === 'RECEIVING_ORDER')} />
+          <VisitPeriodCell periods={row.visitPeriods.filter(period => period.transferStatus === 'APPLIED')} />
+          <VisitPeriodCell periods={row.visitPeriods.filter(period => period.transferStatus === 'PLANNED')} />
+          <td className="registry-actions"><RowActions label={'Действия с КТК ' + row.containerName} actions={[{ label: 'Предпросмотр', onClick: () => showPreview(row) }, { label: 'История собственников', to: '/container-owners/' + row.containerId + '/history' }]} /></td></tr>)}
       </tbody></table></div>
     <dialog ref={previewDialog} className="ownership-preview" aria-labelledby="ownership-preview-title">
       <div className="page-header"><h2 id="ownership-preview-title">КТК {preview?.containerName}</h2><button type="button" className="close-button" aria-label="Закрыть предпросмотр" onClick={() => previewDialog.current?.close()}><ActionIcon name="close" /></button></div>
