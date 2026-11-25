@@ -1,5 +1,11 @@
 package ru.billing.app.order;
 
+import ru.billing.app.reference.EntityReference;
+
+import tools.jackson.databind.annotation.JsonDeserialize;
+
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -7,18 +13,18 @@ import jakarta.validation.constraints.NotNull;
 
 public record OrderContainerRequest(
         @NotNull(message = "КТК обязателен")
-        UUID containerId,
+        @JsonAlias("container") @JsonDeserialize(converter = EntityReference.Id.class) UUID containerId,
 
         @NotNull(message = "Признак порожнего КТК обязателен")
         Boolean empty,
 
         @Valid
         CargoRequest cargo,
-        UUID ownerClientId,
+        @JsonAlias({"ownerContainer", "containerOwner"}) @JsonDeserialize(converter = EntityReference.Id.class) UUID ownerClientId,
         @jakarta.validation.constraints.Size(max = 1000, message = "Номера ЗПУ: не более 1000 символов")
         String sealNumbers,
-        UUID sealTypeId,
-        UUID hazardClassId,
+        @JsonAlias("sealType") @JsonDeserialize(converter = EntityReference.Id.class) UUID sealTypeId,
+        @JsonAlias("dangerClass") @JsonDeserialize(converter = EntityReference.Id.class) UUID hazardClassId,
         java.util.List<@Valid CargoRequest> cargoItems
 ) {
     public OrderContainerRequest {

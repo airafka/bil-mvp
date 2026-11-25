@@ -31,7 +31,7 @@ public class ContainerTaskRows {
             join waybill_container wc on wc.waybill_railway_carriage_id=wr.id
             join container c on c.id=wc.container_id
             where w.receiving_order_id=? order by wc.container_id,wc.id
-            """:"select r.id,r.container_id,r.owner_container_id,r.status,c.code from "+table+" r join container c on c.id=r.container_id where r."
+            """:"select r.id,r.container_id,r."+(receiving?"owner_container_id":"container_owner_id")+",r.status,c.code from "+table+" r join container c on c.id=r.container_id where r."
                 +(receiving?"receiving_order_id":"shipping_order_id")+"=? order by r.container_id,r.id";
         var rows=jdbc.query(query,(rs,n)->new Row(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),
             rs.getObject(3,UUID.class),rs.getString(4),table,rs.getString(5)),order);

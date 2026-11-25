@@ -2,6 +2,23 @@
 
 Учёт собственников вынесен в [CONTAINER_STOCK.md](CONTAINER_STOCK.md), развёртывание и схема — в [database/README.md](database/README.md).
 
+## Общие атрибуты dev_back
+
+В таблице приведены имена из моделей и DTO для операций, реализованных в MVP. У поставок, вывозов и рейсов черновик имеет код DRAFT, подтверждение рейса переводит документы в ACCEPTED, завершение — в DONE, отмена — в REJECTED. ON_REVIEW и IN_PROGRESS относятся к другим этапам основной системы. У строки задания TOS завершение по-прежнему имеет код FINISHED. У запланированной передачи собственника MVP использует SCHEDULED и допускает отмену в CANCELLED.
+
+| Объект | Данные PostgreSQL | Поля API |
+| --- | --- | --- |
+| Поставка и вывоз | number, order_status, plan_receiving_date_time, planned_shipping_date_time | number, orderStatus, planReceivingDateTime у поставки и plannedShippingDateTime у вывоза. Реестры принимают фильтр orderStatus. |
+| Стороны и документы | receiving_order.shipper_id и waybill, shipping_order.consignee_id | shipper и consignee содержат id и name. Запись принимает ссылку с id. Прежнее текстовое имя получателя доступно как consigneeName. Номер транспортной накладной поставки — waybill. |
+| Рейс | number, data_time и ссылки на перевозчика, водителя и ТС | number, dataTime, clientRelatedEntity, clientDriver, clientVehicle, terminalArea, receivingOrders, shippingOrders |
+| КТК и вагон | container.code, container_type, weight, lifting_capacity; railway_carriage.type_id, model_id, date_depot_repair | Для КТК — code, containerType, weight, liftingCapacity. Для вагона — code, type, model, liftingCapacity, dateDepotRepair. |
+| Собственник и история | container_owner.client_id, container_id, receiving_order_id, shipping_order_id; container_owner_history.old_client_id и new_client_id | client, container, receivingOrder, shippingOrder, oldClient, newClient |
+| Передача КТК | service_order.old_client_owner_id, new_client_owner_id, transferred_at | oldClientOwner, newClientOwner, transferredAt, quantity и typeEquipment. Количество вычисляется по составу заявки. |
+| Состав заявок | receiving_order_container.owner_container_id, shipping_order_container.container_owner_id, danger_class_id, seal_type_id и wight_net в строке груза | ownerContainer у поставки, containerOwner у вывоза, dangerClass, sealType, etsngCode, wightNet. Написание wightNet следует исходной модели. |
+| Накладная | waybill.waybill_created_at, waybill_container.owner, owner_container_id, weight, net_weight, waybill_zpu | waybillCreatedAt, owner (текст накладной), ownerContainer (клиент строки), containerType, grossWeight, tareWeight, netWeight, liftingCapacity, zpuNumbers и zpuType |
+| Справочники | client.name, contract.client_id, danger_product.danger_class_id, code у кодовых справочников, водителей и машин | name у клиента, client у договора, dangerClass у опасного груза, code у кодовых записей |
+| Журнал TOS | inbound_event.terminal_area, action_codes и status_details | Входной пакет Datareon передаёт site. Журнал сохраняет исходный site, код найденной площадки и список назначенных действий. |
+
 ## Рабочая дата и время
 
 [ApplicationClockController](backend/src/main/java/ru/billing/app/system/ApplicationClockController.java) предоставляет GET/PUT /api/application-clock. Настройка одна на БД: дата либо NULL (системный режим), версия для защиты от одновременного изменения. PUT принимает date и version; конфликт возвращает 409. Дата хранится в application_clock, диапазон лет 1–9999.
@@ -82,17 +99,17 @@
 
 ## Статусы и выполнение
 
-Транспортные заявки: DRAFT → CONFIRMED → COMPLETED; из каждого состояния разрешена отмена в CANCELLED при выполнении проверок остатков и зависимостей.
+Транспортные заявки: DRAFT → ACCEPTED → DONE; из каждого состояния разрешена отмена в REJECTED при выполнении проверок остатков и зависимостей.
 
 Подтверждение выполняется **через рейс**. Нужна хотя бы одна связанная заявка; все заявки должны быть черновиками. Проверяются дата/время, отправитель у поставки или получатель у вывоза. Реквизиты логистики проверяются при создании/редактировании рейса. Пакет подтверждается транзакционно. Складское резервирование выполняется в той же операции.
 
 Подтверждение поставки фиксирует ожидание в container_owner.receiving_order_id, без создания container_visit или container_period. При `FINISHED` строки КТК событие `ARRIVAL` открывает заезд и первый период хранения. Завершённая строка вывоза даёт событие `DEPARTURE`, которое закрывает этот же заезд. Строки проверяются по заявке события и КТК. После отмены ЖД-поставки освобождённую накладную можно использовать в следующей поставке, а событие исходной приёмки сохраняет ссылку на исходную заявку.
 
-После подтверждения оператор выполняет заявки. В одной транзакции фиксируются складское событие и обновление статусов. Рейс завершается после выполнения всех неотменённых заявок; если отменены все, получает CANCELLED.
+После подтверждения оператор выполняет заявки. В одной транзакции фиксируются складское событие и обновление статусов. Рейс завершается после выполнения всех неотменённых заявок; если отменены все, получает REJECTED.
 
 ## Отмена заявок и рейсов
 
-В карточках транспортных заявок и рейсов доступна отмена без причины. API: POST /api/receiving-orders/{id}/cancellation, /api/shipping-orders/{id}/cancellation, /api/routes/{id}/cancellation; тело — только expectedStatus. GET отмены удалён. Статус CANCELLED сохраняется в самом документе; отдельного архива причины и состава нет. Складские переходы и история — в [CONTAINER_STOCK.md](CONTAINER_STOCK.md).
+В карточках транспортных заявок и рейсов доступна отмена без причины. API: POST /api/receiving-orders/{id}/cancellation, /api/shipping-orders/{id}/cancellation, /api/routes/{id}/cancellation; тело — только expectedStatus. GET отмены удалён. Статус REJECTED сохраняется в самом документе; отдельного архива причины и состава нет. Складские переходы и история — в [CONTAINER_STOCK.md](CONTAINER_STOCK.md).
 
 ## Состав, накладные и массы
 
@@ -114,7 +131,7 @@
 
 ## Реквизиты и ограничения модели
 
-Грузоотправитель и грузополучатель выбираются из справочника client, произвольное имя отклоняется. receiving_order.consignor хранится строкой; shipping_order.consignee_id остаётся ссылкой на client_related_entity. Служебное представление клиента создаёт PartyReferences; оно скрыто из справочника перевозчиков.
+Грузоотправитель и грузополучатель выбираются из справочника client, произвольное имя отклоняется. receiving_order.shipper_id и shipping_order.consignee_id ссылаются на client_related_entity. Служебное представление клиента создаёт PartyReferences; оно скрыто из справочника перевозчиков.
 
 Плановые даты поставки/вывоза передаются как LocalDateTime. Не преобразовывать их повторно как UTC timestamp. Поле contract.valid_from может быть NULL; неизвестную дату показывать прочерком. V28 заполнила существовавшие договоры датой 01.01.2026 по отдельному решению, но не назначает её всем новым договорам.
 

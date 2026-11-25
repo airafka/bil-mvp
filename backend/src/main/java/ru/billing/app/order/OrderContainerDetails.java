@@ -1,5 +1,9 @@
 package ru.billing.app.order;
 
+import ru.billing.app.reference.EntityReference;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.UUID;
 
 public record OrderContainerDetails(
@@ -39,4 +43,22 @@ public record OrderContainerDetails(
     public OrderContainerDetails(UUID containerId, String containerName, boolean empty, OrderCargoDetails cargo) {
         this(containerId, containerName, empty, cargo, null, null, null, null, null, null, null);
     }
+
+    @JsonProperty("container")
+    public EntityReference container() { return EntityReference.coded(containerId, containerName); }
+
+    @JsonProperty("ownerContainer")
+    public EntityReference ownerContainer() { return EntityReference.named(ownerClientId, ownerClientName); }
+
+    @JsonProperty("containerOwner")
+    public EntityReference containerOwner() { return EntityReference.named(ownerClientId, ownerClientName); }
+
+    @JsonProperty("sealType")
+    public EntityReference sealType() { return EntityReference.coded(sealTypeId, sealTypeName); }
+
+    @JsonProperty("dangerClass")
+    public EntityReference dangerClass() { return EntityReference.coded(hazardClassId, hazardClassName); }
+
+    @JsonProperty("status")
+    public String status() { return containerStatus; }
 }

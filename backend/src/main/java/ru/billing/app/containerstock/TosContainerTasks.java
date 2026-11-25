@@ -70,7 +70,7 @@ public class TosContainerTasks {
         stock.requireNoPlannedOwnershipTransfers(List.of(container),
                 "Отмените запланированную передачу действием «Вернуть в черновик» и повторите операцию.");
         jdbc.update("""
-                insert into shipping_order_container(id,shipping_order_id,container_id,owner_container_id,empty,seal_numbers,status,actual_quantity)
+                insert into shipping_order_container(id,shipping_order_id,container_id,container_owner_id,empty,seal_numbers,status,actual_quantity)
                 values(?,?,?,?,true,?,'UPLOADED',?)
                 """,event.taskId(),order,container,state.client(),seals(result),result.qty());
         stock.transition(container,state.client(),"RESERVED_OUT",state.receiving(),order,order,"SHIPPING_ORDER",event.eventDateTime());

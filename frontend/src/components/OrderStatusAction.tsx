@@ -5,7 +5,7 @@ import { statusLabel } from '../domain'
 
 import { OrderCancellationDialog } from './OrderCancellationDialog'
 
-const statuses = ['DRAFT', 'CONFIRMED', 'COMPLETED']
+const statuses = ['DRAFT', 'ACCEPTED', 'DONE']
 export function OrderStatusAction({ apiPath, id, status, onChanged, completionAction }: {
   apiPath: string; id: string; status: string; onChanged: (status: string) => void; completionAction?: ReactNode
 }) {
@@ -24,7 +24,7 @@ export function OrderStatusAction({ apiPath, id, status, onChanged, completionAc
     setError('')
     setMessage('')
     try {
-      const movement = next === 'COMPLETED' && (apiPath === '/api/receiving-orders' || apiPath === '/api/shipping-orders')
+      const movement = next === 'DONE' && (apiPath === '/api/receiving-orders' || apiPath === '/api/shipping-orders')
       const updated = movement ? await finishContainerOrder(apiPath, id) : await changeOrderStatus(apiPath, id, status, next)
       onChanged(updated.status)
       setMessage(`Статус изменён: ${statusLabel(updated.status)}`)
@@ -36,9 +36,9 @@ export function OrderStatusAction({ apiPath, id, status, onChanged, completionAc
     }
   }
   return <div className="order-status-control">
-    {transport && status !== 'CANCELLED' && <button type="button" className="secondary-button" disabled={busy || cancelling} onClick={() => setCancelling(true)}>Отменить заявку</button>}
+    {transport && status !== 'REJECTED' && <button type="button" className="secondary-button" disabled={busy || cancelling} onClick={() => setCancelling(true)}>Отменить заявку</button>}
     {cancelling && <OrderCancellationDialog apiPath={apiPath} id={id} status={status} onChanged={onChanged} onClose={() => setCancelling(false)} />}
-    {next === 'COMPLETED' && completionAction ? completionAction : next && <button type="button" className="primary-button" disabled={busy} onClick={advance}>{busy ? 'Сохраняем…' : next === 'CONFIRMED' ? 'Подтвердить' : 'Выполнить'}</button>}
+    {next === 'DONE' && completionAction ? completionAction : next && <button type="button" className="primary-button" disabled={busy} onClick={advance}>{busy ? 'Сохраняем…' : next === 'ACCEPTED' ? 'Подтвердить' : 'Выполнить'}</button>}
     {error && <Notification kind="error">{error}</Notification>}
     {message && <Notification kind="success">{message}</Notification>}
   </div>

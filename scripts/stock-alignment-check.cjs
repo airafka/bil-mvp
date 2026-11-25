@@ -76,15 +76,15 @@ async function run(name) {
         const clock = await api('/application-clock');
         await api('/application-clock', 'PUT', { date: day(offset), version: clock.version });
     }
-    const common = { clientId: source.id, contractId: contract.id, terminalAreaId: area.id };
+    const common = { client: {id: source.id}, contract: {id: contract.id}, terminalArea: {id: area.id} };
     async function order(kind, offset, composition) {
         return api('/' + kind + '-orders', 'POST', { ...common, transportType: 'VEHICLE',
-            ...(kind === 'receiving' ? { arrivalAt: day(offset) + 'T10:00:00', consignor: source.name, defaultContainerOwnerId: source.id }
-                : { departureAt: day(offset) + 'T12:00:00', consignee: source.name, fillingType: 'ALL' }), ...composition }, 201);
+            ...(kind === 'receiving' ? { planReceivingDateTime: day(offset) + 'T10:00:00', shipper: {id: source.id}, defaultContainerOwner: {id: source.id} }
+                : { plannedShippingDateTime: day(offset) + 'T12:00:00', consignee: {id: source.id}, fillingType: 'ALL' }), ...composition }, 201);
     }
     async function createRoute(kind, orderIds, offset, transportType) {
         const route = await api('/routes', 'POST', { terminalAreaId: area.id, transportType, orderIds,
-            routeType: kind.toUpperCase(), departureAt: day(offset) + 'T10:00:00+03:00', ...(transportType === 'VEHICLE'
+            routeType: kind.toUpperCase(), dataTime: day(offset) + 'T10:00:00+03:00', ...(transportType === 'VEHICLE'
                 ? { carrierId: catalogs[0][0].id, driverId: catalogs[1][0].id, vehicleId: catalogs[2][0].id } : {}) }, 201);
         return '/routes/' + route.route.id;
     }
@@ -95,7 +95,7 @@ async function run(name) {
     const finish = (kind, doc, containerId) => api('/' + kind + '-orders/' + doc.id + '/events', 'POST', {
         eventCode: kind === 'receiving' ? 'UNLOAD_FINISH' : 'LOAD_FINISH', containerId });
     const cancel = (kind, doc, status = 200) => api('/' + kind + '-orders/' + doc.id + '/cancellation', 'POST',
-        { expectedStatus: 'COMPLETED' }, status);
+        { expectedStatus: 'DONE' }, status);
     async function stock(row) {
         const page = await api('/container-owners?query=' + encodeURIComponent(row.containerName));
         const entry = page.items.find(item => item.containerId === row.containerId);
@@ -103,8 +103,8 @@ async function run(name) {
         return entry;
     }
     const periods = async row => (await api('/container-storage-periods?query=' + encodeURIComponent(row.containerName))).items;
-    const transfer = (offset, ownerIds) => api('/service-orders', 'POST', { service: 'CHANGE_OWNER', sourceClientId: source.id,
-        clientId: target.id, effectiveDate: day(offset), containerOwnerIds: ownerIds }, 201);
+    const transfer = (offset, ownerIds) => api('/service-orders', 'POST', { typeEquipment: 'CONTAINER', oldClientOwner: { id: source.id },
+        newClientOwner: { id: target.id }, transferredAt: day(offset), containerOwnerIds: ownerIds }, 201);
 
     async function waitForTransfer(path, ready) {
         const deadline = Date.now() + 75_000;
@@ -135,7 +135,7 @@ async function run(name) {
     const rejected = await confirm('receiving', duplicate, 0, 'VEHICLE', 400);
     const groupedCodes = containers.map(row => row.containerName).sort().join(', ');
     assert.equal(rejected.errorMessage, 'ContainerStatus.ReceivingAlreadyReserved: [' + receiving.code + '; ' + groupedCodes + ']');
-    assert.equal((await api('/receiving-orders/' + duplicate.id)).status, 'DRAFT');
+    assert.equal((await api('/receiving-orders/' + duplicate.id)).orderStatus, 'DRAFT');
     for (const row of containers) assert.equal((await stock(row)).receivingOrderId, receiving.id);
 
     const railReceipt = await api('/receiving-orders/' + receiving.id);
@@ -168,7 +168,7 @@ async function run(name) {
     await send(unload, 'DONE');
     assert.equal(await send({ ...unload, cargoResult: [] }, 'INVALID'), 'TosReceivingResultAction: Required fields are empty');
     await send(unload, 'DONE');
-    assert.equal((await api('/receiving-orders/' + receiving.id)).status, 'CONFIRMED');
+    assert.equal((await api('/receiving-orders/' + receiving.id)).orderStatus, 'ACCEPTED');
     // Transfer one received unit while the other task is still waiting.
     const ownership = await transfer(2, [(await stock(first)).id]);
     const path = '/service-orders/' + ownership.order.id;
@@ -180,14 +180,17 @@ async function run(name) {
     assert.equal(denied.errorCode, 'AccessDenied');
     assert.equal((await stock(first)).clientId, source.id);
     await send(result(second, 1, 'T00:05:00+03:00'), 'DONE');
-    assert.equal((await api('/receiving-orders/' + receiving.id)).status, 'COMPLETED');
+    assert.equal((await api('/receiving-orders/' + receiving.id)).orderStatus, 'DONE');
     assert.equal((await api(path)).order.exportQueued, true);
     await setDay(2);
     // The backend worker runs on the minute. Reading stock does not execute the transfer.
     const executed = await waitForTransfer(path, state => state.order.status === 'DONE');
     assert.equal(executed.order.status, 'DONE', executed.order.executionError);
     assert.equal(executed.order.exportQueued, true);
-    assert.equal((await stock(first)).clientId, target.id);
+    assert.equal((await stock(first)).client.id, target.id);
+    assert.equal(executed.order.newClientOwner.id, target.id);
+    assert.equal(executed.order.oldClientOwner.id, source.id);
+    assert.equal(executed.order.transferredAt, executed.order.effectiveDate);
     assert.equal((await api(path)).order.status, 'DONE');
 
     // The first KTK already changed owner. A pending transfer on the second blocks the whole route.
@@ -218,13 +221,13 @@ async function run(name) {
     assert.deepEqual(await Promise.all(containers.map(stock)), beforeConfirmation);
     assert.equal((await api(holdPath)).order.status, 'SCHEDULED');
     assert.equal((await api(holdPath + '/cancellation', 'POST')).order.status, 'CANCELLED');
-    assert.equal((await api(routePath + '/confirm', 'POST', {})).route.status, 'CONFIRMED');
+    assert.equal((await api(routePath + '/confirm', 'POST', {})).route.status, 'ACCEPTED');
     await api(holdPath + '/containers', 'PUT', [], 403);
     await api(holdPath + '/accept', 'POST', undefined, 409);
     const cancelError = await cancel('receiving', receiving, 400);
     assert.equal(cancelError.errorMessage, 'ContainerStatus.CancelReceivingInShipping: [' + shipping.code + '; ' + groupedCodes + ']');
     await setDay(3);
-    assert.equal((await finish('shipping', shipping)).status, 'COMPLETED');
+    assert.equal((await finish('shipping', shipping)).status, 'DONE');
     const closed = await periods(first);
     assert.deepEqual(closed.map(row => [row.ownerName, row.storageDays]).sort(), [[source.name, 3], [target.name, 2]].sort());
     const onTransfer = new URLSearchParams({ query: first.containerName, storedFrom: day(2), storedTo: day(2) });
@@ -293,7 +296,7 @@ async function run(name) {
     const beforeStorage = await periods(second);
     const blockedLoad = await send(load, 'INVALID');
     assert.ok(blockedLoad.includes(String(loadHold.order.number)) && blockedLoad.includes(second.containerName), blockedLoad);
-    assert.equal((await api('/shipping-orders/' + unnumbered.id)).status, 'CONFIRMED');
+    assert.equal((await api('/shipping-orders/' + unnumbered.id)).status, 'ACCEPTED');
     assert.equal((await api('/shipping-orders/' + unnumbered.id)).containers.length, 0);
     assert.deepEqual(await stock(second), beforeLoad);
     assert.deepEqual(await periods(second), beforeStorage);
@@ -301,7 +304,7 @@ async function run(name) {
     await api(loadHoldPath + '/cancellation', 'POST');
     await send(load, 'DONE');
     await send(load, 'DONE');
-    assert.equal((await api('/shipping-orders/' + unnumbered.id)).status, 'COMPLETED');
+    assert.equal((await api('/shipping-orders/' + unnumbered.id)).status, 'DONE');
     assert.equal((await stock(second)).shippingOrderId, unnumbered.id);
     assert.equal((await candidates('STANDARD_20', source.id, second)).totalElements, 0);
     assert.deepEqual((await periods(second)).map(row => row.storageDays).sort(), [1, 3]);

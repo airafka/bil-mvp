@@ -73,6 +73,7 @@ export type WaybillContainerSummary = Omit<ReceivingContainerAttributes, 'hazard
 }
 
 export type WaybillLink = {
+  waybillCreatedAt?: string | null
   createdAt?: string | null
   shipmentType?: string
   status?: string
@@ -122,6 +123,8 @@ export type GroupedWaybillFilter = {
 }
 
 type OrderHeaderFields = {
+  number?: number
+  orderStatus?: string
   routeId?: string | null
   comment?: string | null
   contractId: string | null
@@ -137,6 +140,8 @@ type OrderHeaderFields = {
 }
 
 export type OrderSummary = OrderHeaderFields & {
+  planReceivingDateTime?: string | null
+  plannedShippingDateTime?: string | null
   plannedAt?: string | null
   routeNumber?: number | null
 }
@@ -235,9 +240,10 @@ export type OrderDetails = OrderHeaderFields & {
   defaultContainerOwnerId?: string | null
   defaultContainerOwnerName?: string | null
   arrivalAt: string | null
+  shipper?: {id: string; name?: string} | null
   consignor: string | null
   departureAt: string | null
-  consignee: string | null
+  consignee: {id: string; name?: string} | null
   containers: OrderContainerDetails[]
   waybills: OrderWaybillDetails[]
   railwayCarriages: ShippingOrderRailwayCarriageDetails[]
@@ -279,7 +285,7 @@ export const orderConfigs: Record<OrderKind, OrderConfig> = {
 }
 
 export function statusLabel(status: string) {
-  return ({ DRAFT: 'Черновик', CANCELLED: 'Отменено', PAID: 'Оплачен', CONFIRMED: 'Подтверждено', COMPLETED: 'Выполнено' } as Record<string, string>)[status] ?? status
+  return ({ DRAFT: 'Черновик', REJECTED: 'Отменено', CANCELLED: 'Отменено', PAID: 'Оплачен', ACCEPTED: 'Подтверждено', DONE: 'Выполнено' } as Record<string, string>)[status] ?? status
 }
 
 export function transportTypeLabel(transportType: TransportType | null) {

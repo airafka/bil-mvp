@@ -30,7 +30,7 @@ class RailwayCarriageStockTest {
         var second = wagon("70000001", shipment);
         returnWagons(List.of(first, second));
 
-        assertThatThrownBy(() -> stock.checkCancellation(true, order, "COMPLETED"))
+        assertThatThrownBy(() -> stock.checkCancellation(true, order, "DONE"))
                 .isInstanceOfSatisfying(ApiException.class, error -> {
                     assertThat(error.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(error.getSourceMessage()).isEqualTo(

@@ -28,11 +28,13 @@ class OrderMetadataStoreTest {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         when(jdbc.queryForObject(anyString(), eq(Integer.class), any(Object[].class))).thenReturn(42);
         when(jdbc.queryForList(contains("select name from client"), eq(String.class), any(Object[].class))).thenAnswer(call -> List.of(call.getArgument(2, String.class)));
+        UUID shipper = UUID.randomUUID();
+        when(jdbc.queryForObject(contains("insert into client_related_entity"), eq(UUID.class), eq("Отправитель"))).thenReturn(shipper);
         CreateOrderRequest request = request();
         new ReceivingOrderStore(jdbc).createVehicle(request.withDefaultContainerOwner(request.clientId()));
-        verify(jdbc).queryForObject(contains("order_status, plan_receiving_date_time, consignor"), eq(Integer.class),
+        verify(jdbc).queryForObject(contains("order_status, plan_receiving_date_time, shipper_id"), eq(Integer.class),
                 any(UUID.class), eq(request.clientId()), eq(request.terminalAreaId()), eq("VEHICLE"),
-                eq(request.contractId()), eq(arrival), eq("Отправитель"), eq(request.clientId()), isNull(), isNull(), isNull(), isNull(), isNull(), isNull());
+                eq(request.contractId()), eq(arrival), eq(shipper), eq(request.clientId()), isNull(), isNull(), isNull(), isNull(), isNull(), isNull());
     }
 
     @Test

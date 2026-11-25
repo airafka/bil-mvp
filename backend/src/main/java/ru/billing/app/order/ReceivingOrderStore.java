@@ -121,7 +121,7 @@ public class ReceivingOrderStore {
         List<OrderSummary> items = jdbcTemplate.query(
                 """
                 select o.id, o.number as code, o.client_id, c.name as client_name,
-                       o.plan_receiving_date_time as planned_at,
+                       o.plan_receiving_date_time, null::timestamp as planned_shipping_date_time,
                        r.number as route_number, o.comment,
                        a.id as area_id, a.code as area_code, a.name as area_name,
                        o.transport_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.route_id
@@ -147,8 +147,8 @@ public class ReceivingOrderStore {
                 select o.id, o.number as code, o.client_id, c.name as client_name,
                        a.id as area_id, a.code as area_code, a.name as area_name,
                        o.transport_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.route_id,
-                       o.plan_receiving_date_time as arrival_at, o.consignor, o.default_container_owner_id, default_owner.name as default_container_owner_name,
-                       o.authorized_representative, o.phone, o.email, o.comment, ct.contract_type, o.created_at, o.transport_waybill_number
+                       o.plan_receiving_date_time as arrival_at, (select name from client_related_entity where id=o.shipper_id) as consignor, o.shipper_id, o.default_container_owner_id, default_owner.name as default_container_owner_name,
+                       o.authorized_representative, o.phone, o.email, o.comment, ct.contract_type, o.created_at, o.waybill as transport_waybill_number
                 from receiving_order o
                 join client c on c.id = o.client_id
                 left join contract ct on ct.id = o.contract_id
@@ -168,7 +168,7 @@ public class ReceivingOrderStore {
                         resultSet.getString("contract_name"),
                         resultSet.getObject("route_id", UUID.class),
                         resultSet.getObject("arrival_at", LocalDateTime.class),
-                        resultSet.getString("consignor"), resultSet.getObject("default_container_owner_id", UUID.class), resultSet.getString("default_container_owner_name"),
+                        resultSet.getObject("shipper_id", UUID.class), resultSet.getString("consignor"), resultSet.getObject("default_container_owner_id", UUID.class), resultSet.getString("default_container_owner_name"),
                         resultSet.getString("authorized_representative"), resultSet.getString("phone"), resultSet.getString("email"), resultSet.getString("comment"), resultSet.getString("contract_type"), resultSet.getObject("created_at", java.time.OffsetDateTime.class), resultSet.getString("transport_waybill_number")
                 ),
                 id
@@ -207,7 +207,7 @@ public class ReceivingOrderStore {
                 OrderContainerDetails.merge(containers), waybills, List.of(), List.of(),
                 header.contractId(), header.contractName(), header.routeId(),
                 header.arrivalAt(), header.consignor(), null, null, header.defaultContainerOwnerId(), header.defaultContainerOwnerName(),
-                header.authorizedRepresentative(), header.phone(), header.email(), header.comment(), header.contractType(), header.createdAt(), header.transportWaybillNumber()
+                header.authorizedRepresentative(), header.phone(), header.email(), header.comment(), header.contractType(), header.createdAt(), header.transportWaybillNumber(), header.partyId(), null
         );
     }
 
@@ -239,7 +239,7 @@ public class ReceivingOrderStore {
             throw new ApiException(HttpStatus.CONFLICT, "CONTAINER_ATTRIBUTES_NOT_EDITABLE", "Реквизиты КТК можно менять только в черновике поставки");
         }
         if(request.metadata()!=null) {
-            jdbcTemplate.update("update receiving_order set plan_receiving_date_time=?, consignor=? where id=?", request.metadata().plannedAt(), ru.billing.app.reference.PartyReferences.clientName(jdbcTemplate, request.metadata().consignor()), id);
+            jdbcTemplate.update("update receiving_order set plan_receiving_date_time=?, shipper_id=? where id=?", request.metadata().plannedAt(), ru.billing.app.reference.PartyReferences.clientParty(jdbcTemplate, request.metadata().shipper(), request.metadata().consignor()), id);
         }
         if (headers.getFirst().get(1).equals("RAILWAY")) {
             if(request.defaultContainerOwnerId()!=null) {
@@ -297,7 +297,7 @@ public class ReceivingOrderStore {
         return jdbcTemplate.queryForObject(
                 "insert into receiving_order "
                         + "(id, client_id, terminal_area_catalog_id, transport_type, contract_id, "
-                        + "order_status, plan_receiving_date_time, consignor, default_container_owner_id, authorized_representative, phone, email, comment, transport_waybill_number, default_railway_carriage_owner_id) "
+                        + "order_status, plan_receiving_date_time, shipper_id, default_container_owner_id, authorized_representative, phone, email, comment, waybill, default_railway_carriage_owner_id) "
                         + "values (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?) returning number",
                 Integer.class,
                 orderId,
@@ -306,7 +306,7 @@ public class ReceivingOrderStore {
                 request.transportType().name(),
                 request.contractId(),
                 request.arrivalAt(),
-                ru.billing.app.reference.PartyReferences.clientName(jdbcTemplate, request.consignor()), request.effectiveDefaultContainerOwnerId(),
+                ru.billing.app.reference.PartyReferences.clientParty(jdbcTemplate, request.shipper(), request.consignor()), request.effectiveDefaultContainerOwnerId(),
                 request.authorizedRepresentative(), request.phone(), request.email(), request.comment(), request.transportWaybillNumber(),
                 request.transportType()==TransportType.RAILWAY ? request.defaultRailwayCarriageOwnerId() : null
         );
@@ -352,9 +352,11 @@ public class ReceivingOrderStore {
         Map<UUID, List<OrderWaybillContainerDetails>> containersByCarriage = new LinkedHashMap<>();
         jdbcTemplate.query(
                 """
-                select wc.waybill_railway_carriage_id, wc.container_id, c.code as container_number, c.container_type as container_type, c.lifting_capacity, wc.weight as gross_weight, c.weight as tare_weight, wc.net_weight as net_weight, p.etsng_code_id, e.code as etsng_name, wc.owner_container_id, wc.owner_container_name,
+                select wc.waybill_railway_carriage_id, wc.container_id, c.code as container_number, c.container_type as container_type, c.lifting_capacity, wc.weight as gross_weight, c.weight as tare_weight, wc.net_weight as net_weight, p.etsng_code_id, e.code as etsng_name, wc.owner_container_id, wc.owner_container_name, wc.owner, task.status as task_status, stock.status as stock_status,
                        wc.seal_numbers, wc.seal_type_id, wc.seal_type_name
                   from waybill_container_details wc
+                  join waybill_container task on task.id=wc.id
+                  left join container_owner_current stock on stock.container_id=wc.container_id
                   join container c on c.id = wc.container_id
                   left join client_related_entity owner on owner.id = wc.owner_container_id
                   left join seal_type st on st.id = wc.seal_type_id
@@ -376,7 +378,7 @@ public class ReceivingOrderStore {
                                 resultSet.getBigDecimal("gross_weight"), resultSet.getBigDecimal("tare_weight"), resultSet.getBigDecimal("net_weight"),
                                 resultSet.getObject("etsng_code_id", UUID.class), resultSet.getString("etsng_name"),
                                 resultSet.getObject("owner_container_id", UUID.class), resultSet.getString("owner_container_name"),
-                                resultSet.getString("seal_numbers"), resultSet.getObject("seal_type_id", UUID.class), resultSet.getString("seal_type_name"), resultSet.getString("container_type"), resultSet.getBigDecimal("lifting_capacity")
+                                resultSet.getString("seal_numbers"), resultSet.getObject("seal_type_id", UUID.class), resultSet.getString("seal_type_name"), resultSet.getString("container_type"), resultSet.getBigDecimal("lifting_capacity"), resultSet.getString("owner"), resultSet.getString("task_status"), resultSet.getString("stock_status")
                         )),
                 orderId
         );
@@ -444,7 +446,7 @@ public class ReceivingOrderStore {
             String contractName,
             UUID routeId,
             LocalDateTime arrivalAt,
-            String consignor, UUID defaultContainerOwnerId, String defaultContainerOwnerName,
+            UUID partyId, String consignor, UUID defaultContainerOwnerId, String defaultContainerOwnerName,
             String authorizedRepresentative, String phone, String email, String comment, String contractType, java.time.OffsetDateTime createdAt, String transportWaybillNumber
     ) {
     }

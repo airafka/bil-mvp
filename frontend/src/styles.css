@@ -454,8 +454,8 @@ tbody tr:hover { background: #fbfcff; }
 .service-loading { padding: 24px; border-radius: 6px; background: #fff; color: #77777d; font-size: 14px; }
 .service-loading div { height: 60px; margin-top: 16px; border-radius: 5px; background: var(--surface-muted); }
 
-.status-badge[data-status="CONFIRMED"] { color: #285fcb; background: #edf3ff; }
-.status-badge[data-status="COMPLETED"] { color: #177859; background: #eaf8f1; }
+.status-badge[data-status="ACCEPTED"] { color: #285fcb; background: #edf3ff; }
+.status-badge[data-status="DONE"] { color: #177859; background: #eaf8f1; }
 .order-status-control { display: flex; align-items: center; gap: 10px; }
 .order-status-control .notice { margin: 0; }
 .view-header-actions { display: flex; align-items: center; gap: 14px; }

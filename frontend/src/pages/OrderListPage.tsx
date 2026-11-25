@@ -101,7 +101,7 @@ export function OrderListPage({ config }: { config: OrderConfig }) {
                   <td className="registry-index">{page * (data?.size ?? 20) + index + 1}</td>
                   <td>
                     <Link className="order-code" to={`${config.listPath}/${order.id}`}>
-                      {order.code}
+                      {order.number ?? order.code}
                     </Link>
                   </td>
                   <td>{order.clientName}</td>
@@ -110,7 +110,7 @@ export function OrderListPage({ config }: { config: OrderConfig }) {
                   <td>{transportTypeLabel(order.transportType)}</td>
                   <td>{order.routeId && order.routeNumber != null ? <Link to={'/routes/' + order.routeId}>{order.routeNumber}</Link> : '—'}</td>
                   <td className="transport-order-comment" title={order.comment || undefined}>{order.comment || '—'}</td>
-                  <td><StatusBadge status={order.status} /></td><td className="registry-actions"><RowActions label={'Действия с заявкой ' + order.code} actions={[{ label: 'Открыть', to: config.listPath + '/' + order.id }]} /></td>
+                  <td><StatusBadge status={order.orderStatus ?? order.status} /></td><td className="registry-actions"><RowActions label={'Действия с заявкой ' + (order.number ?? order.code)} actions={[{ label: 'Открыть', to: config.listPath + '/' + order.id }]} /></td>
                 </RecordRow>
               ))}
             </tbody>

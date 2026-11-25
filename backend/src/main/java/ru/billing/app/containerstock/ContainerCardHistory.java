@@ -1,5 +1,9 @@
 package ru.billing.app.containerstock;
 
+import ru.billing.app.reference.EntityReference;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -29,7 +33,13 @@ public class ContainerCardHistory {
     public record Filter(Long orderNumber, String orderType, UUID oldClientId, UUID newClientId,
                          LocalDate createdFrom, LocalDate createdTo) {}
     public record Entry(UUID id, OffsetDateTime createdAt, OffsetDateTime occurredAt, UUID orderId, Long orderNumber,
-                        String orderType, String oldClientName, String newClientName, String oldStatus, String newStatus) {}
+                        String orderType, UUID oldClientId, UUID newClientId, String oldClientName, String newClientName, String oldStatus, String newStatus) {
+        @JsonProperty("newClient")
+        public EntityReference newClient() { return EntityReference.named(newClientId, newClientName); }
+
+        @JsonProperty("oldClient")
+        public EntityReference oldClient() { return EntityReference.named(oldClientId, oldClientName); }
+    }
     public record Option(String value, String label) {}
     public record Options(List<Option> orderNumber, List<Option> orderType, List<Option> oldClientId, List<Option> newClientId) {}
     public record Card(ContainerReferenceOption container, PagedResponse<Entry> history, Options options) {}
@@ -48,7 +58,7 @@ public class ContainerCardHistory {
                 left join client old on old.id=h.timeline_old_client_id
                 left join client new on new.id=h.new_client_id
                 where h.container_id=:id and ((h.order_type='SERVICE_ORDER' and so.status<>'CANCELLED' and (h.occurred_at at time zone 'Europe/Moscow')::date<=billing_today()) or
-                    (coalesce(r.order_status,s.order_status)='COMPLETED' and h.new_status in ('ON_TERMINAL','DEPARTED')))
+                    (coalesce(r.order_status,s.order_status)='DONE' and h.new_status in ('ON_TERMINAL','DEPARTED')))
             )
             """;
 

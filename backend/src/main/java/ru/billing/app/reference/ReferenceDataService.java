@@ -101,7 +101,7 @@ public class ReferenceDataService {
 
     private static final String CARRIAGE_SELECT = """
         select c.id, c.code, c.model_id, m.code as model_name, c.lifting_capacity, c.date_depot_repair,
-               c.type_id, case t.code when 'PLATFORM_40' then 'Платформа 40 - футов'
+               c.type_id, t.code as type_code, case t.code when 'PLATFORM_40' then 'Платформа 40 - футов'
                    when 'PLATFORM_80' then 'Платформа 80 - футов' else t.name end as type_name
         from railway_carriage c left join railway_carriage_model m on m.id = c.model_id
         left join railway_carriage_type t on t.id = c.type_id
@@ -111,7 +111,7 @@ public class ReferenceDataService {
         return new RailwayCarriageReferenceOption(rs.getObject("id", UUID.class), rs.getString("code"),
                 rs.getObject("model_id", UUID.class), rs.getString("model_name"), rs.getBigDecimal("lifting_capacity"),
                 rs.getObject("date_depot_repair", java.time.LocalDate.class),
-                rs.getObject("type_id", UUID.class), rs.getString("type_name"));
+                rs.getObject("type_id", UUID.class), rs.getString("type_name"), rs.getString("type_code"));
     }
 
     public List<RailwayCarriageReferenceOption> findRailwayCarriages(String query, Integer limit) {
@@ -129,8 +129,8 @@ public class ReferenceDataService {
     public List<ReferenceOption> findRailwayCarriageModels(String query, Integer limit) { return find("railway_carriage_model", query, limit); }
 
     public List<ReferenceOption> findRailwayCarriageKinds() {
-        return jdbcTemplate.query("select id, case code when 'PLATFORM_40' then 'Платформа 40 - футов' else 'Платформа 80 - футов' end as name from railway_carriage_type where code in ('PLATFORM_40', 'PLATFORM_80') order by code",
-                (rs, row) -> new ReferenceOption(rs.getObject("id", UUID.class), rs.getString("name")));
+        return jdbcTemplate.query("select id, code, case code when 'PLATFORM_40' then 'Платформа 40 - футов' else 'Платформа 80 - футов' end as name from railway_carriage_type where code in ('PLATFORM_40', 'PLATFORM_80') order by code",
+                (rs, row) -> new ReferenceOption(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("code")));
     }
 
     @org.springframework.transaction.annotation.Transactional
@@ -150,11 +150,11 @@ public class ReferenceDataService {
         int limit = normalizedLimit(requestedLimit);
         String search = query == null ? "" : query.trim();
         return jdbcTemplate.query(
-                "select id, name from railway_carriage_type "
+                "select id, name, code from railway_carriage_type "
                         + "where lower(code) like lower(?) or lower(name) like lower(?) order by name limit ?",
                 (resultSet, rowNumber) -> new ReferenceOption(
                         resultSet.getObject("id", UUID.class),
-                        resultSet.getString("name")
+                        resultSet.getString("name"), resultSet.getString("code")
                 ),
                 "%" + search + "%",
                 "%" + search + "%",
@@ -291,7 +291,7 @@ public class ReferenceDataService {
                 sql,
                 (resultSet, rowNumber) -> new ReferenceOption(
                         resultSet.getObject("id", UUID.class),
-                        resultSet.getString("code")
+                        resultSet.getString("code"), resultSet.getString("code")
                 ),
                 "%" + search + "%",
                 limit

@@ -30,7 +30,7 @@ export function getTransportTypes() {
 }
 
 export function getOrders(apiPath: string, page: number, size = 20, query = '', status = '') {
-  return request<PagedResponse<OrderSummary>>(`${apiPath}?page=${page}&size=${size}&query=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}`)
+  return request<PagedResponse<OrderSummary>>(`${apiPath}?page=${page}&size=${size}&query=${encodeURIComponent(query)}&orderStatus=${encodeURIComponent(status)}`)
 }
 
 export function updateOrderContainerAttributes(apiPath: string, id: string, containers: Array<import('./domain').ReceivingContainerAttributes & { containerId: string }>, defaultContainerOwnerId?: string, additions: Array<{container: CreateOrderPayload['containers'][number]; railwayCarriageId?: string}> = [], metadata?: { plannedAt: string | null; consignor: string | null; consignee: string | null }) {
@@ -76,7 +76,7 @@ export function getGroupedWaybills(
 
 export function getContracts() { return request<ContractOption[]>('/api/references/contracts') }
 export function changeOrderStatus(apiPath: string, id: string, expectedStatus: string, status: string) {
-  return request<CreatedOrder>(`${apiPath}/${id}/status`, { method: 'PATCH', body: JSON.stringify({ expectedStatus, status }) })
+  return request<CreatedOrder>(`${apiPath}/${id}/status`, { method: 'PATCH', body: JSON.stringify({ expectedStatus, orderStatus: status }) })
 }
 
 export function getRoutes() { return request<RouteSummary[]>('/api/routes') }

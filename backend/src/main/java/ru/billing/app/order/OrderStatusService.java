@@ -1,5 +1,7 @@
 package ru.billing.app.order;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import java.util.UUID;
 import ru.billing.app.containerstock.TosContainerTasks;
 import ru.billing.app.integration.TosEvent;
@@ -30,7 +32,7 @@ public class OrderStatusService {
         if (!(receiving ? "UNLOAD_FINISH" : "LOAD_FINISH").equals(eventCode))
             throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_CONTAINER_EVENT","Для поставки требуется UNLOAD_FINISH, для вывоза — LOAD_FINISH");
         lockOrderRoute(resource,id);
-        return changeInternal(resource,id,new ChangeStatusRequest(Status.CONFIRMED,Status.COMPLETED),containerId,true);
+        return changeInternal(resource,id,new ChangeStatusRequest(Status.ACCEPTED,Status.DONE),containerId,true);
     }
 
     @Transactional
@@ -52,22 +54,22 @@ public class OrderStatusService {
         var doc=docs.getFirst();
         if (!doc.matchesSite()) throw new ApiException(HttpStatus.CONFLICT, "TOS_SITE_MISMATCH", "Площадка пакета не соответствует заявке");
         if (Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from inbound_event where order_id=? and task_id=? and event_code=? and status='DONE')",Boolean.class,order,event.taskId(),event.eventCode()))) return;
-        if (!doc.status().equals("CONFIRMED") && !doc.status().equals("COMPLETED"))
+        if (!doc.status().equals("ACCEPTED") && !doc.status().equals("DONE"))
             throw new ApiException(HttpStatus.CONFLICT,"TOS_ORDER_STATUS","Заявка не подтверждена");
-        if (doc.status().equals("COMPLETED") && !receiving && doc.mode()==FillingType.NONE_CONTAINER)
+        if (doc.status().equals("DONE") && !receiving && doc.mode()==FillingType.NONE_CONTAINER)
             throw new ApiException(HttpStatus.CONFLICT,"TOS_ORDER_COMPLETED","Новая строка для выполненной заявки недопустима");
         tos.process(event,receiving,doc.mode());
-        if (!doc.status().equals("COMPLETED") && stock.allTasksFinished(order,receiving))
+        if (!doc.status().equals("DONE") && stock.allTasksFinished(order,receiving))
             complete(resource,order,table);
     }
 
-    public enum Status { DRAFT, CONFIRMED, COMPLETED }
-    public record ChangeStatusRequest(@NotNull Status expectedStatus, @NotNull Status status) {}
+    public enum Status { DRAFT, ACCEPTED, DONE }
+    public record ChangeStatusRequest(@NotNull Status expectedStatus, @NotNull @JsonAlias("orderStatus") Status status) {}
 
     @Transactional
     public CreatedOrderResponse change(String resource, UUID id,
             ChangeStatusRequest request) {
-        if (request.status() == Status.CONFIRMED)
+        if (request.status() == Status.ACCEPTED)
             throw new ApiException(HttpStatus.CONFLICT, "CONFIRM_THROUGH_ROUTE", "Подтвердите заявку через рейс");
         lockOrderRoute(resource, id);
         return changeInternal(resource, id, request,null,false);
@@ -83,18 +85,18 @@ public class OrderStatusService {
                 (rs, row) -> new CreatedOrderResponse(id, rs.getInt("code"), rs.getString("status")), id);
         if (rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Заявка не найдена");
         var current = rows.getFirst();
-        if(resultEvent && current.status().equals("COMPLETED")){
+        if(resultEvent && current.status().equals("DONE")){
             if(containerId!=null) stock.verifyFinished(resource,id,containerId);
             return current;
         }
         if (!current.status().equals(request.expectedStatus().name())) {
             throw new ApiException(HttpStatus.CONFLICT, "STATUS_CHANGED", "Статус уже изменён. Обновите страницу перед следующим действием.");
         }
-        boolean allowed = request.expectedStatus() == Status.DRAFT && request.status() == Status.CONFIRMED
-                || request.expectedStatus() == Status.CONFIRMED && request.status() == Status.COMPLETED;
+        boolean allowed = request.expectedStatus() == Status.DRAFT && request.status() == Status.ACCEPTED
+                || request.expectedStatus() == Status.ACCEPTED && request.status() == Status.DONE;
         if (!allowed) throw new ApiException(HttpStatus.CONFLICT, "INVALID_STATUS_TRANSITION",
                 "Допустимы только переходы: Черновик → Подтверждено → Выполнено");
-        if(request.status()==Status.CONFIRMED) {
+        if(request.status()==Status.ACCEPTED) {
             stock.reserve(resource,id);
             wagons.confirm(resource.equals("receiving-orders"),id);
         }
@@ -103,18 +105,18 @@ public class OrderStatusService {
                 throw new ApiException(HttpStatus.CONFLICT,"TOS_RESULT_REQUIRED","Для безномерного вывоза нужны фактические номера из пакета TOS");
             if (!stock.finishContainers(resource,id,containerId,null)) return current;
         }
-        if (request.status() == Status.COMPLETED) complete(resource,id,table);
+        if (request.status() == Status.DONE) complete(resource,id,table);
         else jdbc.update("update " + table + " set order_status = ? where id = ?", request.status().name(), id);
         return new CreatedOrderResponse(id, current.code(), request.status().name());
     }
     private void complete(String resource,UUID id,String table) {
         wagons.complete(resource.equals("receiving-orders"),id);
-        jdbc.update("update " + table + " set order_status = ? where id = ?", Status.COMPLETED.name(), id);
+        jdbc.update("update " + table + " set order_status = ? where id = ?", Status.DONE.name(), id);
         jdbc.update("""
-                update route r set status='COMPLETED'
-                where r.id=(select route_id from %s where id=?) and r.status='CONFIRMED'
-                  and not exists (select 1 from receiving_order where route_id=r.id and order_status not in ('COMPLETED','CANCELLED'))
-                  and not exists (select 1 from shipping_order where route_id=r.id and order_status not in ('COMPLETED','CANCELLED'))
+                update route r set status='DONE'
+                where r.id=(select route_id from %s where id=?) and r.status='ACCEPTED'
+                  and not exists (select 1 from receiving_order where route_id=r.id and order_status not in ('DONE','REJECTED'))
+                  and not exists (select 1 from shipping_order where route_id=r.id and order_status not in ('DONE','REJECTED'))
                 """.formatted(table), id);
     }
 
@@ -135,9 +137,9 @@ public class OrderStatusService {
         if(!routes.getFirst().equals("DRAFT")) throw new ApiException(HttpStatus.CONFLICT,"ROUTE_NOT_DRAFT","Рейс уже подтверждён. Обновите страницу");
         record Order(String resource, UUID id, int number, String status, boolean dateMissing, boolean partyMissing) {}
         var orders=new java.util.ArrayList<Order>();
-        orders.addAll(jdbc.query("select id,number,order_status,plan_receiving_date_time,consignor from receiving_order where route_id=? and order_status<>'CANCELLED' order by id for update",
+        orders.addAll(jdbc.query("select id,number,order_status,plan_receiving_date_time,shipper_id from receiving_order where route_id=? and order_status<>'REJECTED' order by id for update",
             (rs,n)->new Order("receiving-orders",rs.getObject(1,UUID.class),rs.getInt(2),rs.getString(3),rs.getObject(4)==null,rs.getString(5)==null||rs.getString(5).isBlank()),routeId));
-        orders.addAll(jdbc.query("select s.id,s.number,s.order_status,s.planned_shipping_date_time,(select name from client_related_entity where id=s.consignee_id) from shipping_order s where s.route_id=? and s.order_status<>'CANCELLED' order by s.id for update of s",
+        orders.addAll(jdbc.query("select s.id,s.number,s.order_status,s.planned_shipping_date_time,(select name from client_related_entity where id=s.consignee_id) from shipping_order s where s.route_id=? and s.order_status<>'REJECTED' order by s.id for update of s",
             (rs,n)->new Order("shipping-orders",rs.getObject(1,UUID.class),rs.getInt(2),rs.getString(3),rs.getObject(4)==null,rs.getString(5)==null||rs.getString(5).isBlank()),routeId));
         if(orders.isEmpty()) throw new ApiException(HttpStatus.CONFLICT,"ROUTE_EMPTY","Добавьте заявки в рейс");
         var errors=new java.util.ArrayList<String>();
@@ -152,7 +154,7 @@ public class OrderStatusService {
         ru.billing.app.containerstock.ContainerLocks.lockOrders(jdbc,
                 orders.stream().filter(o->o.resource().equals("receiving-orders")).map(Order::id).toList(),
                 orders.stream().filter(o->o.resource().equals("shipping-orders")).map(Order::id).toList());
-        for(var order:orders) changeInternal(order.resource(),order.id(),new ChangeStatusRequest(Status.DRAFT,Status.CONFIRMED),null,false);
-        jdbc.update("update route set status='CONFIRMED' where id=?",routeId);
+        for(var order:orders) changeInternal(order.resource(),order.id(),new ChangeStatusRequest(Status.DRAFT,Status.ACCEPTED),null,false);
+        jdbc.update("update route set status='ACCEPTED' where id=?",routeId);
     }
 }

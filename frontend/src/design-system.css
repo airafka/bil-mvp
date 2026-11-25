@@ -40,8 +40,8 @@ tbody tr:hover, .service-compact-table tbody tr:hover { background: #f2f7ff; }
 .table-wrap td a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .status-badge { align-items: center; justify-content: center; min-width: 0; min-height: 24px; padding: 3px 8px; font-size: 12px; font-weight: 400; line-height: 18px; border-radius: 5px; white-space: nowrap; }
 .status-badge[data-status="DRAFT"] { color: #191a1f; background: #f2f4f7; }
-.status-badge[data-status="CONFIRMED"] { color: #175cd3; background: #eff8ff; }
-.status-badge[data-status="COMPLETED"] { color: #027a48; background: #ecfdf3; }
+.status-badge[data-status="ACCEPTED"] { color: #175cd3; background: #eff8ff; }
+.status-badge[data-status="DONE"] { color: #027a48; background: #ecfdf3; }
 .stepper { display: flex; align-items: center; width: fit-content; max-width: 100%; padding: 0; gap: 4px; margin-bottom: 24px; background: #f2f4f7; border: 0; border-radius: 6px; overflow-x: auto; }
 .step { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: 0; height: 40px; padding: 7px 16px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #98a2b3; font-size: 16px; line-height: 24px; font-weight: 400; white-space: nowrap; }
 .step.complete { color: #98a2b3; }

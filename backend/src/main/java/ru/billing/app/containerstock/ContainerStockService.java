@@ -1,5 +1,9 @@
 package ru.billing.app.containerstock;
 
+import ru.billing.app.reference.EntityReference;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.*;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -19,7 +23,19 @@ public class ContainerStockService {
     private final ContainerTaskRows tasks;
     public ContainerStockService(JdbcTemplate jdbc, ContainerStorageService storage, ContainerTaskRows tasks) { this.jdbc=jdbc; this.storage=storage; this.tasks=tasks; }
     public record Owner(UUID id, UUID containerId, String containerName, String containerType,
-            UUID clientId, String clientName, String status, UUID receivingOrderId, UUID shippingOrderId) {}
+            UUID clientId, String clientName, String status, UUID receivingOrderId, UUID shippingOrderId) {
+        @JsonProperty("client")
+        public EntityReference client() { return EntityReference.named(clientId, clientName); }
+
+        @JsonProperty("container")
+        public EntityReference container() { return EntityReference.coded(containerId, containerName); }
+
+        @JsonProperty("receivingOrder")
+        public EntityReference receivingOrder() { return EntityReference.named(receivingOrderId, null); }
+
+        @JsonProperty("shippingOrder")
+        public EntityReference shippingOrder() { return EntityReference.named(shippingOrderId, null); }
+    }
     public record Lookup(UUID containerId, UUID ownerClientId, String ownerClientName, String status) {}
     @Transactional(readOnly=true)
     public List<Lookup> lookup(List<UUID> containerIds) {
@@ -35,7 +51,13 @@ public class ContainerStockService {
     public record History(UUID id, UUID containerId, UUID oldClientId, String oldClientName,
             UUID newClientId, String newClientName, String oldStatus, String newStatus,
             UUID orderId, String orderType, Long orderNumber, Instant createdAt, boolean cancellation, String operationType, java.time.OffsetDateTime occurredAt,
-            UUID containerPeriodId, UUID previousContainerPeriodId) {}
+            UUID containerPeriodId, UUID previousContainerPeriodId) {
+        @JsonProperty("newClient")
+        public EntityReference newClient() { return EntityReference.named(newClientId, newClientName); }
+
+        @JsonProperty("oldClient")
+        public EntityReference oldClient() { return EntityReference.named(oldClientId, oldClientName); }
+    }
     record State(UUID id, UUID client, String status, UUID receiving, UUID shipping) {}
     record Reservation(UUID container, UUID previousOwner) {}
 
@@ -64,7 +86,7 @@ public class ContainerStockService {
             client,status,shipping,old.id());
         // Only drafts follow the register. Confirmation freezes the shipment owner.
         jdbc.update("""
-            update shipping_order_container sc set owner_container_id=?
+            update shipping_order_container sc set container_owner_id=?
             from shipping_order s where s.id=sc.shipping_order_id and s.order_status='DRAFT'
                 and sc.container_id=?
             """,client,container);
@@ -96,7 +118,7 @@ public class ContainerStockService {
             State old=state(row.container());
             if(receiving) transition(row.container(),row.owner(),"EXPECTED",order,old == null ? null : old.shipping(),order,"RECEIVING_ORDER");
             else {
-                jdbc.update("update shipping_order_container set owner_container_id=? where id=?",old.client(),row.id());
+                jdbc.update("update shipping_order_container set container_owner_id=? where id=?",old.client(),row.id());
                 transition(row.container(),old.client(),"RESERVED_OUT",old.receiving(),order,order,"SHIPPING_ORDER");
             }
         }
@@ -224,7 +246,7 @@ public class ContainerStockService {
         for(var row:rows) {
             UUID id=row.container();
             boolean finished="FINISHED".equals(row.status());
-            if(!finished && (!"UPLOADED".equals(row.status()) || "COMPLETED".equals(previousStatus)))
+            if(!finished && (!"UPLOADED".equals(row.status()) || "DONE".equals(previousStatus)))
                 throw error("CONTAINER_TASK_STATUS_CHANGED","Статус строки КТК не соответствует отменяемой операции");
             State old=state(id);
             UUID currentOrder = old == null ? null : (receiving ? old.receiving() : old.shipping());

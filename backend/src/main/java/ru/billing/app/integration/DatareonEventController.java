@@ -32,9 +32,10 @@ public class DatareonEventController {
         String action = jdbc.queryForObject("select (select action_code from inbound_event_config where event_code=?)",
                 String.class,event.eventCode());
         jdbc.update("""
-                insert into inbound_event(id,task_id,order_id,order_number,source,site,event_name,event_code,
-                    event_date_time,external_id,action_code,status) values (?,?,?,?,?,?,?,?,?,?,?,?)
-                """, delivery,event.taskId(),event.orderId(),event.orderNumber(),event.source(),event.site(),
+                insert into inbound_event(id,task_id,order_id,order_number,source,site,terminal_area,event_name,event_code,
+                    event_date_time,external_id,action_codes,status)
+                values (?,?,?,?,?,?,(select code from terminal_area_catalog where lower(name)=lower(?)),?,?,?,?,array_remove(array[?::text], null),?)
+                """, delivery,event.taskId(),event.orderId(),event.orderNumber(),event.source(),event.site(),event.site(),
                 event.eventName(),event.eventCode(),event.eventDateTime(),externalId,action,action == null ? "SKIPPED" : "NEW");
         var result = action == null
                 ? new Receipt("SKIPPED", "Код события не настроен для обработки")

@@ -33,24 +33,24 @@ public class OrderCancellationService {
         var current=rows.getFirst();
         var lockedRoute=jdbc.queryForObject("select route_id from "+table+" where id=?",UUID.class,id);
         if(!java.util.Objects.equals(observedRoute,lockedRoute))throw conflict("ROUTE_CHANGED","Рейс заявки изменился. Повторите отмену");
-        if(current.status().equals("CANCELLED"))return current;
+        if(current.status().equals("REJECTED"))return current;
         if(!current.status().equals(request.expectedStatus()))throw conflict("STATUS_CHANGED","Статус изменился. Обновите заявку перед отменой");
         stock.cancel(resource,id,current.status());
         wagons.checkCancellation(incoming,id,current.status());
-        jdbc.update("update "+table+" set order_status='CANCELLED' where id=?",id);
+        jdbc.update("update "+table+" set order_status='REJECTED' where id=?",id);
         if(incoming) {
             jdbc.update("update waybill set receiving_order_id=null where receiving_order_id=?",id);
         }
         refreshRoute(table,id);
-        return new CreatedOrderResponse(id,current.code(),"CANCELLED");
+        return new CreatedOrderResponse(id,current.code(),"REJECTED");
     }
     private void refreshRoute(String table,UUID id) {
         jdbc.update("""
             update route r set status=case
-              when not exists(select 1 from receiving_order where route_id=r.id and order_status<>'CANCELLED')
-               and not exists(select 1 from shipping_order where route_id=r.id and order_status<>'CANCELLED') then 'CANCELLED'
-              when not exists(select 1 from receiving_order where route_id=r.id and order_status not in ('COMPLETED','CANCELLED'))
-               and not exists(select 1 from shipping_order where route_id=r.id and order_status not in ('COMPLETED','CANCELLED')) then 'COMPLETED'
+              when not exists(select 1 from receiving_order where route_id=r.id and order_status<>'REJECTED')
+               and not exists(select 1 from shipping_order where route_id=r.id and order_status<>'REJECTED') then 'REJECTED'
+              when not exists(select 1 from receiving_order where route_id=r.id and order_status not in ('DONE','REJECTED'))
+               and not exists(select 1 from shipping_order where route_id=r.id and order_status not in ('DONE','REJECTED')) then 'DONE'
               else r.status end
             where r.id=(select route_id from %s where id=?)
             """.formatted(table),id);

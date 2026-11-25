@@ -92,7 +92,7 @@ function OrderCard({ config, orderId }: { config: OrderConfig; orderId: string }
     [order],
   )
   const isRailwayReceiving = config.kind === 'receiving' && order?.transportType === 'RAILWAY'
-  const isRailwayShipping = config.kind === 'shipping' && order?.status !== 'CANCELLED' && order?.transportType === 'RAILWAY'
+  const isRailwayShipping = config.kind === 'shipping' && order?.status !== 'REJECTED' && order?.transportType === 'RAILWAY'
 
   const isRailway = isRailwayReceiving || isRailwayShipping
   const tabs = isRailwayReceiving
@@ -134,7 +134,7 @@ function OrderCard({ config, orderId }: { config: OrderConfig; orderId: string }
     try {
       const updated = await getOrder(config.apiPath, orderId)
       setOrder(updated)
-      setSaveMessage(updated.status === 'COMPLETED' ? `КТК ${container} вывезен. Заявка выполнена.` : `КТК ${container} вывезен. Можно отправить следующий пакет.`)
+      setSaveMessage(updated.status === 'DONE' ? `КТК ${container} вывезен. Заявка выполнена.` : `КТК ${container} вывезен. Можно отправить следующий пакет.`)
       getRoutes().then(setRoutes).catch(e => setRouteError(String(e)))
     } catch {
       setError(`Пакет по КТК ${container} обработан. Обновите страницу, чтобы увидеть актуальный состав заявки.`)
@@ -151,8 +151,8 @@ function OrderCard({ config, orderId }: { config: OrderConfig; orderId: string }
       .catch(e=>setSaveError(e instanceof Error?e.message:'Не удалось загрузить справочники'))
       .finally(()=>setAdditionReferencesLoading(false))}
     setPlannedAtDraft((config.kind === 'receiving' ? order?.arrivalAt : order?.departureAt)?.slice(0,16) || '')
-    setConsignorDraft(order?.consignor || '')
-    setConsigneeDraft(order?.consignee || '')
+    setConsignorDraft(order?.shipper?.name || order?.consignor || '')
+    setConsigneeDraft(order?.consignee?.name || '')
     setDefaultOwnerDraft(order?.defaultContainerOwnerId || '')
     getReferenceOptions('clients').then(setOwnerClients).catch(e => setSaveError(String(e)))
     setContainerDraft(numberedContainers.map(row => ({ ...row })))
@@ -228,7 +228,7 @@ function OrderCard({ config, orderId }: { config: OrderConfig; orderId: string }
         <div className="view-header-actions">{editing && order && <div className="header-actions">            <button type="button" className="secondary-button" disabled={saving} onClick={() => { setEditing(false); setSelectedRouteId(''); setSaveError('') }}>Отмена</button>
             <button type="button" className="primary-button" disabled={saving} onClick={saveOrder}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}{(canEditMetadata || canEditRoute || canEditContainers || canEditDefaultOwner) && !editing && <button type="button" className="secondary-button icon-button" disabled={saving} onClick={startEditing} aria-label="Редактировать" title="Редактировать"><ActionIcon name="edit" /></button>}{order && !editing && !saving && statusAction}<Link className="close-button" to={config.listPath} aria-label="Вернуться в реестр" title="Закрыть"><ActionIcon name="close" /></Link></div>
       </div>
-      {tosDialogOpen && order?.status === 'CONFIRMED' && <TosShipmentDialog order={order} vehicleNumber={assignedRoute?.vehicleNumber}
+      {tosDialogOpen && order?.status === 'ACCEPTED' && <TosShipmentDialog order={order} vehicleNumber={assignedRoute?.vehicleNumber}
         onClose={() => setTosDialogOpen(false)} onSent={packetSent} />}
       <div className="form-workspace">
         {loading && <div className="view-loading">Загружаем заявку…</div>}
@@ -275,7 +275,7 @@ function OrderCard({ config, orderId }: { config: OrderConfig; orderId: string }
             {<>
               <div className="form-section-heading ui-section-divider"><h2>Контактная информация</h2></div>
               <dl className="details-grid">
-                {config.kind === 'receiving' ? <div><dt>Грузоотправитель</dt><dd>{editing && canEditMetadata ? <UiSelect aria-label="Грузоотправитель" value={consignorDraft} disabled={saving || !ownerClients.length} onChange={e => setConsignorDraft(e.target.value)}><option value="" hidden disabled />{ownerClients.map(client => <option key={client.id} value={client.name}>{client.name}</option>)}</UiSelect> : order.consignor || 'Не указан'}</dd></div> : <div><dt>Грузополучатель</dt><dd>{editing && canEditMetadata ? <UiSelect aria-label="Грузополучатель" value={consigneeDraft} disabled={saving || !ownerClients.length} onChange={e => setConsigneeDraft(e.target.value)}><option value="" hidden disabled />{ownerClients.map(client => <option key={client.id} value={client.name}>{client.name}</option>)}</UiSelect> : order.consignee || 'Не указан'}</dd></div>}
+                {config.kind === 'receiving' ? <div><dt>Грузоотправитель</dt><dd>{editing && canEditMetadata ? <UiSelect aria-label="Грузоотправитель" value={consignorDraft} disabled={saving || !ownerClients.length} onChange={e => setConsignorDraft(e.target.value)}><option value="" hidden disabled />{ownerClients.map(client => <option key={client.id} value={client.name}>{client.name}</option>)}</UiSelect> : order.shipper?.name || order.consignor || 'Не указан'}</dd></div> : <div><dt>Грузополучатель</dt><dd>{editing && canEditMetadata ? <UiSelect aria-label="Грузополучатель" value={consigneeDraft} disabled={saving || !ownerClients.length} onChange={e => setConsigneeDraft(e.target.value)}><option value="" hidden disabled />{ownerClients.map(client => <option key={client.id} value={client.name}>{client.name}</option>)}</UiSelect> : order.consignee?.name || 'Не указан'}</dd></div>}
                 <div><dt>Телефон</dt><dd>{order.phone || 'Не указан'}</dd></div>
                 <div><dt>Уполномоченный представитель</dt><dd>{order.authorizedRepresentative || 'Не указан'}</dd></div>
                 <div><dt>Email</dt><dd>{order.email || 'Не указан'}</dd></div>

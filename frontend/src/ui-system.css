@@ -27,7 +27,7 @@
 /* Text close glyphs match the shared 24px action icons. */
 .app-shell .close-button { font-size: 24px; line-height: 1; }
 
-.status-badge[data-status="CANCELLED"] { background: #f1f2f5; color: #6b7280; }
+.status-badge[data-status="REJECTED"], .status-badge[data-status="CANCELLED"] { background: #f1f2f5; color: #6b7280; }
 
 
 #app-overlay-root .route-side-dialog.order-cancellation-dialog { width: min(640px, 100%); max-width: 100%; }

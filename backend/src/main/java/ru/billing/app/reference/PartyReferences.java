@@ -26,6 +26,15 @@ public final class PartyReferences {
         return names.getFirst();
     }
 
+    public static UUID clientParty(JdbcTemplate jdbc, PartySelection selection, String legacyName) {
+        if (selection == null || selection.id() == null) return clientParty(jdbc, selection == null ? legacyName : selection.name());
+        var rows = jdbc.queryForList("select p.id from client_related_entity p join client c on c.name=p.name where p.id=?", UUID.class, selection.id());
+        if (!rows.isEmpty()) return rows.getFirst();
+        var names = jdbc.queryForList("select name from client where id=?", String.class, selection.id());
+        if (names.isEmpty()) throw new ru.billing.app.error.ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "CARGO_PARTY_CLIENT_NOT_FOUND", "Организация отсутствует в справочнике клиентов");
+        return clientParty(jdbc, names.getFirst());
+    }
+
     public static UUID clientParty(JdbcTemplate jdbc, String name) {
         String canonical = clientName(jdbc, name);
         if (canonical == null) return null;

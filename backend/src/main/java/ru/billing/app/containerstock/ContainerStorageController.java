@@ -37,7 +37,7 @@ public class ContainerStorageController {
           e.order_id end_order_id,e.order_type end_order_type,
           case e.order_type when 'SHIPPING_ORDER' then s.number when 'SERVICE_ORDER' then eo.number end::bigint end_order_number,
           rc.name receiving_client_name,ro.name receiving_owner_name,r.transport_type arrival_transport,
-          case r.transport_type when 'VEHICLE' then ic.name when 'RAILWAY' then r.consignor end arrival_party,
+          case r.transport_type when 'VEHICLE' then ic.name when 'RAILWAY' then (select name from client_related_entity where id=r.shipper_id) end arrival_party,
           incoming.cargo_name arrival_cargo,
           sc.name shipping_client_name,sw.name shipping_owner_name,s.transport_type departure_transport,
           case s.transport_type when 'VEHICLE' then oc.name when 'RAILWAY' then cons.name end departure_party,
@@ -63,7 +63,7 @@ public class ContainerStorageController {
         left join client rc on rc.id=r.client_id
         left join client ro on ro.id=coalesce(rr.owner_container_id,rail.owner_container_id,r.default_container_owner_id)
         left join client sc on sc.id=s.client_id
-        left join client sw on sw.id=sr.owner_container_id
+        left join client sw on sw.id=sr.container_owner_id
         left join route ir on ir.id=r.route_id
         left join client_related_entity ic on ic.id=ir.client_related_entity_id
         left join route outr on outr.id=s.route_id

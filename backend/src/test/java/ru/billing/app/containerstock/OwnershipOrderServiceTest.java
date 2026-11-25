@@ -59,7 +59,7 @@ class OwnershipOrderServiceTest {
     @Test
     void emptyDraftNeedsAnExplicitSourceOwner() {
         assertThatExceptionOfType(ApiException.class)
-                .isThrownBy(() -> service.create(new Create(nextOwner, ServiceType.CHANGE_OWNER, null, List.of(), date, null, false)))
+                .isThrownBy(() -> service.create(new Create(nextOwner, ServiceType.CHANGE_OWNER, null, List.of(), date, null, false, null)))
                 .satisfies(error -> assertThat(error.getCode()).isEqualTo("SOURCE_CLIENT_REQUIRED"));
         verifyNoInteractions(jdbc);
     }

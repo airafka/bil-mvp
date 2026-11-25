@@ -29,9 +29,10 @@ public class ReceivingOrderController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "") String query,
-            @RequestParam(defaultValue = "") String status
+            @RequestParam(defaultValue = "") String status,
+            @RequestParam(required = false) String orderStatus
     ) {
-        return service.findPage(page, size, query.trim(), status);
+        return service.findPage(page, size, query.trim(), orderStatus == null ? status : orderStatus);
     }
 
     @GetMapping("/{id}")

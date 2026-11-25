@@ -1,5 +1,7 @@
 package ru.billing.app.waybill;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -13,4 +15,7 @@ public record WaybillLink(
         List<WaybillCarriageSummary> railwayCarriages,
         java.time.OffsetDateTime createdAt, String shipmentType, String status
 ) {
+
+    @JsonProperty("waybillCreatedAt")
+    public java.time.OffsetDateTime waybillCreatedAt() { return createdAt; }
 }

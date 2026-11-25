@@ -1,5 +1,13 @@
 package ru.billing.app.containerstock;
 
+import tools.jackson.databind.annotation.JsonDeserialize;
+
+import com.fasterxml.jackson.annotation.JsonAlias;
+
+import ru.billing.app.reference.EntityReference;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.*;
 import java.time.OffsetDateTime;
 import java.time.LocalDate;
@@ -21,27 +29,51 @@ public class OwnershipOrderService {
         this.jdbc=jdbc;this.stock=stock;this.events=events;
     }
     public enum ServiceType { CHANGE_OWNER }
-    public record Create(@NotNull UUID clientId,@NotNull ServiceType service,@Size(max=1000)String comment,List<@NotNull UUID> containerOwnerIds,LocalDate effectiveDate,UUID sourceClientId,Boolean isDeferred) {}
-    public record Update(@NotNull UUID id,@NotNull ServiceType service,@Size(max=1000)String comment,LocalDate effectiveDate,
-            UUID clientId,List<@NotNull UUID> containerOwnerIds,Boolean isDeferred) {}
+    public enum EquipmentType { CONTAINER }
+    public record Create(@NotNull @JsonAlias("newClientOwner") @JsonDeserialize(converter = EntityReference.Id.class) UUID clientId,@NotNull ServiceType service,@Size(max=1000)String comment,List<@NotNull UUID> containerOwnerIds,@JsonAlias("transferredAt") LocalDate effectiveDate,@JsonAlias("oldClientOwner") @JsonDeserialize(converter = EntityReference.Id.class) UUID sourceClientId, Boolean isDeferred, EquipmentType typeEquipment) {
+        public Create {
+            if (service == null && typeEquipment == EquipmentType.CONTAINER) service = ServiceType.CHANGE_OWNER;
+        }
+    }
+    public record Update(@NotNull UUID id,@NotNull ServiceType service,@Size(max=1000)String comment,@JsonAlias("transferredAt") LocalDate effectiveDate,
+            @JsonAlias("newClientOwner") @JsonDeserialize(converter = EntityReference.Id.class) UUID clientId, List<@NotNull UUID> containerOwnerIds, Boolean isDeferred, EquipmentType typeEquipment) {
+        public Update {
+            if (service == null && typeEquipment == EquipmentType.CONTAINER) service = ServiceType.CHANGE_OWNER;
+        }
+    }
     public record Selection(UUID id,UUID containerOwnerId) {}
     public record Link(UUID id,UUID containerOwnerId,UUID containerId,String containerName,String containerType,
             UUID clientId,String clientName,String status,UUID containerVisitId,UUID expectedClientId,String resultStatus,String resultReason) {}
     public record Header(UUID id,long number,UUID clientId,String clientName,String service,String comment,
             String status,OffsetDateTime completionAt,long containerQuantity,LocalDate effectiveDate,UUID sourceClientId,String sourceClientName,
-            String executionError,boolean exportQueued,OffsetDateTime exportSentAt,String exportError,UUID outboundDataId,boolean exportExhausted,boolean isDeferred) {}
+            String executionError,boolean exportQueued,OffsetDateTime exportSentAt,String exportError,UUID outboundDataId,boolean exportExhausted,boolean isDeferred) {
+        @JsonProperty("newClientOwner")
+        public EntityReference newClientOwner() { return EntityReference.named(clientId, clientName); }
+
+        @JsonProperty("oldClientOwner")
+        public EntityReference oldClientOwner() { return EntityReference.named(sourceClientId, sourceClientName); }
+
+        @JsonProperty("transferredAt")
+        public LocalDate transferredAt() { return effectiveDate; }
+
+        @JsonProperty("typeEquipment")
+        public String typeEquipment() { return "CONTAINER"; }
+
+        @JsonProperty("quantity")
+        public long quantity() { return containerQuantity; }
+    }
     public record Details(Header order,List<Link> containers) {}
     private static final String HEADER="""
         select s.*,e.id as outbound_data_id,e.id is not null as export_queued,(e.success is false and e.attempts>=5) as export_exhausted,
                case when e.success then e.updated_at at time zone 'UTC' end as sent_at,e.error_message,s.completion_at at time zone 'UTC' as confirmation_instant,c.name as client_name,src.name as source_client_name,(select count(*) from service_order_container_current sc where sc.service_order_id=s.id) as quantity
-        from service_order_current s join client c on c.id=s.client_id
-        left join client src on src.id=s.source_client_id
+        from service_order_current s join client c on c.id=s.new_client_owner_id
+        left join client src on src.id=s.old_client_owner_id
         left join outbound_data e on e.root_object_id=s.id and e.entity_type='SERVICE_ORDER' and e.message_type='SERVICE_ORDER_CHAIN_PACKAGE'
         """;
     private Header header(java.sql.ResultSet rs)throws java.sql.SQLException {
-        return new Header(rs.getObject("id",UUID.class),rs.getLong("number"),rs.getObject("client_id",UUID.class),rs.getString("client_name"),
-            rs.getString("service"),rs.getString("comment"),rs.getString("status"),rs.getObject("confirmation_instant",OffsetDateTime.class),rs.getLong("quantity"),rs.getObject("effective_date",LocalDate.class),
-            rs.getObject("source_client_id",UUID.class),rs.getString("source_client_name"),rs.getString("execution_error"),rs.getBoolean("export_queued"),
+        return new Header(rs.getObject("id",UUID.class),rs.getLong("number"),rs.getObject("new_client_owner_id",UUID.class),rs.getString("client_name"),
+            rs.getString("service"),rs.getString("comment"),rs.getString("status"),rs.getObject("confirmation_instant",OffsetDateTime.class),rs.getLong("quantity"),rs.getObject("transferred_at",LocalDate.class),
+            rs.getObject("old_client_owner_id",UUID.class),rs.getString("source_client_name"),rs.getString("execution_error"),rs.getBoolean("export_queued"),
             rs.getObject("sent_at",OffsetDateTime.class),rs.getString("error_message"),rs.getObject("outbound_data_id",UUID.class),rs.getBoolean("export_exhausted"),rs.getBoolean("is_deferred"));
     }
     private Header locked(UUID id){
@@ -95,7 +127,7 @@ public class OwnershipOrderService {
         LocalDate effective=date(request.effectiveDate());
         boolean deferred=validateMode(effective,request.isDeferred());
         UUID id=UUID.randomUUID();
-        jdbc.update("insert into service_order(id,client_id,service,comment,effective_date,source_client_id,is_deferred) values(?,?,?,?,?,?,?)",id,request.clientId(),request.service().name(),request.comment(),effective,request.sourceClientId(),deferred);
+        jdbc.update("insert into service_order(id,new_client_owner_id,service,comment,transferred_at,old_client_owner_id,is_deferred) values(?,?,?,?,?,?,?)",id,request.clientId(),request.service().name(),request.comment(),effective,request.sourceClientId(),deferred);
         return selection.isEmpty() ? details(id) : select(id,asSelections(selection));
     }
     private List<Selection> asSelections(List<UUID> ownerIds){
@@ -128,7 +160,7 @@ public class OwnershipOrderService {
         boolean deferred=validateMode(effective,request.isDeferred()==null ? h.isDeferred() : request.isDeferred());
         differentOwners(h.sourceClientId(),target);
         if (!target.equals(h.clientId())) requireClient(target);
-        jdbc.update("update service_order set service=?,comment=?,client_id=?,effective_date=?,is_deferred=?,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
+        jdbc.update("update service_order set service=?,comment=?,new_client_owner_id=?,transferred_at=?,is_deferred=?,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
                 request.service().name(),request.comment(),target,effective,deferred,id);
         if (request.containerOwnerIds()!=null) return select(id,asSelections(request.containerOwnerIds()));
         if (!target.equals(h.clientId()) || !effective.equals(h.effectiveDate())){
@@ -200,7 +232,7 @@ public class OwnershipOrderService {
         UUID source=rows.getFirst().getValue().previousClient();
         if (eligible.values().stream().anyMatch(candidate -> !candidate.previousClient().equals(source)))
             throw error(HttpStatus.CONFLICT, "OWNERSHIP_MIXED_SOURCE", "Выберите КТК одного прежнего собственника на дату передачи");
-        if (h.sourceClientId()==null) jdbc.update("update service_order set source_client_id=? where id=?",source,h.id());
+        if (h.sourceClientId()==null) jdbc.update("update service_order set old_client_owner_id=? where id=?",source,h.id());
         return eligible;
     }
     private Map<UUID,Candidate> validateExisting(Header h, List<Link> links, boolean accepting) {
@@ -262,7 +294,7 @@ public class OwnershipOrderService {
                 where id=?
                 """,candidate.visit(),candidate.previousClient(),h.clientId(),candidate.instant(),link.id());
         }
-        jdbc.update("update service_order set status='SCHEDULED',execution_error=null,effective_date=?,completion_at=?::timestamptz at time zone 'UTC',updated_at=?::timestamptz at time zone 'UTC',updated_by='local' where id=?",effective,confirmedAt,confirmedAt,id);
+        jdbc.update("update service_order set status='SCHEDULED',execution_error=null,transferred_at=?,completion_at=?::timestamptz at time zone 'UTC',updated_at=?::timestamptz at time zone 'UTC',updated_by='local' where id=?",effective,confirmedAt,confirmedAt,id);
         jdbc.queryForObject("select record_ownership_order(?)",Object.class,id);
         if (!deferred) {
             String reason = jdbc.queryForObject("select apply_ownership_order(?)", String.class, id);

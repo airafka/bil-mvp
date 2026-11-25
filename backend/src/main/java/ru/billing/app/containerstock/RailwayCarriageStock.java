@@ -170,7 +170,7 @@ public class RailwayCarriageStock {
         var violations = new StockViolations();
         for (var wagon : wagons) {
             UUID current = receiving ? wagon.receivingOrder() : wagon.shippingOrder();
-            if ("COMPLETED".equals(previousStatus)) {
+            if ("DONE".equals(previousStatus)) {
                 wagon.addViolation(violations, ContainerStockPolicy.completedCancellationViolation(
                         receiving, wagon.status(), current, order));
             } else if (!order.equals(current)) {

@@ -158,7 +158,7 @@ public class GroupedWaybillStore {
         ContainerIndex containers = loadContainers(batchFilter);
         Map<UUID, List<WaybillCarriageSummary>> carriages = loadCarriages(batchFilter, containers.byCarriage());
         jdbcTemplate.query(
-                "select w.id, w.number, w.departure_station, w.destination_station, w.payer, b.created_at, b.shipment_type, b.status "
+                "select w.id, w.number, w.departure_station, w.destination_station, w.payer, b.waybill_created_at, b.shipment_type, b.status "
                         + "from waybill_details w join waybill b on b.id=w.id where "
                         + batchFilter.sql() + " order by w.number, w.id",
                 resultSet -> {
@@ -175,7 +175,7 @@ public class GroupedWaybillStore {
                             productsByWaybill.getOrDefault(resultSet.getObject("id", UUID.class), List.of()),
                             containers.byWaybill().getOrDefault(resultSet.getObject("id", UUID.class), List.of()),
                             carriages.getOrDefault(resultSet.getObject("id", UUID.class), List.of()),
-                            resultSet.getObject("created_at", java.time.OffsetDateTime.class), resultSet.getString("shipment_type"), resultSet.getString("status")
+                            resultSet.getObject("waybill_created_at", java.time.OffsetDateTime.class), resultSet.getString("shipment_type"), resultSet.getString("status")
                     ));
                 },
                 batchFilter.parameters().toArray()
@@ -225,9 +225,11 @@ public class GroupedWaybillStore {
         Map<UUID, List<WaybillContainerSummary>> byCarriage = new LinkedHashMap<>();
         jdbcTemplate.query("""
                 select w.id as waybill_id, rc.id as carriage_id, wc.container_id, c.code as container_number, c.container_type as container_type, c.lifting_capacity,
-                       wc.weight as gross_weight, c.weight as tare_weight, wc.net_weight as net_weight, p.etsng_code_id, e.code as etsng_name, wc.owner_container_id, wc.owner_container_name,
+                       wc.weight as gross_weight, c.weight as tare_weight, wc.net_weight as net_weight, p.etsng_code_id, e.code as etsng_name, wc.owner_container_id, wc.owner_container_name, wc.owner, task.status as task_status, stock.status as stock_status,
                        wc.seal_numbers, wc.seal_type_id, wc.seal_type_name
                 from waybill_container_details wc
+                  join waybill_container task on task.id=wc.id
+                  left join container_owner_current stock on stock.container_id=wc.container_id
                 join container c on c.id = wc.container_id
                 join waybill_railway_carriage rc on rc.id = wc.waybill_railway_carriage_id
                 join waybill_details w on w.id = rc.waybill_id
@@ -240,7 +242,7 @@ public class GroupedWaybillStore {
                                 rs.getBigDecimal("gross_weight"), rs.getBigDecimal("tare_weight"), rs.getBigDecimal("net_weight"),
                                 rs.getObject("etsng_code_id", UUID.class), rs.getString("etsng_name"),
                                 rs.getObject("owner_container_id", UUID.class), rs.getString("owner_container_name"),
-                                rs.getString("seal_numbers"), rs.getObject("seal_type_id", UUID.class), rs.getString("seal_type_name"), rs.getString("container_type"), rs.getBigDecimal("lifting_capacity"));
+                                rs.getString("seal_numbers"), rs.getObject("seal_type_id", UUID.class), rs.getString("seal_type_name"), rs.getString("container_type"), rs.getBigDecimal("lifting_capacity"), rs.getString("owner"), rs.getString("task_status"), rs.getString("stock_status"));
                     byWaybill.computeIfAbsent(rs.getObject("waybill_id", UUID.class), key -> new ArrayList<>()).add(container);
                     byCarriage.computeIfAbsent(rs.getObject("carriage_id", UUID.class), key -> new ArrayList<>()).add(container);
                 }, filter.parameters().toArray());
@@ -251,7 +253,7 @@ public class GroupedWaybillStore {
             Map<UUID, List<WaybillContainerSummary>> containers) {
         Map<UUID, List<WaybillCarriageSummary>> result = new LinkedHashMap<>();
         jdbcTemplate.query("""
-                select w.id as waybill_id, rc.id, c.code as number, t.name as type_name, m.code as model_name,
+                select w.id as waybill_id, rc.id, rc.railway_carriage_id, c.code as number, t.name as type_name, m.code as model_name,
                        c.lifting_capacity, c.date_depot_repair
                   from waybill_railway_carriage rc
                   join railway_carriage c on c.id = rc.railway_carriage_id
@@ -265,7 +267,7 @@ public class GroupedWaybillStore {
                     result.computeIfAbsent(rs.getObject("waybill_id", UUID.class), key -> new ArrayList<>())
                             .add(new WaybillCarriageSummary(id, rs.getString("number"), containers.getOrDefault(id, List.of()),
                                     rs.getString("type_name"), rs.getString("model_name"), rs.getBigDecimal("lifting_capacity"),
-                                    rs.getObject("date_depot_repair", java.time.LocalDate.class)));
+                                    rs.getObject("date_depot_repair", java.time.LocalDate.class), rs.getObject("railway_carriage_id", UUID.class)));
                 }, filter.parameters().toArray());
         return result;
     }

@@ -37,8 +37,8 @@ public class ScheduledOwnershipTransfers {
 
         var day = now.toLocalDate();
         var orders = jdbc.queryForList("""
-                select s.id from service_order s where s.status='SCHEDULED' and s.effective_date<=?
-                order by s.effective_date,(select min(sc.plan_at) from service_order_container sc
+                select s.id from service_order s where s.status='SCHEDULED' and s.transferred_at<=?
+                order by s.transferred_at,(select min(sc.plan_at) from service_order_container sc
                     where sc.service_order_id=s.id and sc.result_status='PLANNED'),s.number
                 """, UUID.class, day);
         for (var id : orders) {

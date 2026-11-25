@@ -52,7 +52,7 @@ public class ShippingOrderStore {
                 request.contractId(),
                 fillingType.name(),
                 request.departureAt(),
-                ru.billing.app.reference.PartyReferences.clientParty(jdbcTemplate, request.consignee())
+                ru.billing.app.reference.PartyReferences.clientParty(jdbcTemplate, request.destination(), request.consignee())
         );
 
         if (fillingType == FillingType.NONE_CONTAINER) {
@@ -75,7 +75,7 @@ public class ShippingOrderStore {
         List<OrderSummary> items = jdbcTemplate.query(
                 """
                 select o.id, o.number as code, o.client_id, c.name as client_name,
-                       o.planned_shipping_date_time as planned_at,
+                       null::timestamp as plan_receiving_date_time, o.planned_shipping_date_time,
                        r.number as route_number, o.comment,
                        a.id as area_id, a.code as area_code, a.name as area_name,
                        o.transport_type, o.filling_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.route_id
@@ -101,7 +101,7 @@ public class ShippingOrderStore {
                 select o.id, o.number as code, o.client_id, c.name as client_name,
                        a.id as area_id, a.code as area_code, a.name as area_name,
                        o.transport_type, o.filling_type, o.order_status as status, o.contract_id, ct.name as contract_name, o.route_id,
-                       o.planned_shipping_date_time as departure_at, (select name from client_related_entity where id=o.consignee_id) as consignee,
+                       o.planned_shipping_date_time as departure_at, (select name from client_related_entity where id=o.consignee_id) as consignee, o.consignee_id,
                        o.authorized_representative, o.phone, o.email, o.comment, ct.contract_type, o.created_at, o.transport_waybill_number
                 from shipping_order o
                 join client c on c.id = o.client_id
@@ -122,7 +122,7 @@ public class ShippingOrderStore {
                         resultSet.getString("contract_name"),
                         resultSet.getObject("route_id", UUID.class),
                         resultSet.getObject("departure_at", LocalDateTime.class),
-                        resultSet.getString("consignee"), resultSet.getString("authorized_representative"), resultSet.getString("phone"), resultSet.getString("email"), resultSet.getString("comment"), resultSet.getString("contract_type"), resultSet.getObject("created_at", java.time.OffsetDateTime.class), resultSet.getString("transport_waybill_number")
+                        resultSet.getObject("consignee_id", UUID.class), resultSet.getString("consignee"), resultSet.getString("authorized_representative"), resultSet.getString("phone"), resultSet.getString("email"), resultSet.getString("comment"), resultSet.getString("contract_type"), resultSet.getObject("created_at", java.time.OffsetDateTime.class), resultSet.getString("transport_waybill_number")
                 ),
                 id
         );
@@ -141,7 +141,7 @@ public class ShippingOrderStore {
                 header.fillingType(), header.status(),
                 containers, List.of(), railwayCarriages, containerQuantities,
                 header.contractId(), header.contractName(), header.routeId(),
-                null, null, header.departureAt(), header.consignee(), null, null, header.authorizedRepresentative(), header.phone(), header.email(), header.comment(), header.contractType(), header.createdAt(), header.transportWaybillNumber()
+                null, null, header.departureAt(), header.consignee(), null, null, header.authorizedRepresentative(), header.phone(), header.email(), header.comment(), header.contractType(), header.createdAt(), header.transportWaybillNumber(), null, header.partyId()
         );
     }
 
@@ -159,12 +159,12 @@ public class ShippingOrderStore {
         request.additions().forEach(a -> ownerContainers.add(a.container().containerId()));
         ContainerLocks.lockCurrentOwners(jdbcTemplate, ownerContainers);
         if(request.metadata()!=null) {
-            jdbcTemplate.update("update shipping_order set planned_shipping_date_time=?, consignee_id=? where id=?", request.metadata().plannedAt(), ru.billing.app.reference.PartyReferences.clientParty(jdbcTemplate, request.metadata().consignee()), id);
+            jdbcTemplate.update("update shipping_order set planned_shipping_date_time=?, consignee_id=? where id=?", request.metadata().plannedAt(), ru.billing.app.reference.PartyReferences.clientParty(jdbcTemplate, request.metadata().destination(), request.metadata().consignee()), id);
         }
         var seen = new java.util.HashSet<UUID>();
         for (var c : request.containers()) {
             if (!seen.add(c.containerId())) throw new ApiException(HttpStatus.BAD_REQUEST, "DUPLICATE_CONTAINER", "КТК указан дважды");
-            int count = jdbcTemplate.update("update shipping_order_container set owner_container_id = ?, seal_numbers = ?, seal_type_id = ?, danger_class_id = ? where shipping_order_id = ? and container_id = ?",
+            int count = jdbcTemplate.update("update shipping_order_container set container_owner_id = ?, seal_numbers = ?, seal_type_id = ?, danger_class_id = ? where shipping_order_id = ? and container_id = ?",
                     registryOwner(c.containerId()), c.sealNumbers(), c.sealTypeId(), c.hazardClassId(), id, c.containerId());
             if (count != 1) throw new ApiException(HttpStatus.NOT_FOUND, "ORDER_CONTAINER_NOT_FOUND", "КТК отсутствует в этой заявке");
         }
@@ -202,7 +202,7 @@ public class ShippingOrderStore {
         UUID orderContainerId = UUID.randomUUID();
         jdbcTemplate.update(
                 "insert into shipping_order_container "
-                        + "(id, shipping_order_id, shipping_order_railway_carriage_id, container_id, empty, owner_container_id, seal_numbers, seal_type_id, danger_class_id) "
+                        + "(id, shipping_order_id, shipping_order_railway_carriage_id, container_id, empty, container_owner_id, seal_numbers, seal_type_id, danger_class_id) "
                         + "values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 orderContainerId,
                 orderId,
@@ -227,14 +227,14 @@ public class ShippingOrderStore {
         return OrderContainerDetails.merge(jdbcTemplate.query(
                 """
                 select oc.id as task_id, c.container_type, oc.container_id, c.code as container_name, oc.empty,
-                       case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end as owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
+                       case when so.order_status = 'DRAFT' then stock.client_id else oc.container_owner_id end as owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
                        oc.seal_type_id, st.code as seal_type_name, oc.danger_class_id, hc.code as danger_class_name,
                        item.etsng_code_id, e.code as etsng_code_name, item.wight_net, coalesce(stock.status,'DEPARTED') as container_status
                   from shipping_order_container oc
                   join container c on c.id = oc.container_id
                   left join shipping_order so on so.id = oc.shipping_order_id
                   left join container_owner_current stock on stock.container_id = oc.container_id
-                  left join client owner on owner.id = case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end
+                  left join client owner on owner.id = case when so.order_status = 'DRAFT' then stock.client_id else oc.container_owner_id end
                   left join seal_type st on st.id = oc.seal_type_id
                   left join danger_class hc on hc.id = oc.danger_class_id
                   left join shipping_order_container_item item on item.shipping_order_container_id = oc.id
@@ -253,7 +253,7 @@ public class ShippingOrderStore {
                 select sorc.id as carriage_row_id, sorc.railway_carriage_id,
                        rc.code as railway_carriage_code, wagon_owner.name as wagon_owner_name,
                        oc.id as task_id, c.container_type, oc.container_id, c.code as container_name, oc.empty,
-                       case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end as owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
+                       case when so.order_status = 'DRAFT' then stock.client_id else oc.container_owner_id end as owner_container_id, owner.name as owner_container_name, oc.seal_numbers,
                        oc.seal_type_id, st.code as seal_type_name, oc.danger_class_id, hc.code as danger_class_name,
                        item.etsng_code_id, e.code as etsng_code_name, item.wight_net, coalesce(stock.status,'DEPARTED') as container_status
                   from shipping_order_railway_carriage sorc
@@ -266,7 +266,7 @@ public class ShippingOrderStore {
                   left join container c on c.id = oc.container_id
                   join shipping_order so on so.id = sorc.shipping_order_id
                   left join container_owner_current stock on stock.container_id = oc.container_id
-                  left join client owner on owner.id = case when so.order_status = 'DRAFT' then stock.client_id else oc.owner_container_id end
+                  left join client owner on owner.id = case when so.order_status = 'DRAFT' then stock.client_id else oc.container_owner_id end
                   left join seal_type st on st.id = oc.seal_type_id
                   left join danger_class hc on hc.id = oc.danger_class_id
                   left join shipping_order_container_item item on item.shipping_order_container_id = oc.id
@@ -332,7 +332,7 @@ public class ShippingOrderStore {
             String contractName,
             UUID routeId,
             LocalDateTime departureAt,
-            String consignee, String authorizedRepresentative, String phone, String email, String comment, String contractType, java.time.OffsetDateTime createdAt, String transportWaybillNumber
+            UUID partyId, String consignee, String authorizedRepresentative, String phone, String email, String comment, String contractType, java.time.OffsetDateTime createdAt, String transportWaybillNumber
     ) {
     }
 

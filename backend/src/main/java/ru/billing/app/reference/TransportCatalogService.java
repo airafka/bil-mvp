@@ -1,5 +1,7 @@
 package ru.billing.app.reference;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -13,9 +15,9 @@ import ru.billing.app.error.ApiException;
 public class TransportCatalogService {
     private final JdbcTemplate jdbc;
     public TransportCatalogService(JdbcTemplate jdbc) { this.jdbc=jdbc; }
-    public record Entry(UUID id, String name, boolean active, String phoneNumber, String poaNumber,
+    public record Entry(UUID id, String name, String code, boolean active, String phoneNumber, String poaNumber,
         LocalDate poaValidTo, String insuranceNumber, Boolean withTrailer, String trailerNumber) {}
-    public record Input(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=255) String name,
+    public record Input(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=255) @JsonAlias("code") String name,
         @jakarta.validation.constraints.NotNull Boolean active,
         @jakarta.validation.constraints.Size(max=30) String phoneNumber,
         @jakarta.validation.constraints.Size(max=100) String poaNumber, LocalDate poaValidTo,
@@ -26,13 +28,13 @@ public class TransportCatalogService {
             case "vehicles" -> "client_vehicle"; default -> throw new ApiException(HttpStatus.NOT_FOUND,"CATALOG_NOT_FOUND","Справочник не найден"); };
     }
     private String query(String kind) {
-        return "select id,"+(kind.equals("carriers")?"name":"code")+" as name,active,"
+        return "select id,"+(kind.equals("carriers")?"name":"code")+" as name,"+(kind.equals("carriers")?"null::text":"code")+" as code,active,"
             +(kind.equals("drivers")?"phone_number,poa_number,poa_valid_to,":"null::text as phone_number,null::text as poa_number,null::date as poa_valid_to,")
             +(kind.equals("vehicles")?"insurance_number,with_trailer,trailer_number":"null::text as insurance_number,null::boolean as with_trailer,null::text as trailer_number")
             +" from "+table(kind);
     }
     private Entry row(java.sql.ResultSet rs) throws java.sql.SQLException {
-        return new Entry(rs.getObject("id",UUID.class),rs.getString("name"),rs.getBoolean("active"),rs.getString("phone_number"),
+        return new Entry(rs.getObject("id",UUID.class),rs.getString("name"),rs.getString("code"),rs.getBoolean("active"),rs.getString("phone_number"),
             rs.getString("poa_number"),rs.getObject("poa_valid_to",LocalDate.class),rs.getString("insurance_number"),
             rs.getObject("with_trailer",Boolean.class),rs.getString("trailer_number"));
     }

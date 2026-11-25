@@ -21,7 +21,8 @@ final class OrderRowMapper {
                 row.getString("status"),
                 row.getObject("contract_id", UUID.class),
                 row.getString("contract_name"),
-                row.getObject("planned_at", LocalDateTime.class),
+                row.getObject("plan_receiving_date_time", LocalDateTime.class),
+                row.getObject("planned_shipping_date_time", LocalDateTime.class),
                 row.getObject("route_id", UUID.class),
                 row.getObject("route_number", Integer.class),
                 row.getString("comment")
