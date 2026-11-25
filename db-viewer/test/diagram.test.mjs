@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { diagramScope, relationHighlights } from '../public/diagram.js';
+import { diagramScope, fieldRelations } from '../public/diagram.js';
 
 test('the focused diagram includes every foreign key between visible tables', () => {
   const tables = ['history', 'period', 'visit', 'container', 'outside', 'isolated'].map(name => ({ name }));
@@ -19,34 +19,25 @@ test('the focused diagram includes every foreign key between visible tables', ()
   assert.deepEqual(diagramScope(catalog, ''), catalog);
 });
 
-test('references to the same destination key share a color across all panels', () => {
-  const service = { source: 'container_period', columns: ['service_order_id'], target: 'service_order', target_columns: ['id'] };
-  const second = { ...service, source: 'service_order_container' };
-  const arrival = { source: 'container_visit', columns: ['arrival'], target: 'container_owner_history', target_columns: ['id'] };
-  const departure = { ...arrival, columns: ['departure'] };
-  const otherColumn = { ...arrival, target_columns: ['number'] };
-  const keys = [service, second, arrival, departure, otherColumn];
-  const { colors, fields } = relationHighlights(keys);
-  assert.equal(colors.size, keys.length);
-  assert.equal(new Set(colors.values()).size, 3);
-  assert.equal(colors.get(service), colors.get(second));
-  assert.equal(colors.get(arrival), colors.get(departure));
-  assert.deepEqual(fields.get('service_order').get('id'), new Set([service, second]));
-  assert.deepEqual(fields.get('container_visit').get('arrival'), new Set([arrival, otherColumn]));
-  assert.deepEqual(colors, relationHighlights(keys.toReversed()).colors);
-  const focused = relationHighlights(keys, new Set([service]));
-  assert.deepEqual(focused.colors, colors);
-  assert.deepEqual(focused.fields.get('service_order').get('id'), new Set([service]));
+test('selecting a field follows only its own outgoing keys, including composite and off-diagram targets', () => {
+  const service = { source: 'period', columns: ['order_id'], target: 'order', target_columns: ['id'] };
+  const other = { ...service, source: 'visit' };
+  const pair = { source: 'item', columns: ['period_id', 'order_id'], target: 'period', target_columns: ['id', 'order_id'] };
+  const hidden = { ...service, target: 'outside' };
+  const visible = [service, other, pair];
+  const all = [...visible, hidden];
+  assert.deepEqual(fieldRelations(all, visible, 'period', 'order_id'), [service, hidden]);
+  assert.deepEqual(fieldRelations(all, visible, 'item', 'order_id'), [pair]);
+  assert.deepEqual(fieldRelations(all, visible, 'item', 'period_id'), [pair]);
+  assert.deepEqual(fieldRelations(all, visible, 'order', 'id'), [service, other]);
+  assert.deepEqual(fieldRelations(all, visible, 'period', 'note'), []);
 });
 
-test('a composite destination groups by its full set of columns and preserves each mapping', () => {
-  const pair = { source: 'first', columns: ['contract', 'client'], target: 'contract', target_columns: ['id', 'client_id'] };
-  const reversed = { ...pair, source: 'second', columns: ['owner', 'agreement'], target_columns: ['client_id', 'id'] };
-  const single = { ...pair, columns: ['contract'], target_columns: ['id'] };
-  const { colors, fields } = relationHighlights([pair, reversed, single]);
-  assert.equal(colors.get(pair), colors.get(reversed));
-  assert.notEqual(colors.get(pair), colors.get(single));
-  assert.deepEqual(fields.get('contract').get('id'), new Set([pair, reversed, single]));
-  assert.deepEqual(fields.get('contract').get('client_id'), new Set([pair, reversed]));
-  assert.deepEqual(reversed.target_columns, ['client_id', 'id']);
+test('revealing an off-diagram target keeps existing tables and shows every link between them', () => {
+  const tables = ['home', 'neighbor', 'target', 'unrelated'].map(name => ({ name }));
+  const first = { source: 'home', target: 'neighbor' };
+  const second = { source: 'neighbor', target: 'target' };
+  const third = { source: 'unrelated', target: 'target' };
+  const catalog = { tables, relations: [first, second, third] };
+  assert.deepEqual(diagramScope(catalog, 'home', ['target']), { tables: tables.slice(0, 3), relations: [first, second] });
 });

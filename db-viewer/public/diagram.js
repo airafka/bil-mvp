@@ -1,40 +1,14 @@
 const headerHeight = 36, rowHeight = 23;
-const keyPalette = ['#71dfac', '#ffa666', '#c69cff', '#f383b4', '#a7d768', '#ffce72',
-  '#91afff', '#ff9d93', '#63d9e8', '#e6adef', '#c6c977', '#76c7f3',
-  '#cd976d', '#91c79b', '#ae99de', '#6cafd4', '#da859a', '#f5d7a2',
-  '#65c3b9', '#e2a0d5', '#afbc79', '#adacff', '#ff7877', '#abcce8'];
 
-// Group by the referenced key across the whole schema, independent of FK column order.
-export function relationHighlights(relations, visible = new Set(relations)) {
-  const byTarget = new Map();
-  for (const key of relations) {
-    const target = JSON.stringify([key.target, ...key.target_columns.toSorted()]);
-    if (!byTarget.has(target)) byTarget.set(target, []);
-    byTarget.get(target).push(key);
-  }
-  const colors = new Map(), fields = new Map();
-  function mark(table, columns, key) {
-    if (!fields.has(table)) fields.set(table, new Map());
-    const byColumn = fields.get(table);
-    for (const column of columns) {
-      if (!byColumn.has(column)) byColumn.set(column, new Set());
-      byColumn.get(column).add(key);
-    }
-  }
-  [...byTarget.keys()].sort().forEach((target, index) => {
-    const color = keyPalette[index] ?? `hsl(${(index * 137.508) % 360} 72% 72%)`;
-    for (const key of byTarget.get(target)) {
-      colors.set(key, color);
-      mark(key.source, key.columns, key);
-      if (visible.has(key)) mark(key.target, key.target_columns, key);
-    }
-  });
-  return { colors, fields };
+export function fieldRelations(all, visible, table, column) {
+  const outgoing = all.filter(key => key.source === table && key.columns.includes(column));
+  if (outgoing.length) return outgoing;
+  return visible.filter(key => key.target === table && key.target_columns.includes(column));
 }
 
-export function diagramScope(catalog, selected) {
+export function diagramScope(catalog, selected, extraTables = []) {
   if (!selected) return catalog;
-  const visible = new Set([selected]);
+  const visible = new Set([selected, ...extraTables]);
   for (const { source, target } of catalog.relations) {
     if (source === selected) visible.add(target);
     if (target === selected) visible.add(source);
@@ -57,6 +31,19 @@ function relationText(key) {
     key.target + ' (' + key.target_columns.join(', ') + ')';
 }
 
+function makeButton(element, label, activate) {
+  element.setAttribute('role', 'button');
+  element.setAttribute('tabindex', '0');
+  element.setAttribute('aria-label', label);
+  element.onclick = activate;
+  element.onkeydown = event => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      activate();
+    }
+  };
+}
+
 // In the detailed view a line meets the first field of its key. The inspector
 // and the highlighted rows show every pair of a composite constraint.
 function fieldPort(node, column, neighbor, fallback) {
@@ -73,7 +60,7 @@ export function createDiagram(root, number, get, selectTable) {
   const mapping = find('mapping'), workspace = find('workspace'), status = find('status');
   const marker = find('arrow');
   marker.id = 'er-arrow-' + number;
-  let catalog, highlights, home, layout, relations, zoom, fitMode, requestVersion = 0;
+  let catalog, home, layout, relations, zoom, fitMode, activeField, requestVersion = 0;
 
   function changeScope(name) {
     scope.value = name;
@@ -119,44 +106,64 @@ export function createDiagram(root, number, get, selectTable) {
     else changeScope(name);
   }
 
-  function selectEdge(value) {
-    edgeSelect.value = value;
-    const key = value === '' ? null : relations[Number(value)];
+  function selectKeys(keys, field = null) {
+    activeField = field;
+    edgeSelect.querySelector('option[value="field"]')?.remove();
+    if (keys.length > 1) edgeSelect.add(new Option('Связи поля (' + keys.length + ')', 'field'));
+    edgeSelect.value = keys.length > 1 ? 'field' : keys.length ? String(relations.indexOf(keys[0])) : '';
+    const selected = new Set(keys);
     for (const edge of graph.querySelectorAll('.er-edge')) {
-      edge.classList.toggle('selected', edge.dataset.index === value);
-      edge.classList.toggle('dimmed', Boolean(key) && edge.dataset.index !== value);
+      const matches = selected.has(relations[Number(edge.dataset.index)]);
+      edge.classList.toggle('selected', matches);
+      edge.classList.toggle('dimmed', selected.size > 0 && !matches);
     }
-    for (const field of graph.querySelectorAll('.er-field')) {
-      const { table, column } = field.dataset;
-      field.classList.toggle('selected', Boolean(key) && (
+    for (const row of graph.querySelectorAll('.er-field')) {
+      const { table, column } = row.dataset;
+      row.classList.toggle('selected', keys.some(key =>
         (key.source === table && key.columns.includes(column)) ||
         (key.target === table && key.target_columns.includes(column))));
+      if (row.hasAttribute('role')) row.setAttribute('aria-pressed', String(table === field?.table && column === field?.column));
     }
-    mapping.textContent = key
-      ? relationText(key) + '   ·   ' + (key.unique_source ? '0..1' : '0..N') + ' → ' + (key.optional ? '0..1' : '1')
-      : relations.length ? 'Стрелка ведёт от внешнего ключа к связанной таблице.' : 'Внешних ключей между этой таблицей и таблицами схемы public нет.';
+    mapping.textContent = keys.length ? keys.map(key => relationText(key) + '   ·   ' +
+      (key.unique_source ? '0..1' : '0..N') + ' → ' + (key.optional ? '0..1' : '1')).join('\n')
+      : relations.length ? 'Нажмите на поле или стрелку, чтобы увидеть связь.' : 'Внешних ключей между этой таблицей и таблицами схемы public нет.';
+  }
+
+  function selectField(table, column, keys) {
+    if (activeField?.table === table && activeField.column === column) {
+      selectKeys([]);
+      return;
+    }
+    if (keys.some(key => !relations.includes(key))) {
+      render([...layout.nodes(), ...keys.map(key => key.target)]);
+      fitMode = true;
+      setScale(fitScale());
+      const row = [...graph.querySelectorAll('.er-field')].find(row => row.dataset.table === table && row.dataset.column === column);
+      row?.focus({ preventScroll: true });
+    }
+    selectKeys(keys, { table, column });
   }
 
   function tableNode(table, relatedFields, fkNames, measure) {
-    const fieldKeys = highlights.fields.get(table.name);
     const rows = table.columns.filter(col => fields.value === 'all' ||
-      (fields.value === 'keys' && (col.primary || relatedFields.has(col.name) || fieldKeys?.has(col.name))));
+      (fields.value === 'keys' && (col.primary || relatedFields.has(col.name) || fkNames.has(col.name))));
     const width = Math.ceil(Math.max(150, measure(table.name) + 30,
       ...rows.map(col => measure(col.name) + measure(col.type) + 90)));
-    return { table, rows, fkNames, fieldKeys, width, height: headerHeight + rows.length * rowHeight };
+    return { table, rows, fkNames, width, height: headerHeight + rows.length * rowHeight };
   }
 
   function drawTable(node) {
-    const { table, rows, fkNames, fieldKeys, width, height, x, y } = node;
+    const { table, rows, fkNames, width, height, x, y } = node;
     const group = svg('g', {
       class: 'er-node' + (scope.value === table.name ? ' current' : ''),
       transform: 'translate(' + (x - width / 2) + ' ' + (y - height / 2) + ')',
-      role: 'button', tabindex: 0, 'aria-label': 'Связи таблицы ' + table.name,
     });
-    group.append(svg('title', {}, 'Открыть связи таблицы ' + table.name),
-      svg('rect', { class: 'er-card', width, height, rx: 4 }),
+    const header = svg('g', { class: 'er-header' });
+    makeButton(header, 'Связи таблицы ' + table.name, () => { browse(table.name); scope.focus(); });
+    header.append(svg('title', {}, 'Открыть связи таблицы ' + table.name),
       svg('rect', { class: 'er-card-head', width, height: headerHeight, rx: 4 }),
       svg('text', { class: 'er-name', x: 12, y: 23 }, table.name));
+    group.append(svg('rect', { class: 'er-card', width, height, rx: 4 }), header);
     rows.forEach((col, index) => {
       const row = svg('g', { class: 'er-field', 'data-table': table.name, 'data-column': col.name });
       const top = headerHeight + index * rowHeight;
@@ -165,25 +172,14 @@ export function createDiagram(root, number, get, selectTable) {
         svg('text', { class: col.primary ? 'er-pk' : 'er-fk', x: 10, y: top + 16 }, keys),
         svg('text', { x: 51, y: top + 16 }, col.name),
         svg('text', { class: 'er-type', x: width - 11, y: top + 16, 'text-anchor': 'end' }, col.type));
-      const keysHere = fieldKeys?.get(col.name);
-      if (keysHere) {
-        const colors = new Set(Array.from(keysHere, key => highlights.colors.get(key)));
-        const bandWidth = (width - 2) / colors.size;
-        let left = 1;
-        row.prepend(svg('title', {}, [...keysHere].map(relationText).join('\n')));
-        for (const color of colors) {
-          if (colors.size === 1) row.style.setProperty('--er-key-color', color);
-          row.append(svg('rect', { x: left, y: top + rowHeight - 3, width: bandWidth, height: 3, fill: color }));
-          left += bandWidth;
-        }
+      const keysHere = fieldRelations(catalog.relations, relations, table.name, col.name);
+      if (keysHere.length) {
+        row.prepend(svg('title', {}, keysHere.map(relationText).join('\n')));
+        makeButton(row, 'Связи поля ' + table.name + '.' + col.name,
+          () => selectField(table.name, col.name, keysHere));
       }
       group.append(row);
     });
-    const open = () => { browse(table.name); scope.focus(); };
-    group.onclick = open;
-    group.onkeydown = event => {
-      if (['Enter', ' '].includes(event.key)) { event.preventDefault(); open(); }
-    };
     return group;
   }
 
@@ -193,19 +189,17 @@ export function createDiagram(root, number, get, selectTable) {
     path[path.length - 1] = fieldPort(layout.node(key.target), key.target_columns[0], points.at(-2), points.at(-1));
     const coordinates = path.map(p => p.x + ',' + p.y).join(' ');
     const group = svg('g', { class: 'er-edge', 'data-index': index });
-    group.style.setProperty('--er-key-color', highlights.colors.get(key));
     group.append(svg('title', {}, relationText(key)),
       svg('polyline', { class: 'er-line', points: coordinates, 'marker-end': 'url(#' + marker.id + ')' }),
       svg('polyline', { class: 'er-hit', points: coordinates }));
-    group.onclick = () => selectEdge(String(index));
+    group.onclick = () => selectKeys([key]);
     return group;
   }
 
-  function render() {
+  function render(extraTables = []) {
     const selected = scope.value;
-    const { tables, relations: visibleKeys } = diagramScope(catalog, selected);
+    const { tables, relations: visibleKeys } = diagramScope(catalog, selected, extraTables);
     relations = visibleKeys;
-    highlights = relationHighlights(catalog.relations, new Set(relations));
     const ctx = document.createElement('canvas').getContext('2d');
     ctx.font = '13px ' + getComputedStyle(root).getPropertyValue('--mono');
     const measure = text => ctx.measureText(text).width;
@@ -222,14 +216,13 @@ export function createDiagram(root, number, get, selectTable) {
     window.dagre.layout(layout);
     const { width, height } = layout.graph();
     graph.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
-    find('key-legend').hidden = !relations.length;
     find('drawing').replaceChildren(
       ...relations.map((key, index) => drawEdge(key, index, layout.edge(key.source, key.target, String(index)).points)),
       ...tables.map(t => drawTable(layout.node(t.name))));
     edgeSelect.replaceChildren(new Option(relations.length ? 'Выберите связь (' + relations.length + ')' : 'Нет связей', ''),
       ...relations.map((r, i) => new Option(relationText(r), String(i))));
     edgeSelect.disabled = !relations.length;
-    selectEdge('');
+    selectKeys([]);
     const initial = fitScale();
     setScale(selected ? Math.max(0.8, initial) : initial);
     fitMode = zoom === initial;
@@ -274,8 +267,8 @@ export function createDiagram(root, number, get, selectTable) {
   };
   viewport.onlostpointercapture = () => { drag = null; viewport.classList.remove('dragging'); };
   scope.onchange = () => browse(scope.value);
-  fields.onchange = render;
-  edgeSelect.onchange = () => selectEdge(edgeSelect.value);
+  fields.onchange = () => render();
+  edgeSelect.onchange = () => selectKeys(edgeSelect.value === '' ? [] : [relations[Number(edgeSelect.value)]]);
   find('fit').onclick = () => { fitMode = true; setScale(fitScale()); };
   find('plus').onclick = () => stepZoom(1.35);
   find('minus').onclick = () => stepZoom(1 / 1.35);
