@@ -53,6 +53,54 @@ export async function overview() {
   });
 }
 
+// The record grid and the diagram use the same positional mapping for composite keys.
+async function foreignKeys(client, table = null) {
+  const scope = table === null
+    ? `src.relnamespace='public'::regnamespace AND dst.relnamespace='public'::regnamespace
+       AND src.relkind IN ('r','p') AND dst.relkind IN ('r','p')`
+    : 'c.conrelid=$1::regclass';
+  return (await client.query(`SELECT c.conname AS name, src.relname AS source, dst.relname AS target_name,
+    c.confrelid::regclass::text AS target,
+    array_agg(a.attname::text ORDER BY k.position) AS columns,
+    array_agg(af.attname::text ORDER BY k.position) AS target_columns,
+    CASE WHEN c.confmatchtype='f' THEN bool_and(NOT a.attnotnull) ELSE bool_or(NOT a.attnotnull) END AS optional,
+    EXISTS(SELECT 1 FROM pg_index i WHERE i.indrelid=c.conrelid AND i.indisunique AND i.indisvalid
+      AND i.indpred IS NULL AND i.indexprs IS NULL AND NOT EXISTS (
+        SELECT FROM unnest(i.indkey) WITH ORDINALITY ix(attnum, pos)
+        WHERE ix.pos <= i.indnkeyatts AND NOT (ix.attnum=ANY(c.conkey)))) AS unique_source,
+    array_agg(EXISTS(SELECT 1 FROM pg_index i WHERE i.indrelid=c.confrelid
+      AND i.indisunique AND i.indnkeyatts=1 AND i.indpred IS NULL AND i.indexprs IS NULL
+      AND i.indkey[0]=af.attnum) ORDER BY k.position) AS unique_targets
+    FROM pg_constraint c
+    JOIN pg_class src ON src.oid=c.conrelid
+    JOIN pg_class dst ON dst.oid=c.confrelid
+    CROSS JOIN LATERAL unnest(c.conkey, c.confkey) WITH ORDINALITY AS k(source, target, position)
+    JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.source
+    JOIN pg_attribute af ON af.attrelid=c.confrelid AND af.attnum=k.target
+    WHERE c.contype='f' AND ${scope}
+    GROUP BY c.oid, c.conname, c.conrelid, c.confrelid, c.conkey, c.confmatchtype, src.relname, dst.relname
+    ORDER BY cardinality(c.conkey), c.oid`, table === null ? [] : [`public.${quote(table)}`])).rows;
+}
+
+export function schemaDiagram() {
+  return read(async client => {
+    const entities = (await client.query(`SELECT t.relname AS name,
+      COALESCE(json_agg(json_build_object('name', a.attname, 'type', format_type(a.atttypid,a.atttypmod),
+        'primary', COALESCE(a.attnum=ANY(pk.conkey), false)) ORDER BY a.attnum)
+        FILTER (WHERE a.attnum IS NOT NULL), '[]') AS columns
+      FROM pg_class t
+      LEFT JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum>0 AND NOT a.attisdropped
+      LEFT JOIN pg_constraint pk ON pk.conrelid=t.oid AND pk.contype='p'
+      WHERE t.relnamespace='public'::regnamespace AND t.relkind IN ('r','p')
+      GROUP BY t.oid, t.relname ORDER BY t.relname`)).rows;
+    const relations = (await foreignKeys(client)).map(key => ({
+      name: key.name, source: key.source, target: key.target_name, columns: key.columns,
+      target_columns: key.target_columns, optional: key.optional, unique_source: key.unique_source,
+    }));
+    return { tables: entities, relations };
+  });
+}
+
 export async function tablePage(params) {
   const name = params.get('name');
   const search = (params.get('search') || '').trim();
@@ -69,21 +117,9 @@ export async function tablePage(params) {
         AND a.attnum=ANY(i.indkey)) AS primary
       FROM pg_attribute a WHERE a.attrelid=$1::regclass AND a.attnum>0 AND NOT a.attisdropped
       ORDER BY a.attnum`, [`public.${quote(name)}`])).rows;
-    const foreignKeys = (await client.query(`SELECT c.confrelid::regclass::text AS target,
-      array_agg(a.attname::text ORDER BY k.position) AS columns,
-      array_agg(af.attname::text ORDER BY k.position) AS target_columns,
-      array_agg(EXISTS(SELECT 1 FROM pg_index i WHERE i.indrelid=c.confrelid
-        AND i.indisunique AND i.indnkeyatts=1 AND i.indpred IS NULL AND i.indexprs IS NULL
-        AND i.indkey[0]=af.attnum) ORDER BY k.position) AS unique_targets
-      FROM pg_constraint c
-      CROSS JOIN LATERAL unnest(c.conkey, c.confkey) WITH ORDINALITY AS k(source, target, position)
-      JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.source
-      JOIN pg_attribute af ON af.attrelid=c.confrelid AND af.attnum=k.target
-      WHERE c.conrelid=$1::regclass AND c.contype='f'
-      GROUP BY c.oid, c.confrelid
-      ORDER BY cardinality(c.conkey), c.oid`, [`public.${quote(name)}`])).rows;
+    const keys = await foreignKeys(client, name);
     // Prefer the referenced record's own unique key over a shared context field.
-    const relations = foreignKeys.flatMap(key => key.columns.map((column, index) => ({
+    const relations = keys.flatMap(key => key.columns.map((column, index) => ({
       target: key.target, columns: key.columns, target_columns: key.target_columns,
       column, target_column: key.target_columns[index], target_unique: key.unique_targets[index],
     }))).sort((a, b) => Number(b.target_unique) - Number(a.target_unique) || a.columns.length - b.columns.length);

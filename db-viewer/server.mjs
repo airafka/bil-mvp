@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
-import { CHANNEL, connection, overview, tablePage, InputError, pool } from './database.mjs';
+import { CHANNEL, connection, overview, tablePage, schemaDiagram, InputError, pool } from './database.mjs';
 
 const port = Number(process.env.PORT || 3022);
 const clients = new Set();
@@ -41,7 +41,12 @@ async function listen() {
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/diagram.js', ['diagram.js', 'text/javascript; charset=utf-8']],
+  ['/dagre.min.js', ['../node_modules/@dagrejs/dagre/dist/dagre.min.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
+]);
+const dataRoutes = new Map([
+  ['/api/tables', overview], ['/api/table', tablePage], ['/api/diagram', schemaDiagram],
 ]);
 const server = http.createServer(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
@@ -68,8 +73,8 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(connected ? 200 : 503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ connected, database: connection.database })); return;
     }
-    if (url.pathname === '/api/tables' || url.pathname === '/api/table') {
-      const result = url.pathname === '/api/tables' ? await overview() : await tablePage(url.searchParams);
+    if (dataRoutes.has(url.pathname)) {
+      const result = await dataRoutes.get(url.pathname)(url.searchParams);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(result)); return;
     }

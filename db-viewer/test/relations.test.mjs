@@ -10,9 +10,19 @@ test('every exposed foreign key uses all its columns to find the related record'
       return response.json();
     };
     const { tables } = await fetch(url + '/api/tables').then(r => r.json());
+    const diagramResponse = await fetch(url + '/api/diagram');
+    assert.equal(diagramResponse.status, 200);
+    const diagram = await diagramResponse.json();
+    assert.deepEqual(diagram.tables.map(t => t.name), tables.map(t => t.name));
     let keys = 0, followed = 0, composite = 0;
     for (const table of tables) {
       const data = await page(new URLSearchParams({ name: table.name, limit: '100' }));
+      const entity = diagram.tables.find(t => t.name === table.name);
+      assert.deepEqual(entity.columns, data.columns.map(({ name, type, primary }) => ({ name, type, primary })));
+      const diagramKeys = diagram.relations.filter(r => r.source === table.name);
+      const keySignature = r => JSON.stringify([r.target.replace(/^public\./, ''), r.columns, r.target_columns]);
+      assert.deepEqual(new Set(diagramKeys.map(keySignature)), new Set(data.relations.map(keySignature)));
+      assert.equal(new Set(diagramKeys.map(r => r.name)).size, diagramKeys.length);
       if (['receiving_order', 'shipping_order'].includes(table.name)) {
         const contract = data.relations.find(r => r.column === 'contract_id');
         assert.equal(contract?.target.replace(/^public\./, ''), 'contract');

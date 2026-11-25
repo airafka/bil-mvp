@@ -1,3 +1,5 @@
+import { openDiagram } from './diagram.js';
+
 const $ = id => document.getElementById(id);
 const global$ = $;
 const labels = {
@@ -304,6 +306,7 @@ function createPanel(number) {
   root.addEventListener('focusin', () => activate(panel));
   $('activate').onclick = () => activate(panel);
   $('table-select').onchange = () => selectTable($('table-select').value);
+  $('diagram').onclick = () => openDiagram(state.selected, get);
   $('close').onclick = () => {
     if (panels.length === 1) return;
     finishPanelResize?.(); finishPanelMove?.(true);
@@ -352,6 +355,7 @@ function createPanel(number) {
     $('page-size').value = String(state.limit);
     $('table-select').value = state.selected;
     showPanelError('');
+    $('diagram').disabled = !state.selected;
     $('table-title').textContent = state.selected;
     $('table-description').textContent = labels[state.selected] || 'Таблица БД';
     $('relation-filter').hidden = !state.filter;

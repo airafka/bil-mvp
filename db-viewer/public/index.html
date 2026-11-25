@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Биллинг — Database Viewer</title>
   <link rel="stylesheet" href="/style.css">
+  <script defer src="/dagre.min.js"></script>
   <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -60,6 +61,7 @@
             <button data-role="data-tab" role="tab" aria-selected="true"><span class="table-icon" aria-hidden="true"></span>Данные</button>
             <button data-role="schema-tab" role="tab" aria-selected="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.1M4 12h.1M4 18h.1"/></svg>Структура</button>
           </div>
+          <button data-role="diagram" class="diagram-launch tool-button" type="button" aria-haspopup="dialog" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="8" width="7" height="8" rx="1"/><rect x="15" y="2" width="7" height="7" rx="1"/><rect x="15" y="15" width="7" height="7" rx="1"/><path d="M9 12h3V5h3m-3 7v7h3"/></svg> ER-диаграмма</button>
           <span data-role="table-description" class="table-description">Таблицы схемы public</span>
         </div>
         <div class="filter-toolbar">
@@ -85,5 +87,29 @@
 
   <footer class="statusbar"><span id="connection" class="connection waiting" role="status">Подключение…</span><span class="status-hint">Изменения появляются после сохранения в БД</span><span id="updated">Ожидаем данные</span></footer>
   <dialog id="detail"><div class="detail-heading"><div><span class="table-icon" aria-hidden="true"></span><h2 id="detail-title"></h2><span class="detail-caption">Значения записи</span></div><button id="close-detail" aria-label="Закрыть запись">×</button></div><div id="detail-body"></div></dialog>
+  <dialog id="er-dialog" aria-labelledby="er-title">
+    <header class="er-heading"><h2 id="er-title">ER-диаграмма</h2><span class="tab-schema">public</span><button id="er-close" type="button" aria-label="Закрыть диаграмму">×</button></header>
+    <p id="er-status" role="status"></p>
+    <div id="er-workspace" hidden>
+      <div class="er-toolbar">
+        <label>Показать <select id="er-scope" aria-label="Область диаграммы"></select></label>
+        <label>Поля <select id="er-fields"><option value="keys">Ключевые</option><option value="all">Все поля</option><option value="none">Только названия</option></select></label>
+        <div class="er-zoom" role="group" aria-label="Масштаб диаграммы">
+          <button id="er-minus" aria-label="Уменьшить масштаб">−</button><output id="er-scale"></output><button id="er-plus" aria-label="Увеличить масштаб">+</button>
+          <button id="er-fit">Вписать</button>
+        </div>
+      </div>
+      <div id="er-viewport" tabindex="0" aria-label="Область прокрутки диаграммы">
+        <svg id="er-graph" role="group" aria-label="Таблицы и внешние ключи">
+          <defs><marker id="er-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z"/></marker></defs>
+          <g id="er-drawing"></g>
+        </svg>
+      </div>
+      <div class="er-inspector">
+        <label>Внешний ключ <select id="er-edge" aria-label="Внешний ключ"></select></label>
+        <p id="er-mapping" aria-live="polite"></p>
+      </div>
+    </div>
+  </dialog>
 </body>
 </html>

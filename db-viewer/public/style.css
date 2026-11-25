@@ -305,3 +305,54 @@ table.column-grid { table-layout: fixed; min-width: 0; }
 .data-panel.drop-before::after, .data-panel.drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 4px; bottom: 0; background: #94bddc; z-index: 10; pointer-events: none; }
 .data-panel.drop-before::after { top: 0; bottom: auto; }
 .moving-panels, .moving-panels * { cursor: grabbing !important; user-select: none !important; }
+
+.diagram-launch { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; }
+#er-dialog { width: min(1600px, 96vw); height: 90dvh; max-height: 96dvh; border-radius: 5px; overflow: hidden; }
+#er-dialog[open], #er-workspace { display: flex; flex-direction: column; }
+.er-heading, .er-toolbar, .er-inspector { flex: none; padding: 8px 14px; background: #2d3338; }
+.er-heading { display: flex; align-items: center; gap: 5px; border-bottom: 1px solid var(--border); }
+.er-heading h2 { font-size: 16px; }
+#er-close { margin-left: auto; font-size: 20px; line-height: 1; }
+#er-status { padding: 20px; color: var(--muted); }
+#er-workspace { flex: 1; min-height: 0; }
+.er-toolbar, .er-toolbar label, .er-zoom, .er-inspector label { display: flex; align-items: center; gap: 7px; }
+.er-toolbar { flex-wrap: wrap; gap: 8px 16px; border-bottom: 1px solid var(--border); }
+.er-toolbar label, .er-inspector label { min-width: 0; color: #c6d2da; }
+.er-toolbar select, .er-inspector select { min-width: 0; max-width: 100%; }
+.er-zoom { margin-left: auto; }
+.er-zoom output { min-width: 34px; text-align: center; font-variant-numeric: tabular-nums; }
+#er-viewport { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; align-content: safe center; cursor: grab;
+  background: radial-gradient(circle, #41484e 1px, transparent 1px) 0 0 / 16px 16px, #22272b; }
+#er-viewport.dragging { cursor: grabbing; user-select: none; }
+#er-graph { display: block; margin-inline: auto; }
+.er-node { cursor: pointer; }
+.er-card { fill: #2f363c; stroke: #5b6e7e; }
+.er-card-head { fill: #3b4b57; stroke: #607584; }
+.er-node.current .er-card-head { fill: #31536b; stroke: #8dc4e8; }
+.er-node:hover .er-card-head, .er-node:focus .er-card-head { stroke: #c6e7ff; stroke-width: 2px; }
+#er-graph text { font: 13px var(--mono); fill: #e2e7eb; }
+#er-graph .er-name { font-weight: 600; }
+.er-field rect { fill: transparent; }
+.er-field.selected rect { fill: #4a5142; }
+#er-graph .er-pk, #er-graph .er-fk { font-size: 10px; font-weight: bold; }
+#er-graph .er-pk { fill: #eaca8c; }
+#er-graph .er-fk { fill: #9bc7e6; }
+#er-graph .er-type { fill: #bdc9d1; font-size: 11px; }
+.er-edge { cursor: pointer; }
+.er-line { fill: none; stroke: #8db4cc; stroke-width: 1.6; stroke-linejoin: round; }
+#er-arrow path { fill: #a8c9df; }
+.er-hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; }
+.er-edge.dimmed { opacity: .28; }
+.er-edge:hover, .er-edge.selected { opacity: 1; }
+.er-edge:hover .er-line, .er-edge.selected .er-line { stroke: #f3ce86; stroke-width: 2.5; }
+.er-inspector { border-top: 1px solid var(--border); }
+.er-inspector select { width: min(680px, 75%); }
+#er-mapping { margin-top: 5px; color: #d1dfe8; font: 12px/1.5 var(--mono); overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  #er-dialog { width: 98vw; height: 94dvh; }
+  .er-heading, .er-toolbar, .er-inspector { padding: 6px 8px; }
+  .er-toolbar label:first-child { flex-basis: 100%; }
+  #er-scope { flex: 1; }
+  .er-zoom { gap: 3px; }
+  .er-inspector select { flex: 1; }
+}
