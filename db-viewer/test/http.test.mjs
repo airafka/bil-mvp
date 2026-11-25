@@ -28,3 +28,28 @@ test('HTTP reads every table and rejects mutations, unknown identifiers and fore
     assert.equal((await fetch(url + '/api/table?name=client&limit=100000')).status, 400);
     console.log(`Read-only HTTP checks passed for ${overview.tables.length} tables`);
   });
+
+test('period dates come from the linked history event and support sorting and search',
+  { skip: !process.env.VIEWER_URL }, async () => {
+    const page = async params => {
+      const response = await fetch(process.env.VIEWER_URL + '/api/table?' + new URLSearchParams(params));
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    const periods = await page({ name: 'container_period', sort: 'effective_at', direction: 'asc' });
+    const dateColumn = periods.columns.find(c => c.name === 'effective_at');
+    assert.equal(dateColumn?.derived, true);
+    assert.equal(dateColumn.label, 'Действует с');
+    let previous;
+    for (const row of periods.rows) {
+      const event = await page({ name: 'container_owner_history', column: 'id', value: row.start_container_owner_history_id });
+      assert.equal(event.rows[0].occurred_at, row.effective_at);
+      if (previous) assert.ok(Date.parse(previous) <= Date.parse(row.effective_at));
+      previous = row.effective_at;
+    }
+    if (previous) {
+      const matches = await page({ name: 'container_period', search: previous, column: 'effective_at', value: previous });
+      assert.ok(matches.rows.length > 0);
+      assert.ok(matches.rows.every(row => row.effective_at === previous));
+    }
+  });

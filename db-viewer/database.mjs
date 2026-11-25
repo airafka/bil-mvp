@@ -69,6 +69,17 @@ export async function tablePage(params) {
         AND a.attnum=ANY(i.indkey)) AS primary
       FROM pg_attribute a WHERE a.attrelid=$1::regclass AND a.attnum>0 AND NOT a.attisdropped
       ORDER BY a.attnum`, [`public.${quote(name)}`])).rows;
+    const showPeriodStart = name === 'container_period'
+      && columns.some(c => c.name === 'start_container_owner_history_id')
+      && !columns.some(c => c.name === 'effective_at');
+    let source = `public.${quote(name)} t`;
+    if (showPeriodStart) {
+      const ownerColumn = columns.findIndex(c => c.name === 'client_id');
+      columns.splice(ownerColumn + 1, 0, { name: 'effective_at', label: 'Действует с', derived: true,
+        type: 'timestamp with time zone', nullable: false, primary: false, comment: 'Момент начала периода из container_owner_history.occurred_at (UTC).' });
+      source += ' LEFT JOIN public.container_owner_history start_event ON start_event.id=t.start_container_owner_history_id';
+    }
+    const field = key => showPeriodStart && key === 'effective_at' ? 'start_event.occurred_at' : `t.${quote(key)}`;
     const foreignKeys = (await client.query(`SELECT c.confrelid::regclass::text AS target,
       array_agg(a.attname::text ORDER BY k.position) AS columns,
       array_agg(af.attname::text ORDER BY k.position) AS target_columns,
@@ -96,21 +107,22 @@ export async function tablePage(params) {
     const filters = [];
     if (search) {
       values.push('%' + search.replace(/[\\%_]/g, '\\$&') + '%');
-      filters.push(`to_jsonb(t)::text ILIKE $${values.length}`);
+      const match = `to_jsonb(t)::text ILIKE $${values.length}`;
+      filters.push(showPeriodStart ? `(${match} OR start_event.occurred_at::text ILIKE $${values.length})` : match);
     }
     for (const [index, filterColumn] of filterColumns.entries()) {
       const filterValue = filterValues[index];
       if (filterValue.length > 200) throw new InputError('Слишком длинное значение');
       values.push(filterValue);
-      filters.push(`t.${quote(filterColumn)}::text = $${values.length}`);
+      filters.push(`${field(filterColumn)}::text = $${values.length}`);
     }
     const where = filters.length ? ' WHERE ' + filters.join(' AND ') : '';
-    const total = (await client.query(`SELECT count(*)::text AS count FROM public.${quote(name)} t${where}`, values)).rows[0].count;
+    const total = (await client.query(`SELECT count(*)::text AS count FROM ${source}${where}`, values)).rows[0].count;
     const pk = columns.filter(c => c.primary).map(c => `t.${quote(c.name)}`).join(', ');
-    const order = sort ? `t.${quote(sort)} ${params.get('direction') === 'asc' ? 'ASC' : 'DESC'} NULLS LAST` : 't.xmin::text::bigint DESC';
+    const order = sort ? `${field(sort)} ${params.get('direction') === 'asc' ? 'ASC' : 'DESC'} NULLS LAST` : 't.xmin::text::bigint DESC';
     // Text conversion avoids precision loss for BIGINT, numeric, timestamps and JSON numbers.
-    const projection = columns.map(c => `t.${quote(c.name)}::text AS ${quote(c.name)}`).join(', ');
-    const rows = (await client.query(`SELECT ${projection} FROM public.${quote(name)} t${where}
+    const projection = columns.map(c => `${field(c.name)}::text AS ${quote(c.name)}`).join(', ');
+    const rows = (await client.query(`SELECT ${projection} FROM ${source}${where}
       ORDER BY ${order}, ${pk || 't.ctid'} LIMIT $${values.length + 1} OFFSET $${values.length + 2}`, [...values, limit, offset])).rows;
     return { name, columns: columns.map(column => ({ ...column, note: attributeNote(name, column, relations) })),
       relations, rows, total, offset, limit, at: new Date().toISOString() };
