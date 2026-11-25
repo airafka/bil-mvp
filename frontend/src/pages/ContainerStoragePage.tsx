@@ -6,7 +6,7 @@ import { request } from '../http'
 import type { PagedResponse, ReferenceOption } from '../domain'
 import { StoragePeriodDialog } from '../components/StoragePeriodDialog'
 import { allDates, monthBounds, validMonth, wholeMonths, type StorageDateRange } from '../storageDateRange'
-import { UiSelect } from '../components/FormControls'
+import { StorageContainerFilter } from '../components/StorageContainerFilter'
 import { TableReveal } from '../components/TableReveal'
 import { storageBoundaryLabel, storageDate, storageClientOwner, storageTransport, type StorageVisit } from '../containerStorage'
 import './ContainerStoragePage.css'
@@ -69,14 +69,10 @@ function StorageFilterForm({ initial, containers, onApply, onReset }: {
   function apply() {
     const bounds = monthBounds(dates)
     const month = bounds.length === 1 ? bounds[0] : ''
-    onApply({ query, month, storedFrom: month ? '' : dates.from, storedTo: month ? '' : dates.to })
+    onApply({ query: query.trim(), month, storedFrom: month ? '' : dates.from, storedTo: month ? '' : dates.to })
   }
   return <><form className="storage-filters" aria-label="Фильтры хранения" onSubmit={event => { event.preventDefault(); apply() }}>
-    <label className="field">Номер КТК<UiSelect value={query} onChange={e => setQuery(e.target.value)}>
-      <option value="">Все КТК</option>
-      {query && !containers.some(item => item.name === query) && <option>{query}</option>}
-      {containers.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
-    </UiSelect></label>
+    <StorageContainerFilter value={query} containers={containers} onChange={setQuery} />
     <label className="field storage-period-field">Период<button type="button" className="ui-control ui-select storage-period-trigger"
       aria-haspopup="dialog" aria-expanded={choosingPeriod} onClick={() => setChoosingPeriod(true)}>
       {dates.from || dates.to ? periodLabel : 'За всё время'}

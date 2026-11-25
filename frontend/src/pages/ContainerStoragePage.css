@@ -9,6 +9,21 @@
 .app-shell .storage-table > thead > tr > th { position: sticky; top: 0; z-index: 1; }
 .storage-filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; margin-bottom: 16px; }
 .storage-page .storage-filters .field { display: grid; grid-template-columns: minmax(0, 1fr); width: 180px; max-width: 100%; margin: 0; }
+.storage-number-picker { position: relative; }
+.storage-number-picker input.ui-control { padding-right: 32px; }
+.app-shell .storage-number-toggle {
+  position: absolute; inset: 1px 1px 1px auto; width: 30px; min-height: 0; padding: 0; border: 0;
+  background: transparent url('/icons/ui-kit-chevron.svg') center / 16px no-repeat; cursor: pointer;
+}
+.storage-number-options {
+  position: absolute; z-index: 4; inset: calc(100% + 4px) 0 auto; max-height: min(260px, 35dvh);
+  overflow-y: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: 4px;
+  background: white; color: var(--ui-field-text); border: 1px solid var(--app-border);
+  border-radius: var(--ui-picker-radius); box-shadow: var(--ui-picker-shadow);
+}
+.storage-number-options li { padding: 8px; border-radius: 5px; cursor: pointer; }
+.storage-number-options li:is(:hover, [aria-selected="true"]) { background: var(--ui-option-active); }
+.storage-number-options li[aria-disabled="true"] { color: var(--ui-field-placeholder); background: transparent; cursor: default; }
 .storage-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .storage-review { color: #9a3412; }
 .storage-table td:first-child { white-space: nowrap; font-weight: normal; }
