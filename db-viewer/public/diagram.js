@@ -1,12 +1,17 @@
 const headerHeight = 36, rowHeight = 23;
-const orderTables = new Set(['receiving_order', 'shipping_order', 'service_order']);
-const orderPalette = ['#71dfac', '#ffa666', '#c69cff', '#f383b4', '#a7d768', '#ffce72',
-  '#91afff', '#ff887b', '#63d9e8', '#e6adef', '#c6c977', '#76c7f3'];
+const keyPalette = ['#71dfac', '#ffa666', '#c69cff', '#f383b4', '#a7d768', '#ffce72',
+  '#91afff', '#ff9d93', '#63d9e8', '#e6adef', '#c6c977', '#76c7f3',
+  '#cd976d', '#91c79b', '#ae99de', '#6cafd4', '#da859a', '#f5d7a2',
+  '#65c3b9', '#e2a0d5', '#afbc79', '#adacff', '#ff7877', '#abcce8'];
 
-// Use the whole catalog so a constraint keeps its color across panels and scopes.
-export function orderHighlights(relations, visible = new Set(relations)) {
-  const keys = relations.filter(key => orderTables.has(key.target))
-    .sort((a, b) => a.source.localeCompare(b.source) || a.name.localeCompare(b.name));
+// Group by the referenced key across the whole schema, independent of FK column order.
+export function relationHighlights(relations, visible = new Set(relations)) {
+  const byTarget = new Map();
+  for (const key of relations) {
+    const target = JSON.stringify([key.target, ...key.target_columns.toSorted()]);
+    if (!byTarget.has(target)) byTarget.set(target, []);
+    byTarget.get(target).push(key);
+  }
   const colors = new Map(), fields = new Map();
   function mark(table, columns, key) {
     if (!fields.has(table)) fields.set(table, new Map());
@@ -16,11 +21,13 @@ export function orderHighlights(relations, visible = new Set(relations)) {
       byColumn.get(column).add(key);
     }
   }
-  keys.forEach((key, index) => {
-    const color = orderPalette[index] ?? `hsl(${(index * 137.508) % 360} 72% 72%)`;
-    colors.set(key, color);
-    mark(key.source, key.columns, key);
-    if (visible.has(key)) mark(key.target, key.target_columns, key);
+  [...byTarget.keys()].sort().forEach((target, index) => {
+    const color = keyPalette[index] ?? `hsl(${(index * 137.508) % 360} 72% 72%)`;
+    for (const key of byTarget.get(target)) {
+      colors.set(key, color);
+      mark(key.source, key.columns, key);
+      if (visible.has(key)) mark(key.target, key.target_columns, key);
+    }
   });
   return { colors, fields };
 }
@@ -131,16 +138,16 @@ export function createDiagram(root, number, get, selectTable) {
   }
 
   function tableNode(table, relatedFields, fkNames, measure) {
-    const orderFields = highlights.fields.get(table.name);
+    const fieldKeys = highlights.fields.get(table.name);
     const rows = table.columns.filter(col => fields.value === 'all' ||
-      (fields.value === 'keys' && (col.primary || relatedFields.has(col.name) || orderFields?.has(col.name))));
+      (fields.value === 'keys' && (col.primary || relatedFields.has(col.name) || fieldKeys?.has(col.name))));
     const width = Math.ceil(Math.max(150, measure(table.name) + 30,
       ...rows.map(col => measure(col.name) + measure(col.type) + 90)));
-    return { table, rows, fkNames, orderFields, width, height: headerHeight + rows.length * rowHeight };
+    return { table, rows, fkNames, fieldKeys, width, height: headerHeight + rows.length * rowHeight };
   }
 
   function drawTable(node) {
-    const { table, rows, fkNames, orderFields, width, height, x, y } = node;
+    const { table, rows, fkNames, fieldKeys, width, height, x, y } = node;
     const group = svg('g', {
       class: 'er-node' + (scope.value === table.name ? ' current' : ''),
       transform: 'translate(' + (x - width / 2) + ' ' + (y - height / 2) + ')',
@@ -158,14 +165,14 @@ export function createDiagram(root, number, get, selectTable) {
         svg('text', { class: col.primary ? 'er-pk' : 'er-fk', x: 10, y: top + 16 }, keys),
         svg('text', { x: 51, y: top + 16 }, col.name),
         svg('text', { class: 'er-type', x: width - 11, y: top + 16, 'text-anchor': 'end' }, col.type));
-      const keysHere = orderFields?.get(col.name);
+      const keysHere = fieldKeys?.get(col.name);
       if (keysHere) {
-        const bandWidth = (width - 2) / keysHere.size;
+        const colors = new Set(Array.from(keysHere, key => highlights.colors.get(key)));
+        const bandWidth = (width - 2) / colors.size;
         let left = 1;
         row.prepend(svg('title', {}, [...keysHere].map(relationText).join('\n')));
-        for (const key of keysHere) {
-          const color = highlights.colors.get(key);
-          if (keysHere.size === 1) row.style.setProperty('--er-key-color', color);
+        for (const color of colors) {
+          if (colors.size === 1) row.style.setProperty('--er-key-color', color);
           row.append(svg('rect', { x: left, y: top + rowHeight - 3, width: bandWidth, height: 3, fill: color }));
           left += bandWidth;
         }
@@ -186,11 +193,7 @@ export function createDiagram(root, number, get, selectTable) {
     path[path.length - 1] = fieldPort(layout.node(key.target), key.target_columns[0], points.at(-2), points.at(-1));
     const coordinates = path.map(p => p.x + ',' + p.y).join(' ');
     const group = svg('g', { class: 'er-edge', 'data-index': index });
-    const color = highlights.colors.get(key);
-    if (color) {
-      group.classList.add('order-reference');
-      group.style.setProperty('--er-key-color', color);
-    }
+    group.style.setProperty('--er-key-color', highlights.colors.get(key));
     group.append(svg('title', {}, relationText(key)),
       svg('polyline', { class: 'er-line', points: coordinates, 'marker-end': 'url(#' + marker.id + ')' }),
       svg('polyline', { class: 'er-hit', points: coordinates }));
@@ -202,7 +205,7 @@ export function createDiagram(root, number, get, selectTable) {
     const selected = scope.value;
     const { tables, relations: visibleKeys } = diagramScope(catalog, selected);
     relations = visibleKeys;
-    highlights = orderHighlights(catalog.relations, new Set(relations));
+    highlights = relationHighlights(catalog.relations, new Set(relations));
     const ctx = document.createElement('canvas').getContext('2d');
     ctx.font = '13px ' + getComputedStyle(root).getPropertyValue('--mono');
     const measure = text => ctx.measureText(text).width;
@@ -219,9 +222,7 @@ export function createDiagram(root, number, get, selectTable) {
     window.dagre.layout(layout);
     const { width, height } = layout.graph();
     graph.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
-    const hasOrderLinks = fields.value === 'none' ? relations.some(key => highlights.colors.has(key))
-      : tables.some(t => highlights.fields.has(t.name));
-    find('order-legend').hidden = !hasOrderLinks;
+    find('key-legend').hidden = !relations.length;
     find('drawing').replaceChildren(
       ...relations.map((key, index) => drawEdge(key, index, layout.edge(key.source, key.target, String(index)).points)),
       ...tables.map(t => drawTable(layout.node(t.name))));

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { diagramScope, orderHighlights } from '../public/diagram.js';
+import { diagramScope, relationHighlights } from '../public/diagram.js';
 
 test('the focused diagram includes every foreign key between visible tables', () => {
   const tables = ['history', 'period', 'visit', 'container', 'outside', 'isolated'].map(name => ({ name }));
@@ -19,26 +19,34 @@ test('the focused diagram includes every foreign key between visible tables', ()
   assert.deepEqual(diagramScope(catalog, ''), catalog);
 });
 
-test('order references keep distinct colors across views and share them across all columns of a key', () => {
-  const receiving = { name: 'order_fk', source: 'items', columns: ['document', 'client'],
-    target: 'receiving_order', target_columns: ['id', 'client_id'] };
-  const second = { ...receiving, source: 'history' };
-  const shipping = { ...receiving, name: 'shipping_fk', target: 'shipping_order' };
-  const service = { ...receiving, name: 'transfer_fk', target: 'service_order' };
-  const unrelated = { ...receiving, source: 'receiving_order', target: 'client' };
-  const keys = [receiving, second, shipping, service, unrelated];
-  const { colors, fields } = orderHighlights(keys);
-  assert.equal(new Set(colors.values()).size, 4);
-  assert.equal(colors.has(unrelated), false);
-  assert.deepEqual(colors, orderHighlights(keys.toReversed()).colors);
-  for (const column of receiving.columns) {
-    assert.deepEqual(fields.get('items').get(column), new Set([receiving, shipping, service]));
-  }
-  for (const column of receiving.target_columns) {
-    assert.deepEqual(fields.get('receiving_order').get(column), new Set([receiving, second]));
-  }
-  const focused = orderHighlights(keys, new Set([receiving]));
+test('references to the same destination key share a color across all panels', () => {
+  const service = { source: 'container_period', columns: ['service_order_id'], target: 'service_order', target_columns: ['id'] };
+  const second = { ...service, source: 'service_order_container' };
+  const arrival = { source: 'container_visit', columns: ['arrival'], target: 'container_owner_history', target_columns: ['id'] };
+  const departure = { ...arrival, columns: ['departure'] };
+  const otherColumn = { ...arrival, target_columns: ['number'] };
+  const keys = [service, second, arrival, departure, otherColumn];
+  const { colors, fields } = relationHighlights(keys);
+  assert.equal(colors.size, keys.length);
+  assert.equal(new Set(colors.values()).size, 3);
+  assert.equal(colors.get(service), colors.get(second));
+  assert.equal(colors.get(arrival), colors.get(departure));
+  assert.deepEqual(fields.get('service_order').get('id'), new Set([service, second]));
+  assert.deepEqual(fields.get('container_visit').get('arrival'), new Set([arrival, otherColumn]));
+  assert.deepEqual(colors, relationHighlights(keys.toReversed()).colors);
+  const focused = relationHighlights(keys, new Set([service]));
   assert.deepEqual(focused.colors, colors);
-  assert.deepEqual(focused.fields.get('receiving_order').get('id'), new Set([receiving]));
-  assert.deepEqual(focused.fields.get('items').get('document'), fields.get('items').get('document'));
+  assert.deepEqual(focused.fields.get('service_order').get('id'), new Set([service]));
+});
+
+test('a composite destination groups by its full set of columns and preserves each mapping', () => {
+  const pair = { source: 'first', columns: ['contract', 'client'], target: 'contract', target_columns: ['id', 'client_id'] };
+  const reversed = { ...pair, source: 'second', columns: ['owner', 'agreement'], target_columns: ['client_id', 'id'] };
+  const single = { ...pair, columns: ['contract'], target_columns: ['id'] };
+  const { colors, fields } = relationHighlights([pair, reversed, single]);
+  assert.equal(colors.get(pair), colors.get(reversed));
+  assert.notEqual(colors.get(pair), colors.get(single));
+  assert.deepEqual(fields.get('contract').get('id'), new Set([pair, reversed, single]));
+  assert.deepEqual(fields.get('contract').get('client_id'), new Set([pair, reversed]));
+  assert.deepEqual(reversed.target_columns, ['client_id', 'id']);
 });
