@@ -226,7 +226,12 @@ async function run(name) {
     await setDay(3);
     assert.equal((await finish('shipping', shipping)).status, 'COMPLETED');
     const closed = await periods(first);
-    assert.deepEqual(closed.map(row => [row.ownerName, row.storageDays]).sort(), [[source.name, 2], [target.name, 2]].sort());
+    assert.deepEqual(closed.map(row => [row.ownerName, row.storageDays]).sort(), [[source.name, 3], [target.name, 2]].sort());
+    const onTransfer = new URLSearchParams({ query: first.containerName, storedFrom: day(2), storedTo: day(2) });
+    const { items: [visit] } = await api('/container-periods/visits?' + onTransfer);
+    assert.equal(visit.storageDays, 4);
+    assert.equal(visit.storageDaysInPeriod, 1);
+    assert.deepEqual(visit.periods.map(row => row.storageDaysInPeriod), [1, 1]);
     assert.deepEqual((await periods(second)).map(row => [row.ownerName, row.storageDays]), [[source.name, 3]]);
 
     await setDay(4);

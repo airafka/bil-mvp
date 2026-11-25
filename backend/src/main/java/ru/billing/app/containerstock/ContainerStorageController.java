@@ -188,10 +188,12 @@ public class ContainerStorageController {
         var visits=new ArrayList<Visit>();
         periodsByVisit.forEach((id,periods)->{
             Row first=periods.getFirst(),last=periods.getLast();boolean shipped="SHIPPING_ORDER".equals(last.endOrderType());
-            visits.add(new Visit(id,first.containerId(),first.containerName(),first.arrivalAt(),shipped?last.departureAt():null,
+            var shippingAt = shipped ? last.departureAt() : null;
+            var visitSpan = storageSpan(first.arrivalAt(), shippingAt, reportDate);
+            visits.add(new Visit(id,first.containerId(),first.containerName(),first.arrivalAt(),shippingAt,
                 first.startOrderId(),first.startOrderNumber(),shipped?last.endOrderId():null,shipped?last.endOrderNumber():null,
-                periods.stream().mapToLong(Row::storageDays).sum(),
-                stay.specified() ? periods.stream().mapToLong(Row::storageDaysInPeriod).sum() : null, List.copyOf(periods)));
+                visitSpan.daysWithin(StayPeriod.ALL_TIME),
+                stay.specified() ? visitSpan.daysWithin(stay) : null, List.copyOf(periods)));
         });
         return PagedResponse.of(visits,page,size,count);
     }
@@ -268,11 +270,10 @@ public class ContainerStorageController {
             return Math.max(0, ChronoUnit.DAYS.between(start, end) + 1);
         }
     }
-    static StorageSpan storageSpan(OffsetDateTime start,OffsetDateTime end,String endOrderType,LocalDate asOf) {
+    static StorageSpan storageSpan(OffsetDateTime start,OffsetDateTime end,LocalDate asOf) {
         var zone=ZoneId.of("Europe/Moscow");
         var first=start.atZoneSameInstant(zone).toLocalDate();
         var last=end==null?asOf:end.atZoneSameInstant(zone).toLocalDate();
-        if(end!=null && "SERVICE_ORDER".equals(endOrderType))last=last.minusDays(1);
         if(last.isAfter(asOf))last=asOf;
         return new StorageSpan(first,last);
     }
@@ -281,7 +282,7 @@ public class ContainerStorageController {
         var start=rs.getObject("receiving_at",OffsetDateTime.class);
         var end=rs.getObject("shipping_at",OffsetDateTime.class);
         var endType=rs.getString("end_order_type");
-        var span=storageSpan(start,end,endType,asOf);
+        var span=storageSpan(start,end,asOf);
         return new Row(rs.getObject("id",UUID.class),rs.getObject("container_id",UUID.class),rs.getString("container_name"),
             rs.getString("owner_name"),start,end,status,span.daysWithin(StayPeriod.ALL_TIME),
             stay.specified() ? span.daysWithin(stay) : null,
