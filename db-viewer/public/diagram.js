@@ -25,6 +25,19 @@ export function orderHighlights(relations, visible = new Set(relations)) {
   return { colors, fields };
 }
 
+export function diagramScope(catalog, selected) {
+  if (!selected) return catalog;
+  const visible = new Set([selected]);
+  for (const { source, target } of catalog.relations) {
+    if (source === selected) visible.add(target);
+    if (target === selected) visible.add(source);
+  }
+  return {
+    tables: catalog.tables.filter(table => visible.has(table.name)),
+    relations: catalog.relations.filter(key => visible.has(key.source) && visible.has(key.target)),
+  };
+}
+
 function svg(tag, attributes, text) {
   const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
   for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
@@ -187,10 +200,9 @@ export function createDiagram(root, number, get, selectTable) {
 
   function render() {
     const selected = scope.value;
-    relations = catalog.relations.filter(r => !selected || r.source === selected || r.target === selected);
+    const { tables, relations: visibleKeys } = diagramScope(catalog, selected);
+    relations = visibleKeys;
     highlights = orderHighlights(catalog.relations, new Set(relations));
-    const neighbors = new Set(relations.flatMap(r => [r.source, r.target]));
-    const tables = catalog.tables.filter(t => !selected || t.name === selected || neighbors.has(t.name));
     const ctx = document.createElement('canvas').getContext('2d');
     ctx.font = '13px ' + getComputedStyle(root).getPropertyValue('--mono');
     const measure = text => ctx.measureText(text).width;

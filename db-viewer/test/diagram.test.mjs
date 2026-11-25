@@ -1,6 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { orderHighlights } from '../public/diagram.js';
+import { diagramScope, orderHighlights } from '../public/diagram.js';
+
+test('the focused diagram includes every foreign key between visible tables', () => {
+  const tables = ['history', 'period', 'visit', 'container', 'outside', 'isolated'].map(name => ({ name }));
+  const relations = [
+    { source: 'period', target: 'history' }, { source: 'visit', target: 'history' },
+    { source: 'history', target: 'container' },
+    { source: 'period', target: 'visit', name: 'current_visit' },
+    { source: 'period', target: 'visit', name: 'previous_visit' },
+    { source: 'visit', target: 'container', columns: ['a', 'b'], target_columns: ['x', 'y'] },
+    { source: 'visit', target: 'visit' },
+    { source: 'outside', target: 'period' }, { source: 'visit', target: 'outside' },
+  ];
+  const catalog = { tables, relations };
+  assert.deepEqual(diagramScope(catalog, 'history'), { tables: tables.slice(0, 4), relations: relations.slice(0, 7) });
+  assert.deepEqual(diagramScope(catalog, 'isolated'), { tables: [tables[5]], relations: [] });
+  assert.deepEqual(diagramScope(catalog, ''), catalog);
+});
 
 test('order references keep distinct colors across views and share them across all columns of a key', () => {
   const receiving = { name: 'order_fk', source: 'items', columns: ['document', 'client'],
