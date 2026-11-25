@@ -31,3 +31,25 @@
 .storage-period-last .storage-period-guide::before { bottom: 50%; }
 .storage-expand:hover { background: #dfe9f7; }
 @media (prefers-reduced-motion: reduce) { .storage-expand svg { transition: none; } }
+
+.storage-page .storage-filters .storage-period-field { width: 236px; flex-basis: 236px; }
+.storage-filters .storage-period-trigger { text-align: left; white-space: nowrap; cursor: pointer; }
+.storage-period-dialog {
+  box-sizing: border-box; width: min(392px, calc(100% - 24px)); max-width: none; max-height: calc(100dvh - 24px);
+  margin: auto; padding: 20px; overflow: auto; color: var(--text); background: white;
+  border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 12px 40px #18264226;
+}
+.storage-period-dialog::backdrop { background: #18264245; }
+.storage-period-dialog form { display: grid; gap: 16px; }
+.storage-period-dialog header, .storage-period-year, .storage-period-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.storage-period-dialog h2 { margin: 0; font-size: 20px; line-height: 26px; }
+.storage-period-year strong { font-variant-numeric: tabular-nums; }
+.storage-months { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.storage-period-dialog .storage-months button { min-width: 0; padding-inline: 4px; }
+.storage-period-dialog .storage-months button[data-between="true"] { background: #edf3ff; color: #234d91; }
+.storage-period-dialog .storage-months button[aria-pressed="true"] { color: white; background: var(--blue); border-color: var(--blue); }
+.storage-period-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-top: 16px; border-top: 1px solid var(--app-border); }
+@media (max-width: 380px) {
+  .storage-period-dialog { padding: 14px; }
+  .storage-period-dates { grid-template-columns: minmax(0, 1fr); }
+}

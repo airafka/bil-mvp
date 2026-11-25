@@ -1,10 +1,12 @@
 import { historyOrderPath } from '../containerStock'
-import { useApplicationClock } from '../applicationClock'
+import { businessDateLabel, useApplicationClock } from '../applicationClock'
 import { Fragment, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { request } from '../http'
 import type { PagedResponse, ReferenceOption } from '../domain'
-import { UiInput, UiSelect } from '../components/FormControls'
+import { StoragePeriodDialog } from '../components/StoragePeriodDialog'
+import { allDates, monthBounds, validMonth, wholeMonths, type StorageDateRange } from '../storageDateRange'
+import { UiSelect } from '../components/FormControls'
 import { TableReveal } from '../components/TableReveal'
 import { storageBoundaryLabel, storageDate, storageClientOwner, storageTransport, type StorageVisit } from '../containerStorage'
 import './ContainerStoragePage.css'
@@ -47,43 +49,40 @@ export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows
 }
 
 type StorageFilters = { query: string; month: string; storedFrom: string; storedTo: string }
-const emptyFilters: StorageFilters = { query: '', month: '', storedFrom: '', storedTo: '' }
 
 function StorageFilterForm({ initial, containers, onApply, onReset }: {
   initial: StorageFilters; containers: ReferenceOption[]; onApply: (filters: StorageFilters) => void; onReset: () => void
 }) {
-  const [draft, setDraft] = useState(initial)
-  const [mode, setMode] = useState(initial.month ? 'month' : initial.storedFrom || initial.storedTo ? 'range' : 'all')
-  function change(field: keyof StorageFilters, value: string) {
-    setDraft(current => ({ ...current, [field]: value }))
+  const [query, setQuery] = useState(initial.query)
+  const [dates, setDates] = useState<StorageDateRange>(() => validMonth(initial.month)
+    ? wholeMonths(initial.month) : { from: initial.storedFrom, to: initial.storedTo })
+  const [choosingPeriod, setChoosingPeriod] = useState(false)
+  const periodLabel = [dates.from, dates.to].map(businessDateLabel).join(' — ')
+  function apply() {
+    const bounds = monthBounds(dates)
+    const month = bounds.length === 1 ? bounds[0] : ''
+    onApply({ query, month, storedFrom: month ? '' : dates.from, storedTo: month ? '' : dates.to })
   }
-  return <form className="storage-filters" aria-label="Фильтры хранения" onSubmit={event => {
-    event.preventDefault()
-    onApply({ query: draft.query, month: mode === 'month' ? draft.month : '',
-      storedFrom: mode === 'range' ? draft.storedFrom : '', storedTo: mode === 'range' ? draft.storedTo : '' })
-  }}>
-    <label className="field">Номер КТК<UiSelect value={draft.query} onChange={e => change('query', e.target.value)}>
+  return <><form className="storage-filters" aria-label="Фильтры хранения" onSubmit={event => { event.preventDefault(); apply() }}>
+    <label className="field">Номер КТК<UiSelect value={query} onChange={e => setQuery(e.target.value)}>
       <option value="">Все КТК</option>
-      {draft.query && !containers.some(item => item.name === draft.query) && <option>{draft.query}</option>}
+      {query && !containers.some(item => item.name === query) && <option>{query}</option>}
       {containers.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
     </UiSelect></label>
-    <label className="field">Период<UiSelect value={mode} onChange={e => setMode(e.target.value)}>
-      <option value="all">За всё время</option><option value="month">Месяц</option><option value="range">Диапазон дат</option>
-    </UiSelect></label>
-    {mode === 'month' && <label className="field">Месяц хранения
-      <UiInput type="month" required min="0001-01" max="9999-12" value={draft.month} onChange={e => change('month', e.target.value)} />
-    </label>}
-    {mode === 'range' && <>
-      <label className="field">С даты<UiInput type="date" required value={draft.storedFrom}
-        max={draft.storedTo || '9999-12-31'} onChange={e => change('storedFrom', e.target.value)} /></label>
-      <label className="field">По дату<UiInput type="date" required value={draft.storedTo}
-        min={draft.storedFrom || '0001-01-01'} max="9999-12-31" onChange={e => change('storedTo', e.target.value)} /></label>
-    </>}
+    <label className="field storage-period-field">Период<button type="button" className="ui-control ui-select storage-period-trigger"
+      aria-haspopup="dialog" aria-expanded={choosingPeriod} onClick={() => setChoosingPeriod(true)}>
+      {dates.from || dates.to ? periodLabel : 'За всё время'}
+    </button></label>
     <div className="storage-actions"><button type="submit" className="primary-button">Сформировать</button>
       <button type="button" className="secondary-button" onClick={() => {
-        setDraft(emptyFilters); setMode('all'); onReset()
+        setQuery(''); setDates(allDates); onReset()
       }}>Сбросить</button></div>
   </form>
+    {choosingPeriod && <StoragePeriodDialog initial={dates} onClose={range => {
+      if (range) setDates(range)
+      setChoosingPeriod(false)
+    }} />}
+  </>
 }
 
 export default function ContainerStoragePage() {
