@@ -1,6 +1,6 @@
 export type StoragePeriod = {
   id: string; containerId: string; containerName: string;
-  arrivalAt: string; ownerName?: string; departureAt?: string; status: string; storageDays: number;
+  arrivalAt: string; ownerName?: string; departureAt?: string; status: string; storageDays: number; storageDaysInPeriod?: number;
   startOrderId?: string; startOrderType?: string; startOrderNumber?: number;
   endOrderId?: string; endOrderType?: string; endOrderNumber?: number;
   receivingClientName?: string; receivingOwnerName?: string; arrivalTransport?: string; arrivalParty?: string; arrivalCargo?: string;
@@ -9,7 +9,7 @@ export type StoragePeriod = {
 export type StorageVisit = {
   id: string; containerId: string; containerName: string; receivingAt: string; shippingAt?: string;
   receivingOrderId: string; receivingOrderNumber: number; shippingOrderId?: string; shippingOrderNumber?: number;
-  storageDays: number; periods: StoragePeriod[];
+  storageDays: number; storageDaysInPeriod?: number; periods: StoragePeriod[];
 }
 export const storageDate = (value?: string) => value ? new Date(value).toLocaleString('ru-RU', {
   timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',

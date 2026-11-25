@@ -11,12 +11,16 @@ import { TableReveal } from '../components/TableReveal'
 import { storageBoundaryLabel, storageDate, storageClientOwner, storageTransport, type StorageVisit } from '../containerStorage'
 import './ContainerStoragePage.css'
 
-const columns = [44, 140, 200, 90, 145, 150, 105, 145, 150, 105, 240, 110, 240, 220, 240, 110, 240, 220]
+const eventColumns = [145, 150, 105, 145, 150, 105, 240, 110, 240, 220, 240, 110, 240, 220]
 
-export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows: StorageVisit[]; emptyText: string; selectedPeriodId?: string }) {
+export function StorageVisitsTable({ rows, emptyText, selectedPeriodId, showPeriodDays }: {
+  rows: StorageVisit[]; emptyText: string; selectedPeriodId?: string; showPeriodDays: boolean
+}) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const columns = [44, 140, 200, 90, ...(showPeriodDays ? [130] : []), ...eventColumns]
   return <table className="storage-table"><colgroup>{columns.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
     <thead><tr><th aria-label="Раскрытие визита" /><th>Номер КТК</th><th>Собственник КТК</th><th>Дней хранения</th>
+      {showPeriodDays && <th>Дней хранения в периоде</th>}
       <th>Начало периода (UTC)</th><th>Событие</th><th>Заявка</th><th>Конец периода (UTC)</th><th>Событие</th><th>Заявка</th>
       <th>Клиент/Собственник поставки</th><th>Транспорт поставки</th><th>Грузоперевозчик/грузоотправитель поставки</th><th>Груз поставки</th>
       <th>Клиент/Собственник вывоза</th><th>Транспорт вывоза</th><th>Грузоперевозчик/грузополучатель вывоза</th><th>Груз вывоза</th></tr></thead>
@@ -28,7 +32,9 @@ export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows
         <tr data-visit-id={visit.id} className={'storage-visit-row' + (open ? ' storage-visit-open' : '')}>
           <td className="registry-index"><button type="button" className="storage-expand" aria-expanded={open} aria-controls={open ? visit.periods.map(period => detailsId + '-' + period.id).join(' ') : undefined} aria-label={(open ? 'Свернуть' : 'Раскрыть') + ' визит ' + visit.containerName + ' от ' + storageDate(visit.receivingAt)} onClick={() => setExpanded(value => ({ ...value, [visit.id]: !open }))}><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg></button></td>
           <td><Link to={'/container-owners/' + visit.containerId + '/history'}>{visit.containerName}</Link></td>
-          <td>{last.ownerName || '—'}</td><td className="storage-visit-total">{visit.storageDays}</td><td>{storageDate(visit.receivingAt)}</td><td>Поставка</td>
+          <td>{last.ownerName || '—'}</td><td className="storage-visit-total">{visit.storageDays}</td>
+          {showPeriodDays && <td className="storage-visit-total">{visit.storageDaysInPeriod}</td>}
+          <td>{storageDate(visit.receivingAt)}</td><td>Поставка</td>
           <td><Link to={historyOrderPath({ orderId: visit.receivingOrderId, orderType: 'RECEIVING_ORDER' })}>{visit.receivingOrderNumber}</Link></td>
           <td>{visit.shippingAt ? storageDate(visit.shippingAt) : ''}</td><td>{visit.shippingAt ? 'Вывоз' : ''}</td>
           <td>{visit.shippingOrderId && <Link to={historyOrderPath({ orderId: visit.shippingOrderId, orderType: 'SHIPPING_ORDER' })}>{visit.shippingOrderNumber}</Link>}</td>
@@ -37,7 +43,9 @@ export function StorageVisitsTable({ rows, emptyText, selectedPeriodId }: { rows
         </tr>
         {open && visit.periods.map((row, index) => <tr key={row.id} id={detailsId + '-' + row.id} data-period-id={row.id} className={'storage-period-row' + (index === visit.periods.length - 1 ? ' storage-period-last' : '') + (row.id === selectedPeriodId ? ' storage-period-selected' : '')}>
           <td className="storage-period-guide" aria-hidden="true" /><td />
-          <td>{row.ownerName || '—'}</td><td>{row.storageDays}</td><td>{storageDate(row.arrivalAt)}</td><td>{storageBoundaryLabel(row.startOrderType)}</td>
+          <td>{row.ownerName || '—'}</td><td>{row.storageDays}</td>
+          {showPeriodDays && <td>{row.storageDaysInPeriod}</td>}
+          <td>{storageDate(row.arrivalAt)}</td><td>{storageBoundaryLabel(row.startOrderType)}</td>
           <td>{row.startOrderId && row.startOrderType && <Link to={historyOrderPath({ orderId: row.startOrderId, orderType: row.startOrderType })}>{row.startOrderNumber}</Link>}</td>
           <td>{row.departureAt ? storageDate(row.departureAt) : ''}</td><td>{storageBoundaryLabel(row.endOrderType)}</td>
           <td>{row.endOrderId && row.endOrderType && <Link to={historyOrderPath({ orderId: row.endOrderId, orderType: row.endOrderType })}>{row.endOrderNumber}</Link>}</td>
@@ -157,7 +165,8 @@ export default function ContainerStoragePage() {
     {periodId && <p>Показан визит с выбранным периодом хранения.</p>}
     {generated && <>
       {error && <div role="alert" className="storage-review">{error} <button onClick={() => setAttempt(a => a + 1)}>Повторить</button></div>}
-      <TableReveal loading={loading}><div className="table-wrap" data-page-size={pageSize}><StorageVisitsTable key={applied.toString()} rows={data?.items || []} selectedPeriodId={periodId || undefined} emptyText={error ? 'Данные не загружены' : 'Визиты хранения не найдены'} /></div></TableReveal>
+      <TableReveal loading={loading}><div className="table-wrap" data-page-size={pageSize}><StorageVisitsTable key={applied.toString()} rows={data?.items || []} selectedPeriodId={periodId || undefined}
+        showPeriodDays={!!(initial.month || initial.storedFrom || initial.storedTo)} emptyText={error ? 'Данные не загружены' : 'Визиты хранения не найдены'} /></div></TableReveal>
       <div className="pagination"><span>Всего визитов: {data?.totalElements ?? '—'}</span>
         <button disabled={loading || page === 0} onClick={() => goToPage(page - 1)}>Назад</button><span>{page + 1} / {Math.max(1, data?.totalPages ?? 1)}</span>
         <button disabled={loading || !data || page + 1 >= data.totalPages} onClick={() => goToPage(page + 1)}>Далее</button></div>
