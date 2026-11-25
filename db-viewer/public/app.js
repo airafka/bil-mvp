@@ -64,12 +64,12 @@ function renderTables() {
   $('table-count').textContent = app.tables.length;
 }
 
-function detail(row, name, columns) {
+function detail(row, name) {
   $('detail-title').textContent = name;
   const list = element('dl');
   for (const [key, value] of Object.entries(row)) {
     const field = element('div', undefined, 'detail-field');
-    field.append(element('dt', columns.find(c => c.name === key)?.label || key), element('dd', value === null ? 'NULL' : value)); list.append(field);
+    field.append(element('dt', key), element('dd', value === null ? 'NULL' : value)); list.append(field);
   }
   $('detail-body').replaceChildren(list); $('detail').showModal();
 }
@@ -389,10 +389,7 @@ function createPanel(number) {
     if (state.view === 'data') {
       for (const [index, th] of [...probeRow.children].entries()) {
         const button = th.querySelector('button');
-        if (button) {
-          const column = data.columns[index - 1];
-          button.lastChild.textContent = '↑ ' + (column.label || column.name);
-        }
+        if (button) button.lastChild.textContent = '↑ ' + data.columns[index - 1].name;
       }
     }
     probeHead.append(probeRow); probe.append(probeHead); root.append(probe);
@@ -404,7 +401,7 @@ function createPanel(number) {
       : [42, ...data.columns.map(column => column.type === 'uuid' ? 0
         : Math.min(280, Math.max(column.type.includes('timestamp') ? 210 : 130, column.name.length * 8 + 42)))]).map((width, index) => Math.max(width, minimums[index]));
     const names = state.view === 'schema' ? ['Колонка', 'Примечание', 'Тип данных', 'NULL', 'Ключ', 'Связь']
-      : ['#', ...data.columns.map(column => column.label || column.name)];
+      : ['#', ...data.columns.map(column => column.name)];
     const keys = names.map(name => JSON.stringify([data.name, state.view, name]));
     const widths = defaults.map((width, index) => Math.max(minimums[index], columnWidths.get(keys[index]) ?? width));
     const group = element('colgroup');
@@ -472,7 +469,7 @@ function createPanel(number) {
     $('table-title').textContent = data.name;
     $('rows-count').textContent = `${count(data.total)} строк${state.search || state.filter ? ' найдено' : ''}`;
     global$('updated').textContent = `Обновлено ${stamp(data.at)}`;
-    $('reset-sort').textContent = state.sort ? `Сортировка: ${data.columns.find(c => c.name === state.sort)?.label || state.sort} ${state.direction === 'asc' ? '↑' : '↓'}` : 'Последние изменения ↓';
+    $('reset-sort').textContent = state.sort ? `Сортировка: ${state.sort} ${state.direction === 'asc' ? '↑' : '↓'}` : 'Последние изменения ↓';
     $('data-tab').setAttribute('aria-selected', String(state.view === 'data'));
     $('schema-tab').setAttribute('aria-selected', String(state.view === 'schema'));
     $('previous').disabled = state.offset === 0;
@@ -482,7 +479,7 @@ function createPanel(number) {
     head.append(heading);
     if (state.view === 'schema') {
       for (const title of ['Колонка', 'Примечание', 'Тип данных', 'NULL', 'Ключ', 'Связь']) heading.append(element('th', title));
-      for (const column of data.columns.filter(c => !c.derived)) {
+      for (const column of data.columns) {
         const row = element('tr');
         const relation = data.relations.find(r => r.column === column.name);
         row.append(element('td', column.name), element('td', column.note || 'Описание назначения атрибута пока не задано.', 'schema-note'));
@@ -499,7 +496,7 @@ function createPanel(number) {
         const symbol = column.primary ? '◆' : numeric ? '123' : column.type.includes('timestamp') || column.type === 'date' ? '◷' : 'A-Z';
         const icon = element('span', symbol, `column-symbol${column.primary ? ' primary' : ''}`);
         icon.setAttribute('aria-hidden', 'true');
-        button.append(icon, document.createTextNode(`${state.sort === column.name ? (state.direction === 'asc' ? '↑ ' : '↓ ') : ''}${column.label || column.name}`));
+        button.append(icon, document.createTextNode(`${state.sort === column.name ? (state.direction === 'asc' ? '↑ ' : '↓ ') : ''}${column.name}`));
         button.onclick = () => { state.direction = state.sort === column.name && state.direction === 'asc' ? 'desc' : 'asc'; state.sort = column.name; state.offset = 0; state.version++; refreshPanel(true); };
         th.append(button); heading.append(th);
       }
@@ -526,7 +523,7 @@ function createPanel(number) {
         if (highlight?.until > Date.now()) row.classList.add(highlight.kind);
         else state.highlights.delete(key);
         const action = element('td', undefined, 'action-cell');
-        const open = element('button', String(state.offset + index + 1), 'row-open'); open.title = 'Открыть все поля записи'; open.setAttribute('aria-label', 'Открыть запись'); open.onclick = () => detail(record, state.selected, data.columns); action.append(open); row.append(action);
+        const open = element('button', String(state.offset + index + 1), 'row-open'); open.title = 'Открыть все поля записи'; open.setAttribute('aria-label', 'Открыть запись'); open.onclick = () => detail(record, state.selected); action.append(open); row.append(action);
         for (const column of data.columns) {
           const value = record[column.name];
           const td = element('td', undefined, value === null ? 'null' : '');
