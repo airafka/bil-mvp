@@ -60,20 +60,45 @@
           <div class="view-tabs" role="tablist" aria-label="Представление таблицы">
             <button data-role="data-tab" role="tab" aria-selected="true"><span class="table-icon" aria-hidden="true"></span>Данные</button>
             <button data-role="schema-tab" role="tab" aria-selected="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.1M4 12h.1M4 18h.1"/></svg>Структура</button>
+            <button data-role="diagram-tab" role="tab" aria-selected="false" type="button" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="8" width="7" height="8" rx="1"/><rect x="15" y="2" width="7" height="7" rx="1"/><rect x="15" y="15" width="7" height="7" rx="1"/><path d="M9 12h3V5h3m-3 7v7h3"/></svg> ER-диаграмма</button>
           </div>
-          <button data-role="diagram" class="diagram-launch tool-button" type="button" aria-haspopup="dialog" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="8" width="7" height="8" rx="1"/><rect x="15" y="2" width="7" height="7" rx="1"/><rect x="15" y="15" width="7" height="7" rx="1"/><path d="M9 12h3V5h3m-3 7v7h3"/></svg> ER-диаграмма</button>
           <span data-role="table-description" class="table-description">Таблицы схемы public</span>
         </div>
-        <div class="filter-toolbar">
-          <button data-role="reset-sort" title="Сначала последние изменённые строки">Последние изменения ↓</button>
-          <label class="row-search"><svg class="icon filter-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><span class="sr-only">Поиск по данным</span><input data-role="row-search" type="search" placeholder="Фильтр данных: номер, UUID или значение" autocomplete="off"></label>
+        <div data-role="grid-view" class="panel-view" role="tabpanel">
+          <div class="filter-toolbar">
+            <button data-role="reset-sort" title="Сначала последние изменённые строки">Последние изменения ↓</button>
+            <label class="row-search"><svg class="icon filter-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><span class="sr-only">Поиск по данным</span><input data-role="row-search" type="search" placeholder="Фильтр данных: номер, UUID или значение" autocomplete="off"></label>
+          </div>
+          <div data-role="relation-filter" class="filter-banner" hidden><span data-role="filter-text"></span><button data-role="clear-filter">Снять фильтр ×</button></div>
+          <div data-role="data-scroll" class="data-scroll" tabindex="0" aria-label="Содержимое таблицы"><table data-role="data-table"></table><div data-role="empty" class="empty" hidden></div></div>
+          <footer class="table-footer">
+            <span data-role="rows-count" class="count-label">—</span>
+            <div class="pagination"><button data-role="previous" aria-label="Предыдущая страница" title="Предыдущая страница">◀</button><button data-role="next" aria-label="Следующая страница" title="Следующая страница">▶</button><span data-role="page-info">—</span><span class="toolbar-separator" aria-hidden="true"></span><label>Размер страницы <select data-role="page-size"><option>25</option><option selected>50</option><option>100</option></select></label></div>
+          </footer>
         </div>
-        <div data-role="relation-filter" class="filter-banner" hidden><span data-role="filter-text"></span><button data-role="clear-filter">Снять фильтр ×</button></div>
-        <div data-role="data-scroll" class="data-scroll" tabindex="0" aria-label="Содержимое таблицы"><table data-role="data-table"></table><div data-role="empty" class="empty" hidden></div></div>
-        <footer class="table-footer">
-          <span data-role="rows-count" class="count-label">—</span>
-          <div class="pagination"><button data-role="previous" aria-label="Предыдущая страница" title="Предыдущая страница">◀</button><button data-role="next" aria-label="Следующая страница" title="Следующая страница">▶</button><span data-role="page-info">—</span><span class="toolbar-separator" aria-hidden="true"></span><label>Размер страницы <select data-role="page-size"><option>25</option><option selected>50</option><option>100</option></select></label></div>
-        </footer>
+        <div data-role="diagram-view" class="panel-view" role="tabpanel" hidden>
+          <p class="er-status" role="status"></p>
+          <div class="er-workspace" hidden>
+            <div class="er-toolbar">
+              <label>Показать <select class="er-scope" aria-label="Область диаграммы"></select></label>
+              <label>Поля <select class="er-fields"><option value="keys">Ключевые</option><option value="all">Все поля</option><option value="none">Только названия</option></select></label>
+              <div class="er-zoom" role="group" aria-label="Масштаб диаграммы">
+                <button class="er-minus" aria-label="Уменьшить масштаб">−</button><output class="er-scale"></output><button class="er-plus" aria-label="Увеличить масштаб">+</button>
+                <button class="er-fit">Вписать</button>
+              </div>
+            </div>
+            <div class="er-viewport" tabindex="0" aria-label="Область прокрутки диаграммы">
+              <svg class="er-graph" role="group" aria-label="Таблицы и внешние ключи">
+                <defs><marker class="er-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z"/></marker></defs>
+                <g class="er-drawing"></g>
+              </svg>
+            </div>
+            <div class="er-inspector">
+              <label>Внешний ключ <select class="er-edge-picker" aria-label="Внешний ключ"></select></label>
+              <p class="er-mapping" aria-live="polite"></p>
+            </div>
+          </div>
+        </div>
       </section>
       </template>
 
@@ -87,29 +112,5 @@
 
   <footer class="statusbar"><span id="connection" class="connection waiting" role="status">Подключение…</span><span class="status-hint">Изменения появляются после сохранения в БД</span><span id="updated">Ожидаем данные</span></footer>
   <dialog id="detail"><div class="detail-heading"><div><span class="table-icon" aria-hidden="true"></span><h2 id="detail-title"></h2><span class="detail-caption">Значения записи</span></div><button id="close-detail" aria-label="Закрыть запись">×</button></div><div id="detail-body"></div></dialog>
-  <dialog id="er-dialog" aria-labelledby="er-title">
-    <header class="er-heading"><h2 id="er-title">ER-диаграмма</h2><span class="tab-schema">public</span><button id="er-close" type="button" aria-label="Закрыть диаграмму">×</button></header>
-    <p id="er-status" role="status"></p>
-    <div id="er-workspace" hidden>
-      <div class="er-toolbar">
-        <label>Показать <select id="er-scope" aria-label="Область диаграммы"></select></label>
-        <label>Поля <select id="er-fields"><option value="keys">Ключевые</option><option value="all">Все поля</option><option value="none">Только названия</option></select></label>
-        <div class="er-zoom" role="group" aria-label="Масштаб диаграммы">
-          <button id="er-minus" aria-label="Уменьшить масштаб">−</button><output id="er-scale"></output><button id="er-plus" aria-label="Увеличить масштаб">+</button>
-          <button id="er-fit">Вписать</button>
-        </div>
-      </div>
-      <div id="er-viewport" tabindex="0" aria-label="Область прокрутки диаграммы">
-        <svg id="er-graph" role="group" aria-label="Таблицы и внешние ключи">
-          <defs><marker id="er-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z"/></marker></defs>
-          <g id="er-drawing"></g>
-        </svg>
-      </div>
-      <div class="er-inspector">
-        <label>Внешний ключ <select id="er-edge" aria-label="Внешний ключ"></select></label>
-        <p id="er-mapping" aria-live="polite"></p>
-      </div>
-    </div>
-  </dialog>
 </body>
 </html>

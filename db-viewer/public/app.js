@@ -1,4 +1,4 @@
-import { openDiagram } from './diagram.js';
+import { createDiagram } from './diagram.js';
 
 const $ = id => document.getElementById(id);
 const global$ = $;
@@ -297,6 +297,46 @@ function createPanel(number) {
   window.addEventListener('blur', cancelColumnResize);
   const panel = { root, number, state, select: selectTable, refresh: refreshPanel, options: updateOptions };
   root.id = 'table-panel-' + number;
+  const diagram = createDiagram($('diagram-view'), number, get, selectTable);
+  const views = ['data', 'schema', 'diagram'];
+  const gridView = $('grid-view'), diagramView = $('diagram-view');
+  gridView.id = root.id + '-grid';
+  diagramView.id = root.id + '-diagram';
+  for (const view of views) {
+    const tab = $(view + '-tab');
+    tab.id = root.id + '-' + view + '-tab';
+    tab.setAttribute('aria-controls', view === 'diagram' ? diagramView.id : gridView.id);
+    tab.onclick = () => {
+      const previous = state.view;
+      updateView(view);
+      if (view !== 'diagram') renderData();
+      if (view === 'diagram' || previous === 'diagram') refreshPanel(true);
+    };
+    tab.onkeydown = event => {
+      const available = views.map(name => $(name + '-tab')).filter(button => !button.disabled);
+      const index = available.indexOf(tab);
+      const next = { ArrowLeft: (index + available.length - 1) % available.length,
+        ArrowRight: (index + 1) % available.length, Home: 0, End: available.length - 1 }[event.key];
+      if (next === undefined) return;
+      event.preventDefault(); available[next].focus(); available[next].click();
+    };
+  }
+  function updateView(view) {
+    state.view = view;
+    const isDiagram = view === 'diagram';
+    diagramView.hidden = !isDiagram;
+    gridView.hidden = isDiagram;
+    const selectedTab = $(view + '-tab');
+    (isDiagram ? diagramView : gridView).setAttribute('aria-labelledby', selectedTab.id);
+    for (const name of views) {
+      const tab = $(name + '-tab');
+      tab.setAttribute('aria-selected', String(name === view));
+      tab.tabIndex = name === view ? 0 : -1;
+    }
+    if (isDiagram) showPanelError('');
+    else diagram.suspend();
+  }
+  updateView(state.view);
   root.setAttribute('aria-label', 'Панель ' + number);
   $('table-select').setAttribute('aria-label', 'Таблица панели ' + number);
   $('close').setAttribute('aria-label', 'Закрыть панель ' + number);
@@ -306,11 +346,11 @@ function createPanel(number) {
   root.addEventListener('focusin', () => activate(panel));
   $('activate').onclick = () => activate(panel);
   $('table-select').onchange = () => selectTable($('table-select').value);
-  $('diagram').onclick = () => openDiagram(state.selected, get);
   $('close').onclick = () => {
     if (panels.length === 1) return;
     finishPanelResize?.(); finishPanelMove?.(true);
     disposed = true; clearTimeout(searchTimer);
+    diagram.dispose();
     cancelColumnResize(); window.removeEventListener('blur', cancelColumnResize);
     const index = panels.indexOf(panel);
     panels.splice(index, 1); root.remove();
@@ -355,7 +395,8 @@ function createPanel(number) {
     $('page-size').value = String(state.limit);
     $('table-select').value = state.selected;
     showPanelError('');
-    $('diagram').disabled = !state.selected;
+    $('diagram-tab').disabled = !state.selected;
+    updateView(state.view);
     $('table-title').textContent = state.selected;
     $('table-description').textContent = labels[state.selected] || 'Таблица БД';
     $('relation-filter').hidden = !state.filter;
@@ -469,13 +510,11 @@ function createPanel(number) {
   function renderData() {
     cancelColumnResize();
     const data = state.data;
-    if (!data) return;
+    if (!data || state.view === 'diagram') return;
     $('table-title').textContent = data.name;
     $('rows-count').textContent = `${count(data.total)} строк${state.search || state.filter ? ' найдено' : ''}`;
     global$('updated').textContent = `Обновлено ${stamp(data.at)}`;
     $('reset-sort').textContent = state.sort ? `Сортировка: ${state.sort} ${state.direction === 'asc' ? '↑' : '↓'}` : 'Последние изменения ↓';
-    $('data-tab').setAttribute('aria-selected', String(state.view === 'data'));
-    $('schema-tab').setAttribute('aria-selected', String(state.view === 'schema'));
     $('previous').disabled = state.offset === 0;
     $('next').disabled = state.offset + state.limit >= Number(data.total);
     $('page-info').textContent = Number(data.total) ? `${state.offset + 1}–${Math.min(state.offset + data.rows.length, Number(data.total))} из ${count(data.total)}` : '0 строк';
@@ -565,6 +604,10 @@ function createPanel(number) {
 
   async function refreshPanel(force = false) {
     if (disposed || !state.selected || (app.paused && !force)) return;
+    if (state.view === 'diagram') {
+      if (force) await diagram.show(state.selected);
+      return;
+    }
     if (state.loading || finishColumnResize) { state.pending = true; return; }
     state.loading = true;
     const version = state.version;
@@ -582,7 +625,7 @@ function createPanel(number) {
         showPanelError('');
       } else state.pending = true;
     } catch (error) {
-      if (!disposed && version === state.version) showPanelError(error.message === 'The operation was aborted due to timeout' ? 'БД не ответила вовремя. Нажмите «Обновить».' : error.message);
+      if (!disposed && state.view !== 'diagram' && version === state.version) showPanelError(error.message === 'The operation was aborted due to timeout' ? 'БД не ответила вовремя. Нажмите «Обновить».' : error.message);
     } finally {
       state.loading = false;
       if (state.pending && !disposed) { state.pending = false; refreshPanel(force); }
@@ -597,8 +640,6 @@ function createPanel(number) {
   $('next').onclick = () => { state.offset += state.limit; state.version++; refreshPanel(true); };
   $('reset-sort').onclick = () => { state.sort = ''; state.offset = 0; state.version++; refreshPanel(true); };
   $('clear-filter').onclick = () => selectTable(state.selected);
-  $('data-tab').onclick = () => { state.view = 'data'; renderData(); };
-  $('schema-tab').onclick = () => { state.view = 'schema'; renderData(); };
 
   return panel;
 }
