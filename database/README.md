@@ -215,7 +215,12 @@ if ($LASTEXITCODE -ne 0) { throw 'pg_dump завершился ошибкой' }
 if ($LASTEXITCODE -ne 0) { throw 'Оглавление дампа не читается' }
 & $billingDocker compose -p billing-mvp cp "db:/tmp/$backupName" $backupPath
 if ($LASTEXITCODE -ne 0) { throw 'Не удалось сохранить локальную копию' }
-Get-FileHash -LiteralPath $backupPath -Algorithm SHA256
+$hash = Get-FileHash -LiteralPath $backupPath -Algorithm SHA256
+$containerHash = & $billingDocker compose -p billing-mvp exec -T db sha256sum "/tmp/$backupName"
+if ($LASTEXITCODE -ne 0 -or ($containerHash -split '\s+')[0] -ne $hash.Hash) { throw 'Контрольные суммы копий различаются' }
+& $billingDocker compose -p billing-mvp exec -T db rm -- "/tmp/$backupName"
+if ($LASTEXITCODE -ne 0) { throw 'Не удалось удалить временный файл из контейнера' }
+$hash
 ```
 
 Дамп передаётся файлом: не перенаправлять бинарный stdout pg_dump через текстовый PowerShell pipeline. Проверка оглавления и SHA-256 не заменяет проверку восстановления; перед существенным изменением данных восстановить копию в отдельную тестовую БД и проверить результат. Резервные копии не публиковать автоматически. После успешной проверки восстановления новой копии удалить заменённые ею старые копии и временную проверочную БД. Правила хранения, исключения для уникальных данных и проверки перед очисткой — в [AGENTS.md](../AGENTS.md#данные-и-проверки).

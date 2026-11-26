@@ -183,7 +183,7 @@ async function run(name) {
     assert.equal((await api('/receiving-orders/' + receiving.id)).orderStatus, 'DONE');
     assert.equal((await api(path)).order.exportQueued, true);
     await setDay(2);
-    // The backend worker runs on the minute. Reading stock does not execute the transfer.
+    // The backend worker processes due transfers. Reading stock does not execute the transfer.
     const executed = await waitForTransfer(path, state => state.order.status === 'DONE');
     assert.equal(executed.order.status, 'DONE', executed.order.executionError);
     assert.equal(executed.order.exportQueued, true);

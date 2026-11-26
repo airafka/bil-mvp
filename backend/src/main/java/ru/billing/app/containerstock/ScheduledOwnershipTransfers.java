@@ -30,7 +30,7 @@ public class ScheduledOwnershipTransfers {
         this.transactions = transactions;
     }
 
-    @Scheduled(cron = "0 * * * * *", zone = "Europe/Moscow")
+    @Scheduled(cron = "${OWNERSHIP_CHECK_CRON:* * * * * *}", zone = "Europe/Moscow")
     public void applyDueTransfers() {
         var now = jdbc.queryForObject("select billing_now()", OffsetDateTime.class).atZoneSameInstant(MOSCOW);
         if (now.toLocalTime().isBefore(START)) return;
