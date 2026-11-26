@@ -22,8 +22,8 @@ export function StorageVisitsTable({ rows, emptyText, selectedPeriodId, showPeri
     <thead><tr><th aria-label="Раскрытие визита" /><th>Номер КТК</th><th>Собственник КТК</th><th>Дней хранения</th>
       {showPeriodDays && <th>Дней хранения в периоде</th>}
       <th>Начало периода (UTC)</th><th>Событие</th><th>Заявка</th><th>Конец периода (UTC)</th><th>Событие</th><th>Заявка</th>
-      <th>Клиент/Собственник поставки</th><th>Транспорт поставки</th><th>Грузоперевозчик/грузоотправитель поставки</th><th>Груз поставки</th>
-      <th>Клиент/Собственник вывоза</th><th>Транспорт вывоза</th><th>Грузоперевозчик/грузополучатель вывоза</th><th>Груз вывоза</th></tr></thead>
+      <th>Клиент/Собственник поставки</th><th>Транспорт поставки</th><th>Экспедитор/грузоотправитель поставки</th><th>Груз поставки</th>
+      <th>Клиент/Собственник вывоза</th><th>Транспорт вывоза</th><th>Экспедитор/грузополучатель вывоза</th><th>Груз вывоза</th></tr></thead>
     <tbody>{rows.length ? rows.map(visit => {
       const first = visit.periods[0], last = visit.periods[visit.periods.length - 1]
       const open = expanded[visit.id] ?? visit.periods.some(period => period.id === selectedPeriodId)

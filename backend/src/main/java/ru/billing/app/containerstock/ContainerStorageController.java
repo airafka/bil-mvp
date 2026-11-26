@@ -37,10 +37,10 @@ public class ContainerStorageController {
           e.order_id end_order_id,e.order_type end_order_type,
           case e.order_type when 'SHIPPING_ORDER' then s.number when 'SERVICE_ORDER' then eo.number end::bigint end_order_number,
           rc.name receiving_client_name,ro.name receiving_owner_name,r.transport_type arrival_transport,
-          case r.transport_type when 'VEHICLE' then ic.name when 'RAILWAY' then (select name from client_related_entity where id=r.shipper_id) end arrival_party,
+          ic.name arrival_forwarder,shipper.name arrival_shipper,
           incoming.cargo_name arrival_cargo,
           sc.name shipping_client_name,sw.name shipping_owner_name,s.transport_type departure_transport,
-          case s.transport_type when 'VEHICLE' then oc.name when 'RAILWAY' then cons.name end departure_party,
+          oc.name departure_forwarder,cons.name departure_consignee,
           outgoing.cargo_name departure_cargo
         from report_periods p
         join container_owner_history h on h.id=p.start_history_id
@@ -66,6 +66,7 @@ public class ContainerStorageController {
         left join client sw on sw.id=sr.container_owner_id
         left join route ir on ir.id=r.route_id
         left join client_related_entity ic on ic.id=ir.client_related_entity_id
+        left join client_related_entity shipper on shipper.id=r.shipper_id
         left join route outr on outr.id=s.route_id
         left join client_related_entity oc on oc.id=outr.client_related_entity_id
         left join client_related_entity cons on cons.id=s.consignee_id
@@ -223,14 +224,14 @@ public class ContainerStorageController {
         var out=new StringBuilder("\uFEFF");
         reportCsv(out,"Номер КТК","Собственник КТК","Дней хранения",stay.specified() ? "Дней хранения в периоде" : null,"Начало периода","Событие","Заявка",
             "Конец периода","Событие","Заявка","Клиент/Собственник поставки","Транспорт поставки",
-            "Грузоперевозчик/грузоотправитель поставки","Груз поставки","Клиент/Собственник вывоза","Транспорт вывоза",
-            "Грузоперевозчик/грузополучатель вывоза","Груз вывоза");
+            "Экспедитор/грузоотправитель поставки","Груз поставки","Клиент/Собственник вывоза","Транспорт вывоза",
+            "Экспедитор/грузополучатель вывоза","Груз вывоза");
         jdbc.query(reportQuery(f,false),rs->{
             Row r=row(rs,reportDate,stay);
             reportCsv(out,r.containerName(),r.ownerName(),r.storageDays(),r.storageDaysInPeriod(),format(r.arrivalAt()),
                 boundary(r.startOrderType()),r.startOrderNumber(),format(r.departureAt()),boundary(r.endOrderType()),r.endOrderNumber(),
-                clientOwner(r.receivingClientName(),r.receivingOwnerName()),transport(r.arrivalTransport()),r.arrivalParty(),r.arrivalCargo(),
-                clientOwner(r.shippingClientName(),r.shippingOwnerName()),transport(r.departureTransport()),r.departureParty(),r.departureCargo());
+                partyPair(r.receivingClientName(),r.receivingOwnerName()),transport(r.arrivalTransport()),r.arrivalParty(),r.arrivalCargo(),
+                partyPair(r.shippingClientName(),r.shippingOwnerName()),transport(r.departureTransport()),r.departureParty(),r.departureCargo());
         },f.args().toArray());
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=container-storage.csv")
             .contentType(new MediaType("text","csv",StandardCharsets.UTF_8)).body(out.toString().getBytes(StandardCharsets.UTF_8));
@@ -250,8 +251,9 @@ public class ContainerStorageController {
     static String format(OffsetDateTime value){return value==null?"":value.withOffsetSameInstant(ZoneOffset.UTC)
         .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm 'UTC'"));}
     private static String boundary(String s){return s==null?"":switch(s){case "RECEIVING_ORDER"->"Поставка";case "SHIPPING_ORDER"->"Вывоз";case "SERVICE_ORDER"->"Смена собственника";default->s;};}
-    private static String clientOwner(String client,String owner) {
-        return client==null && owner==null?"":(client==null?"—":client)+" / "+(owner==null?"—":owner);
+    static String partyPair(String first, String second) {
+        if (first == null && second == null) return null;
+        return (first == null ? "—" : first) + " / " + (second == null ? "—" : second);
     }
     private static String transport(String value) {
         return value==null?"":switch(value){case "VEHICLE"->"Авто";case "RAILWAY"->"ЖД";default->value;};
@@ -288,7 +290,9 @@ public class ContainerStorageController {
             stay.specified() ? span.daysWithin(stay) : null,
             rs.getObject("start_order_id",UUID.class),rs.getString("start_order_type"),rs.getObject("start_order_number",Long.class),
             rs.getObject("end_order_id",UUID.class),rs.getString("end_order_type"),rs.getObject("end_order_number",Long.class),
-            rs.getString("receiving_client_name"),rs.getString("receiving_owner_name"),rs.getString("arrival_transport"),rs.getString("arrival_party"),rs.getString("arrival_cargo"),
-            rs.getString("shipping_client_name"),rs.getString("shipping_owner_name"),rs.getString("departure_transport"),rs.getString("departure_party"),rs.getString("departure_cargo"));
+            rs.getString("receiving_client_name"),rs.getString("receiving_owner_name"),rs.getString("arrival_transport"),
+            partyPair(rs.getString("arrival_forwarder"), rs.getString("arrival_shipper")),rs.getString("arrival_cargo"),
+            rs.getString("shipping_client_name"),rs.getString("shipping_owner_name"),rs.getString("departure_transport"),
+            partyPair(rs.getString("departure_forwarder"), rs.getString("departure_consignee")),rs.getString("departure_cargo"));
     }
 }
