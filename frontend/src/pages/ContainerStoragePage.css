@@ -27,7 +27,7 @@
 .storage-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .storage-review { color: #9a3412; }
 .storage-table td:first-child { white-space: nowrap; font-weight: normal; }
-@media (max-width: 640px) { .storage-page .storage-filters .field { flex: 1 1 160px; } .storage-page .page-header { flex-wrap: wrap; gap: 12px; } }
+@media (max-width: 640px) { .storage-page .storage-filters .field { flex: 1 1 160px; } }
 
 .app-shell .storage-expand { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #334155; cursor: pointer; }
 .storage-expand svg { transition: transform 120ms ease; }

@@ -5,8 +5,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.nio.charset.StandardCharsets;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -83,10 +82,10 @@ public class ContainerStorageController {
           where i.shipping_order_container_id=sr.id
         ) outgoing on true
         """;
-    private static String reportQuery(Filter filter,boolean paged) {
+    private static String reportQuery(Filter filter) {
         // Resolve source documents only for selected rows; keep the count independent of cargo joins.
         return "with report_periods as materialized (select p.* "+FROM+filter.sql()
-            +" order by h.occurred_at desc,p.id"+(paged?" limit ? offset ?":"")+") "
+            +" order by h.occurred_at desc,p.id limit ? offset ?) "
             +SELECT+" order by h.occurred_at desc,p.id";
     }
     record Filter(String sql,List<Object> args) {}
@@ -119,7 +118,7 @@ public class ContainerStorageController {
         page=Math.max(0,page);size=Math.max(1,Math.min(100,size));
         long count=jdbc.queryForObject("select count(*) "+FROM+f.sql(),Long.class,f.args().toArray());
         var args=new ArrayList<>(f.args());args.add(size);args.add((long)page*size);
-        return PagedResponse.of(jdbc.query(reportQuery(f,true),
+        return PagedResponse.of(jdbc.query(reportQuery(f),
             (rs,n)->row(rs,reportDate,StayPeriod.ALL_TIME),args.toArray()),page,size,count);
     }
     public record ContainerOption(UUID id, String name) {}
@@ -207,56 +206,9 @@ public class ContainerStorageController {
             order by c.code,c.id
             """, (rs,n)->new ContainerOption(rs.getObject(1,UUID.class),rs.getString(2)));
     }
-    @GetMapping(value="/export",produces="text/csv")
-    public ResponseEntity<byte[]> export(@RequestParam(defaultValue="")String query,@RequestParam(defaultValue="ACTIVE")String status,
-            @RequestParam(required=false)UUID clientId,@RequestParam(required=false)UUID periodId,@RequestParam(required=false)LocalDate arrivalFrom,
-            @RequestParam(required=false)LocalDate arrivalTo,@RequestParam(required=false)LocalDate asOf,
-            @ModelAttribute StayPeriod stay,@RequestParam(required=false)UUID visitPeriodId) {
-        var reportDate=date(asOf);
-        var f=filter(query,status,clientId,periodId,arrivalFrom,arrivalTo,reportDate);
-        if (stay.specified() || visitPeriodId!=null) {
-            var visits=stay.visits("",visitPeriodId,reportDate);
-            var args=new ArrayList<>(f.args());
-            args.addAll(visits.args());
-            f=new Filter(f.sql()+" and p.id in (select op.id from container_period op"
-                +" where op.container_visit_id in (select v.id"+visits.sql()+"))",args);
-        }
-        var out=new StringBuilder("\uFEFF");
-        reportCsv(out,"Номер КТК","Собственник КТК","Дней хранения",stay.specified() ? "Дней хранения в периоде" : null,"Начало периода","Событие","Заявка",
-            "Конец периода","Событие","Заявка","Клиент/Собственник поставки","Транспорт поставки",
-            "Экспедитор/грузоотправитель поставки","Груз поставки","Клиент/Собственник вывоза","Транспорт вывоза",
-            "Экспедитор/грузополучатель вывоза","Груз вывоза");
-        jdbc.query(reportQuery(f,false),rs->{
-            Row r=row(rs,reportDate,stay);
-            reportCsv(out,r.containerName(),r.ownerName(),r.storageDays(),r.storageDaysInPeriod(),format(r.arrivalAt()),
-                boundary(r.startOrderType()),r.startOrderNumber(),format(r.departureAt()),boundary(r.endOrderType()),r.endOrderNumber(),
-                partyPair(r.receivingClientName(),r.receivingOwnerName()),transport(r.arrivalTransport()),r.arrivalParty(),r.arrivalCargo(),
-                partyPair(r.shippingClientName(),r.shippingOwnerName()),transport(r.departureTransport()),r.departureParty(),r.departureCargo());
-        },f.args().toArray());
-        return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=container-storage.csv")
-            .contentType(new MediaType("text","csv",StandardCharsets.UTF_8)).body(out.toString().getBytes(StandardCharsets.UTF_8));
-    }
-    private static void reportCsv(StringBuilder out,String container,String owner,Object days,Object daysInPeriod,Object... details) {
-        var cells = new ArrayList<Object>(Arrays.asList(container, owner, days));
-        if (daysInPeriod != null) cells.add(daysInPeriod);
-        Collections.addAll(cells, details);
-        csv(out, cells.toArray());
-    }
-    static void csv(StringBuilder out,Object... values) {
-        var cells=new ArrayList<String>();for(Object v:values){String s=v==null?"":v.toString();
-            String trimmed=s.stripLeading();
-            if(!trimmed.isEmpty() && "=+-@".indexOf(trimmed.charAt(0))>=0)s="'"+s;
-            cells.add("\""+s.replace("\"","\"\"")+"\"");}out.append(String.join(";",cells)).append("\r\n");
-    }
-    static String format(OffsetDateTime value){return value==null?"":value.withOffsetSameInstant(ZoneOffset.UTC)
-        .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm 'UTC'"));}
-    private static String boundary(String s){return s==null?"":switch(s){case "RECEIVING_ORDER"->"Поставка";case "SHIPPING_ORDER"->"Вывоз";case "SERVICE_ORDER"->"Смена собственника";default->s;};}
     static String partyPair(String first, String second) {
         if (first == null && second == null) return null;
         return (first == null ? "—" : first) + " / " + (second == null ? "—" : second);
-    }
-    private static String transport(String value) {
-        return value==null?"":switch(value){case "VEHICLE"->"Авто";case "RAILWAY"->"ЖД";default->value;};
     }
     private LocalDate date(LocalDate d) {
         LocalDate today=jdbc.queryForObject("select billing_today()",LocalDate.class);

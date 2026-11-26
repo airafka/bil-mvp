@@ -1,14 +1,21 @@
 package ru.billing.app.containerstock;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.mock;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class ContainerStorageCsvTest {
-    @Test void exportsTheStartOfAMoscowStorageDayInUtc() {
-        var midnight = java.time.OffsetDateTime.parse("2026-11-30T00:00:00+03:00");
-        assertEquals("29.11.2026 21:00 UTC", ContainerStorageController.format(midnight));
-        assertEquals("", ContainerStorageController.format(null));
+class ContainerStorageControllerTest {
+    @Test void exportIsAbsentUnderBothStoragePaths() throws Exception {
+        var controller = new ContainerStorageController(mock(JdbcTemplate.class));
+        var mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mvc.perform(get("/api/container-periods/export")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/container-storage-periods/export")).andExpect(status().isNotFound());
     }
 
     @Test void preservesForwarderAndOrderPartyPositionsInTheReport() {
@@ -17,11 +24,5 @@ class ContainerStorageCsvTest {
         assertEquals("Экспедитор / —", ContainerStorageController.partyPair("Экспедитор", null));
         assertEquals("— / Организация", ContainerStorageController.partyPair(null, "Организация"));
         assertNull(ContainerStorageController.partyPair(null, null));
-    }
-
-    @Test void escapesSpreadsheetFormulasQuotesAndMultilineValues() {
-        var csv=new StringBuilder();
-        ContainerStorageController.csv(csv,"=1\n+2","  +SUM(A1)","КТК \"тест\"",null,5);
-        assertEquals("\"'=1\n+2\";\"'  +SUM(A1)\";\"КТК \"\"тест\"\"\";\"\";\"5\"\r\n",csv.toString());
     }
 }

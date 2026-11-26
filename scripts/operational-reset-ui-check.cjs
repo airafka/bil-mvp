@@ -66,12 +66,13 @@ async function main() {
   run(['exec','-i',pg,'pg_restore','-U','billing','-d','billing_reset_ui_restore','--no-owner','--single-transaction','--exit-on-error'], bytes);
   assert.deepEqual(snapshot('billing_reset_ui_restore'), before, 'Automatic backup restore mismatch');
   assert.deepEqual((await api('/container-storage-periods')).items, []);
-  const csv = await (await fetch(base + '/container-storage-periods/export')).text();
-  assert.equal(csv.trim().split(/\r?\n/).length, 1); assert.equal(csv.trim().split(';').length, 17);
+  const visits = await api('/container-storage-periods/visits');
+  assert.deepEqual(visits.items, []);
+  assert.equal(visits.totalElements, 0);
   await api(endpoint, 'POST', { confirmation: 'УДАЛИТЬ', token: preview.token }, 409);
   const empty = await api(endpoint); assert.equal(empty.totalRows, 0);
   assert.deepEqual(await api(endpoint, 'POST', { confirmation: 'УДАЛИТЬ', token: empty.token }), { cleared: false });
-  console.log('PASS: confirmation, changed data, backup failure, FK rollback, concurrent reset, preserved catalogs/sequences, automatic backup restore, empty report/17-column CSV, repeat reset');
+  console.log('PASS: confirmation, changed data, backup failure, FK rollback, concurrent reset, preserved catalogs/sequences, automatic backup restore, empty storage periods and visits, repeat reset');
 
   const tariff = json('select row_to_json(t) from (select client_id,contract_id from complex_service_tariff where active order by id limit 1)t');
   const clients = await api('/references/clients'), owner = tariff.client_id, other = clients.find(c => c.id !== owner).id, party = clients.find(c => c.id === owner).name;

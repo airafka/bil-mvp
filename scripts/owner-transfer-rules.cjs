@@ -145,6 +145,6 @@ async function main() {
     const visits = await api('/container-periods/visits?periodId='+firstChange.containerPeriodId);
     assert.equal(visits.items.length, 1);
     assert.equal(visits.items[0].shippingAt ?? null, null);
-    console.log('PASS transfer eligibility, reservation, withdrawal, early shipping, dated history, calendar replay, backdating and storage days/CSV');
+    console.log('PASS transfer eligibility, reservation, withdrawal, early shipping, dated history, calendar replay, backdating and storage days by owner');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

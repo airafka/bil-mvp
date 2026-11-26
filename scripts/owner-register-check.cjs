@@ -266,31 +266,14 @@ async function expectOwner(k,id){
  assert.equal(lookup[0].containerId,k);assert.equal(lookup[0].ownerClientId,id,'Lookup JSON owner ID');assert.equal(lookup[0].ownerClientName,name);
  assert.equal(owner(k),id);assert.equal(physical(k),id);
 }
-function parseCsv(text){
- text=text.replace(/^\uFEFF/,'');const rows=[];let row=[],cell='',quoted=false;
- for(let i=0;i<text.length;i++){const ch=text[i];
-  if(ch==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}
-  else if(!quoted&&ch===';'){row.push(cell);cell='';}
-  else if(!quoted&&(ch==='\r'||ch==='\n')){if(ch==='\r'&&text[i+1]==='\n')i++;row.push(cell);rows.push(row);row=[];cell='';}
-  else cell+=ch;
- }
- assert.equal(quoted,false);if(row.length||cell){row.push(cell);rows.push(row);}return rows;
-}
 async function expectStorage(k,expected,periodTable='container_period'){
  const code=sql(`select code from container where id=${quote(k)}`);
  const report=await api('/container-storage-periods?size=100&query='+encodeURIComponent(code));
  const assignments=json(`select coalesce(json_agg(t),'[]') from (select p.id,p.client_id,c.name from ${identifier(periodTable)} p join container_visit v on v.id=p.container_visit_id join client c on c.id=p.client_id where v.container_id=${quote(k)})t`);
  const byId=new Map(assignments.map(p=>[p.id,p]));
- const actual=report.items.map(r=>{const p=byId.get(r.id);assert(p);assert.equal(r.containerId,k);assert.equal(r.ownerName,p.name);return {ownerClientId:p.client_id,storageDays:r.storageDays};});
+ const actual=report.items.map(r=>{const p=byId.get(r.id);assert(p);assert.equal(r.containerId,k);assert.equal(r.containerName,code);assert.equal(r.ownerName,p.name);return {ownerClientId:p.client_id,storageDays:r.storageDays};});
  const sort=rows=>rows.slice().sort((a,b)=>a.ownerClientId.localeCompare(b.ownerClientId)||a.storageDays-b.storageDays);
  assert.deepEqual(sort(actual),sort(expected),'Storage days belong to the expected owners');
- const r=await fetch(base+'/container-storage-periods/export?query='+encodeURIComponent(code));assert.equal(r.status,200);
- const bytes=Buffer.from(await r.arrayBuffer());assert.deepEqual([...bytes.subarray(0,3)],[0xef,0xbb,0xbf],'CSV UTF-8 BOM');
- const csv=parseCsv(bytes.toString('utf8'));for(const row of csv)assert.equal(row.length,17,'CSV column count');
- assert.equal(csv[0][0],'Номер КТК');assert.equal(csv[0][1],'Собственник КТК');assert.equal(csv[0][2],'Дней хранения');
- const expectedCsv=report.items.map(r=>[r.containerName,r.ownerName,r.storageDays]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
- const actualCsv=csv.slice(1).map(r=>[r[0],r[1],Number(r[2])]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
- assert.deepEqual(actualCsv,expectedCsv,'CSV agrees with JSON owner labels and days');
  return report;
 }
 async function seed(){const x=await init('billing-register-owner-old');

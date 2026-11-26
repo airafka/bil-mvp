@@ -6,8 +6,8 @@ info:
     Контракт HTTP API отчёта bil-mvp. Каждый визит начинается фактической приёмкой одного КТК и заканчивается его фактическим вывозом.
     Рабочая дата определяется календарём приложения в Europe/Moscow. Все даты расчёта и границы дней хранения относятся к этой зоне.
     Даты и время событий в JSON передаются в ISO 8601 со смещением. Необязательные поля без значения пропускаются при сериализации.
-    Основной префикс /api/container-periods. Префикс /api/container-storage-periods поддерживает те же четыре операции.
-    В примерах идентификаторы, документы, контрагенты и грузы условны. Ноябрьский визит, плоская выдача и обе выгрузки CSV описывают одну цепочку. Примеры с одним грузом и без груза показывают отдельные варианты исходной поставки.
+    Основной префикс /api/container-periods. Префикс /api/container-storage-periods поддерживает те же три операции.
+    В примерах идентификаторы, документы, контрагенты и грузы условны. Ноябрьский визит и плоская выдача описывают одну цепочку. Примеры с одним грузом и без груза показывают отдельные варианты исходной поставки.
 servers:
   - url: /
     description: Тот же сервер, на котором открыт интерфейс
@@ -60,37 +60,6 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/Containers'
-  /api/container-periods/export:
-    get:
-      tags: [Хранение]
-      operationId: exportStoragePeriods
-      summary: Выгрузить периоды владения в CSV
-      description: |
-        Каждая строка файла соответствует одному периоду владения. Сначала идут более поздние события начала, при совпадении по UUID периода. Параметры month/storedFrom/storedTo фильтруют визиты по пересечению и добавляют вычисляемую колонку. visitPeriodId выбирает полный визит по одному из его периодов. Отдельный periodId ограничивает строки конкретным периодом. Все переданные фильтры применяются совместно. Сервер выгружает все подходящие строки без постраничного ограничения.
-        Примеры запроса
-
-        `GET /api/container-periods/export?query=9000460&month=2026-11&asOf=2026-11-30`
-
-        `GET /api/container-periods/export?query=9000460&asOf=2026-11-30`
-
-        `GET /api/container-periods/export?visitPeriodId=10000000-0000-4000-8000-000000000002`
-      parameters:
-        - $ref: '#/components/parameters/Query'
-        - $ref: '#/components/parameters/Status'
-        - $ref: '#/components/parameters/Client'
-        - $ref: '#/components/parameters/ExactPeriod'
-        - $ref: '#/components/parameters/ArrivalFrom'
-        - $ref: '#/components/parameters/ArrivalTo'
-        - $ref: '#/components/parameters/AsOf'
-        - $ref: '#/components/parameters/Month'
-        - $ref: '#/components/parameters/StoredFrom'
-        - $ref: '#/components/parameters/StoredTo'
-        - $ref: '#/components/parameters/ExportVisitPeriod'
-      responses:
-        '200':
-          $ref: '#/components/responses/Csv'
-        '400':
-          $ref: '#/components/responses/BadRequest'
   /api/container-periods:
     get:
       tags: [Хранение]
@@ -155,33 +124,6 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/Containers'
-  /api/container-storage-periods/export:
-    get:
-      tags: [Совместимость]
-      operationId: exportStoragePeriodsAlias
-      summary: Выгрузить периоды владения в CSV (альтернативный путь)
-      description: |
-        Тот же контракт и результат, что у GET /api/container-periods/export.
-        Пример запроса
-
-        `GET /api/container-storage-periods/export?query=9000460&month=2026-11&asOf=2026-11-30`
-      parameters:
-        - $ref: '#/components/parameters/Query'
-        - $ref: '#/components/parameters/Status'
-        - $ref: '#/components/parameters/Client'
-        - $ref: '#/components/parameters/ExactPeriod'
-        - $ref: '#/components/parameters/ArrivalFrom'
-        - $ref: '#/components/parameters/ArrivalTo'
-        - $ref: '#/components/parameters/AsOf'
-        - $ref: '#/components/parameters/Month'
-        - $ref: '#/components/parameters/StoredFrom'
-        - $ref: '#/components/parameters/StoredTo'
-        - $ref: '#/components/parameters/ExportVisitPeriod'
-      responses:
-        '200':
-          $ref: '#/components/responses/Csv'
-        '400':
-          $ref: '#/components/responses/BadRequest'
   /api/container-storage-periods:
     get:
       tags: [Совместимость]
@@ -221,13 +163,6 @@ components:
       in: query
       required: false
       description: UUID периода, по которому нужно найти визит и все его периоды, видимые на дату расчёта. Неизвестный или скрытый период даёт пустую страницу.
-      schema: {type: string, format: uuid}
-      example: 10000000-0000-4000-8000-000000000002
-    ExportVisitPeriod:
-      name: visitPeriodId
-      in: query
-      required: false
-      description: Включить все видимые периоды визита, содержащего этот период. FE передаёт сюда periodId из ссылки на визит.
       schema: {type: string, format: uuid}
       example: 10000000-0000-4000-8000-000000000002
     ExactPeriod:
@@ -473,25 +408,6 @@ components:
               $ref: '#/components/examples/flat'
             empty:
               $ref: '#/components/examples/empty'
-    Csv:
-      description: |
-        Вложение container-storage.csv в UTF-8 с BOM. Разделитель «;», все ячейки в двойных кавычках.
-        Внутренняя кавычка удваивается, строки заканчиваются CRLF. Значение без данных передаётся как пустая ячейка.
-        Если после начальных пробелов первый символ значения один из =, +, -, @, перед значением добавляется апостроф.
-        Без фильтра интервала файл содержит 17 колонок. С интервалом добавляется четвёртая колонка «Дней хранения в периоде» (всего 18).
-        Даты событий имеют формат dd.MM.yyyy HH:mm UTC. Пустая выборка даёт файл с одной строкой заголовков.
-      headers:
-        Content-Disposition:
-          description: Имя предлагаемого для скачивания файла
-          schema: {type: string, const: 'attachment; filename=container-storage.csv'}
-      content:
-        text/csv:
-          schema: {type: string}
-          examples:
-            month:
-              $ref: '#/components/examples/csvMonth'
-            allTime:
-              $ref: '#/components/examples/csvAll'
     BadRequest:
       description: |
         Недопустимое сочетание или значение фильтров. Бизнес-ошибки включают будущий asOf,
@@ -719,13 +635,3 @@ components:
       value:
         - id: "10000000-0000-4000-8000-000000000004"
           name: "TKRU9000460"
-    csvMonth:
-      summary: Ноябрь, 18 колонок и два периода
-      value: "\uFEFF\"Номер КТК\";\"Собственник КТК\";\"Дней хранения\";\"Дней хранения в периоде\";\"Начало периода\";\"Событие\";\"Заявка\";\"Конец периода\";\"Событие\";\"Заявка\";\"Клиент/Собственник поставки\";\"Транспорт поставки\";\"Экспедитор/грузоотправитель поставки\";\"Груз поставки\";\"Клиент/Собственник вывоза\";\"Транспорт вывоза\";\"Экспедитор/грузополучатель вывоза\";\"Груз вывоза\"\r\n\
-        \"TKRU9000460\";\"Собственник Б\";\"30\";\"30\";\"31.10.2026 21:00 UTC\";\"Смена собственника\";\"22001\";\"30.11.2026 11:00 UTC\";\"Вывоз\";\"33001\";\"Клиент А / Собственник А\";\"ЖД\";\"Экспедитор А / Отправитель А\";\"011005 — Пшеница; 161128 — Лесоматериалы\";\"Клиент Б / Собственник Б\";\"Авто\";\"— / Получатель Б\";\"324116 — Металлопрокат\"\r\n\
-        \"TKRU9000460\";\"Собственник А\";\"2\";\"1\";\"31.10.2026 08:00 UTC\";\"Поставка\";\"11001\";\"31.10.2026 21:00 UTC\";\"Смена собственника\";\"22001\";\"Клиент А / Собственник А\";\"ЖД\";\"Экспедитор А / Отправитель А\";\"011005 — Пшеница; 161128 — Лесоматериалы\";\"\";\"\";\"\";\"\"\r\n"
-    csvAll:
-      summary: Все даты по состоянию на 30 ноября, 17 колонок и два периода
-      value: "\uFEFF\"Номер КТК\";\"Собственник КТК\";\"Дней хранения\";\"Начало периода\";\"Событие\";\"Заявка\";\"Конец периода\";\"Событие\";\"Заявка\";\"Клиент/Собственник поставки\";\"Транспорт поставки\";\"Экспедитор/грузоотправитель поставки\";\"Груз поставки\";\"Клиент/Собственник вывоза\";\"Транспорт вывоза\";\"Экспедитор/грузополучатель вывоза\";\"Груз вывоза\"\r\n\
-        \"TKRU9000460\";\"Собственник Б\";\"30\";\"31.10.2026 21:00 UTC\";\"Смена собственника\";\"22001\";\"30.11.2026 11:00 UTC\";\"Вывоз\";\"33001\";\"Клиент А / Собственник А\";\"ЖД\";\"Экспедитор А / Отправитель А\";\"011005 — Пшеница; 161128 — Лесоматериалы\";\"Клиент Б / Собственник Б\";\"Авто\";\"— / Получатель Б\";\"324116 — Металлопрокат\"\r\n\
-        \"TKRU9000460\";\"Собственник А\";\"2\";\"31.10.2026 08:00 UTC\";\"Поставка\";\"11001\";\"31.10.2026 21:00 UTC\";\"Смена собственника\";\"22001\";\"Клиент А / Собственник А\";\"ЖД\";\"Экспедитор А / Отправитель А\";\"011005 — Пшеница; 161128 — Лесоматериалы\";\"\";\"\";\"\";\"\"\r\n"

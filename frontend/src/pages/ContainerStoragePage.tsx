@@ -104,8 +104,7 @@ export default function ContainerStoragePage() {
   const generated = params.has('report') || !!periodId || applied.size > 0
   const page = Math.max(0, Number(params.get('page')) || 0)
   const pageSize = 20
-  const exportFilter = new URLSearchParams(applied)
-  if (periodId) { applied.set('periodId', periodId); exportFilter.set('visitPeriodId', periodId) }
+  if (periodId) applied.set('periodId', periodId)
   const url = '/api/container-periods/visits?' + applied + '&page=' + page + '&size=' + pageSize
   const requestKey = url + ':' + attempt + ':' + clock.date + ':' + clock.version
   const [result, setResult] = useState<{ key: string; data: PagedResponse<StorageVisit> } | null>(null)
@@ -153,9 +152,7 @@ export default function ContainerStoragePage() {
   }
 
   return <section className="registry-page storage-page">
-    <div className="page-header"><h1>Хранение КТК</h1>
-      {data && <a className="secondary-button" href={'/api/container-periods/export?' + exportFilter}>Выгрузить CSV</a>}
-    </div>
+    <div className="page-header"><h1>Хранение КТК</h1></div>
     <StorageFilterForm key={String(generated) + applied.toString()} initial={initial} containers={containers} onApply={apply} onReset={() => setParams({})} />
     {optionsError && <div role="alert" className="storage-review">Не удалось загрузить номера КТК. <button onClick={() => setOptionsAttempt(a => a + 1)}>Повторить</button></div>}
     {periodId && <p>Показан визит с выбранным периодом хранения.</p>}
