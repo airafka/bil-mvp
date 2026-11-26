@@ -1,0 +1,731 @@
+openapi: 3.1.0
+info:
+  title: Отчёт хранения КТК
+  version: 1.0.0
+  description: |
+    Контракт HTTP API отчёта bil-mvp. Каждый визит начинается фактической приёмкой одного КТК и заканчивается его фактическим вывозом.
+    Рабочая дата определяется календарём приложения в Europe/Moscow. Все даты расчёта и границы дней хранения относятся к этой зоне.
+    Даты и время событий в JSON передаются в ISO 8601 со смещением. Необязательные поля без значения пропускаются при сериализации.
+    Основной префикс /api/container-periods. Префикс /api/container-storage-periods поддерживает те же четыре операции.
+    В примерах идентификаторы, документы, контрагенты и грузы условны. Ноябрьский визит, плоская выдача и обе выгрузки CSV описывают одну цепочку. Примеры с одним грузом и без груза показывают отдельные варианты исходной поставки.
+servers:
+  - url: /
+    description: Тот же сервер, на котором открыт интерфейс
+tags:
+  - name: Хранение
+  - name: Совместимость
+paths:
+  /api/container-periods/visits:
+    get:
+      tags: [Хранение]
+      operationId: listStorageVisits
+      summary: Получить визиты КТК и их периоды владения
+      description: |
+        Страница содержит целые визиты, пересекающие включительный интервал хранения. month и пара storedFrom/storedTo взаимно исключаются. Допустима одна граница. Периоды внутри выбранного визита остаются в ответе, в том числе когда число дней в фильтре равно нулю. Визиты идут по дате поставки по убыванию, при совпадении по UUID визита. Периоды идут по occurred_at, затем created_at и UUID события начала.
+        Примеры запроса
+
+        `GET /api/container-periods/visits?query=9000460&month=2026-11&asOf=2026-11-30&page=0&size=20`
+
+        `GET /api/container-periods/visits?periodId=10000000-0000-4000-8000-000000000002&storedFrom=2026-11-15`
+
+        `GET /api/container-periods/visits?query=NO-SUCH-CONTAINER`
+
+        Для вариантов поставки с одним грузом и без груза запрос на дату приёмки имеет вид
+
+        `GET /api/container-periods/visits?query=9000460&asOf=2026-10-31`
+      parameters:
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/VisitPeriod'
+        - $ref: '#/components/parameters/Month'
+        - $ref: '#/components/parameters/StoredFrom'
+        - $ref: '#/components/parameters/StoredTo'
+        - $ref: '#/components/parameters/AsOf'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          $ref: '#/components/responses/Visits'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/container-periods/containers:
+    get:
+      tags: [Хранение]
+      operationId: listStorageContainers
+      summary: Получить номера КТК для выпадающего фильтра
+      description: |
+        Полный список КТК, для которых есть хотя бы один неотменённый визит с датой поставки не позже текущей рабочей даты. Сортировка по номеру КТК, затем по UUID. Поиск по подстроке в этом списке выполняет FE.
+        Пример запроса
+
+        `GET /api/container-periods/containers`
+      responses:
+        '200':
+          $ref: '#/components/responses/Containers'
+  /api/container-periods/export:
+    get:
+      tags: [Хранение]
+      operationId: exportStoragePeriods
+      summary: Выгрузить периоды владения в CSV
+      description: |
+        Каждая строка файла соответствует одному периоду владения. Сначала идут более поздние события начала, при совпадении по UUID периода. Параметры month/storedFrom/storedTo фильтруют визиты по пересечению и добавляют вычисляемую колонку. visitPeriodId выбирает полный визит по одному из его периодов. Отдельный periodId ограничивает строки конкретным периодом. Все переданные фильтры применяются совместно. Сервер выгружает все подходящие строки без постраничного ограничения.
+        Примеры запроса
+
+        `GET /api/container-periods/export?query=9000460&month=2026-11&asOf=2026-11-30`
+
+        `GET /api/container-periods/export?query=9000460&asOf=2026-11-30`
+
+        `GET /api/container-periods/export?visitPeriodId=10000000-0000-4000-8000-000000000002`
+      parameters:
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Client'
+        - $ref: '#/components/parameters/ExactPeriod'
+        - $ref: '#/components/parameters/ArrivalFrom'
+        - $ref: '#/components/parameters/ArrivalTo'
+        - $ref: '#/components/parameters/AsOf'
+        - $ref: '#/components/parameters/Month'
+        - $ref: '#/components/parameters/StoredFrom'
+        - $ref: '#/components/parameters/StoredTo'
+        - $ref: '#/components/parameters/ExportVisitPeriod'
+      responses:
+        '200':
+          $ref: '#/components/responses/Csv'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/container-periods:
+    get:
+      tags: [Хранение]
+      operationId: listStoragePeriods
+      summary: Получить плоский список периодов владения
+      description: |
+        Совместимый интерфейс для постраничного просмотра отдельных периодов. arrivalFrom/arrivalTo ограничивают дату события начала периода по UTC. Сортировка по времени начала по убыванию, затем по UUID периода. Дни возвращаются за всё время на дату расчёта. Экран сгруппированного отчёта использует /visits.
+        Примеры запроса
+
+        `GET /api/container-periods?query=9000460&status=CLOSED&asOf=2026-11-30&page=0&size=20`
+
+        `GET /api/container-periods?periodId=10000000-0000-4000-8000-000000000001`
+      parameters:
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Client'
+        - $ref: '#/components/parameters/ExactPeriod'
+        - $ref: '#/components/parameters/ArrivalFrom'
+        - $ref: '#/components/parameters/ArrivalTo'
+        - $ref: '#/components/parameters/AsOf'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          $ref: '#/components/responses/Periods'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/container-storage-periods/visits:
+    get:
+      tags: [Совместимость]
+      operationId: listStorageVisitsAlias
+      summary: Получить визиты КТК и их периоды владения (альтернативный путь)
+      description: |
+        Тот же контракт и результат, что у GET /api/container-periods/visits.
+        Пример запроса
+
+        `GET /api/container-storage-periods/visits?query=9000460&month=2026-11&asOf=2026-11-30&page=0&size=20`
+      parameters:
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/VisitPeriod'
+        - $ref: '#/components/parameters/Month'
+        - $ref: '#/components/parameters/StoredFrom'
+        - $ref: '#/components/parameters/StoredTo'
+        - $ref: '#/components/parameters/AsOf'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          $ref: '#/components/responses/Visits'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/container-storage-periods/containers:
+    get:
+      tags: [Совместимость]
+      operationId: listStorageContainersAlias
+      summary: Получить номера КТК для выпадающего фильтра (альтернативный путь)
+      description: |
+        Тот же контракт и результат, что у GET /api/container-periods/containers.
+        Пример запроса
+
+        `GET /api/container-storage-periods/containers`
+      responses:
+        '200':
+          $ref: '#/components/responses/Containers'
+  /api/container-storage-periods/export:
+    get:
+      tags: [Совместимость]
+      operationId: exportStoragePeriodsAlias
+      summary: Выгрузить периоды владения в CSV (альтернативный путь)
+      description: |
+        Тот же контракт и результат, что у GET /api/container-periods/export.
+        Пример запроса
+
+        `GET /api/container-storage-periods/export?query=9000460&month=2026-11&asOf=2026-11-30`
+      parameters:
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Client'
+        - $ref: '#/components/parameters/ExactPeriod'
+        - $ref: '#/components/parameters/ArrivalFrom'
+        - $ref: '#/components/parameters/ArrivalTo'
+        - $ref: '#/components/parameters/AsOf'
+        - $ref: '#/components/parameters/Month'
+        - $ref: '#/components/parameters/StoredFrom'
+        - $ref: '#/components/parameters/StoredTo'
+        - $ref: '#/components/parameters/ExportVisitPeriod'
+      responses:
+        '200':
+          $ref: '#/components/responses/Csv'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/container-storage-periods:
+    get:
+      tags: [Совместимость]
+      operationId: listStoragePeriodsAlias
+      summary: Получить плоский список периодов владения (альтернативный путь)
+      description: |
+        Тот же контракт и результат, что у GET /api/container-periods.
+        Пример запроса
+
+        `GET /api/container-storage-periods?query=9000460&status=CLOSED&asOf=2026-11-30&page=0&size=20`
+      parameters:
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Client'
+        - $ref: '#/components/parameters/ExactPeriod'
+        - $ref: '#/components/parameters/ArrivalFrom'
+        - $ref: '#/components/parameters/ArrivalTo'
+        - $ref: '#/components/parameters/AsOf'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          $ref: '#/components/responses/Periods'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+components:
+  parameters:
+    Query:
+      name: query
+      in: query
+      required: false
+      description: Подстрока номера КТК без учёта регистра. Краевые пробелы удаляются.
+      schema: {type: string, default: ''}
+      example: '9000460'
+    VisitPeriod:
+      name: periodId
+      in: query
+      required: false
+      description: UUID периода, по которому нужно найти визит и все его периоды, видимые на дату расчёта. Неизвестный или скрытый период даёт пустую страницу.
+      schema: {type: string, format: uuid}
+      example: 10000000-0000-4000-8000-000000000002
+    ExportVisitPeriod:
+      name: visitPeriodId
+      in: query
+      required: false
+      description: Включить все видимые периоды визита, содержащего этот период. FE передаёт сюда periodId из ссылки на визит.
+      schema: {type: string, format: uuid}
+      example: 10000000-0000-4000-8000-000000000002
+    ExactPeriod:
+      name: periodId
+      in: query
+      required: false
+      description: Ограничить выборку одним периодом по UUID.
+      schema: {type: string, format: uuid}
+      example: 10000000-0000-4000-8000-000000000001
+    Month:
+      name: month
+      in: query
+      required: false
+      description: Календарный месяц целиком. Можно задать вместо диапазона storedFrom/storedTo.
+      schema: {type: string, pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'}
+      example: '2026-11'
+    StoredFrom:
+      name: storedFrom
+      in: query
+      required: false
+      description: Первая дата интервала хранения включительно. Допускается без storedTo. Если переданы обе границы, storedFrom должна быть не позже storedTo.
+      schema: {type: string, format: date}
+      example: '2026-11-01'
+    StoredTo:
+      name: storedTo
+      in: query
+      required: false
+      description: Последняя дата интервала хранения включительно. Допускается без storedFrom. Расчёт ограничен asOf.
+      schema: {type: string, format: date}
+      example: '2026-11-30'
+    AsOf:
+      name: asOf
+      in: query
+      required: false
+      description: Дата среза включительно. По умолчанию используется рабочая дата billing_today(). Дата позже рабочей возвращает ошибку 400.
+      schema: {type: string, format: date}
+      example: '2026-11-30'
+    Page:
+      name: page
+      in: query
+      required: false
+      description: Номер страницы с нуля. Отрицательное значение приводится к нулю. За пределами выдачи возвращается пустой items и фактическое общее количество.
+      schema: {type: integer, format: int32, default: 0}
+      example: 0
+    Size:
+      name: size
+      in: query
+      required: false
+      description: Запрошенный размер страницы. Сервер приводит значение к диапазону от 1 до 100 включительно.
+      schema: {type: integer, format: int32, default: 20}
+      example: 20
+    Status:
+      name: status
+      in: query
+      required: false
+      description: Статус периода на дату расчёта. ACTIVE и ALL включают OPEN и CLOSED. CANCELLED допустим как фильтр и даёт пустую выборку, поскольку отменённые записи исключены из отчёта.
+      schema: {type: string, enum: [ACTIVE, ALL, OPEN, CLOSED, CANCELLED], default: ACTIVE}
+      example: CLOSED
+    Client:
+      name: clientId
+      in: query
+      required: false
+      description: Клиент исходной заявки на поставку этого визита.
+      schema: {type: string, format: uuid}
+      example: 10000000-0000-4000-8000-000000000010
+    ArrivalFrom:
+      name: arrivalFrom
+      in: query
+      required: false
+      description: Нижняя включительная граница даты события начала периода по UTC. Началом может быть поставка или смена собственника.
+      schema: {type: string, format: date}
+      example: '2026-11-01'
+    ArrivalTo:
+      name: arrivalTo
+      in: query
+      required: false
+      description: Верхняя включительная граница даты события начала периода по UTC. Значение должно быть не раньше arrivalFrom.
+      schema: {type: string, format: date}
+      example: '2026-11-30'
+  schemas:
+    ContainerOption:
+      type: object
+      required: [id, name]
+      properties:
+        id: {type: string, format: uuid, description: UUID КТК}
+        name: {type: string, description: Номер КТК для поиска и отображения}
+    Period:
+      type: object
+      description: |
+        Один период одного собственника. Старт и окончание задаются складскими событиями.
+        Владелец и стороны исходной поставки могут различаться. Реквизиты поставки относятся к поставке этого визита и повторяются в его периодах.
+        Реквизиты вывоза заполняются только у периода, который закончился фактическим вывозом. День передачи входит в оба смежных периода.
+      required: [id, containerId, containerName, ownerName, arrivalAt, status, storageDays, startOrderId, startOrderType, startOrderNumber]
+      properties:
+        id: {type: string, format: uuid, description: UUID периода владения}
+        containerId: {type: string, format: uuid}
+        containerName: {type: string, description: Номер КТК}
+        ownerName: {type: string, description: Собственник в этом периоде}
+        arrivalAt: {type: string, format: date-time, description: Время события начала периода}
+        departureAt: {type: string, format: date-time, description: Время события окончания периода при наличии}
+        status: {type: string, enum: [OPEN, CLOSED]}
+        storageDays: {type: integer, format: int64, minimum: 0, description: Дни этого периода до его окончания или даты расчёта включительно}
+        storageDaysInPeriod:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Дни пересечения с month или storedFrom/storedTo. Поле присутствует только при таком фильтре.
+        startOrderId: {type: string, format: uuid}
+        startOrderType: {type: string, enum: [RECEIVING_ORDER, SERVICE_ORDER]}
+        startOrderNumber: {type: integer, format: int64}
+        endOrderId: {type: string, format: uuid}
+        endOrderType: {type: string, enum: [SERVICE_ORDER, SHIPPING_ORDER]}
+        endOrderNumber: {type: integer, format: int64}
+        receivingClientName: {type: string, description: Клиент исходной заявки на поставку}
+        receivingOwnerName: {type: string, description: Собственник КТК в исходной поставке}
+        arrivalTransport: {type: string, enum: [VEHICLE, RAILWAY]}
+        arrivalParty:
+          type: string
+          description: Экспедитор рейса / грузоотправитель поставки. При одном значении на месте второго ставится «—». При отсутствии обеих сторон поле пропускается.
+        arrivalCargo:
+          type: string
+          description: |
+            Значения ЕТСНГ автостроки КТК или ЖД-накладной КТК в этой поставке. Отсортированы по коду, без повторов, разделитель «; ».
+            Масса в строку не входит. При отсутствии грузовых позиций поле пропускается.
+          examples: ["011005 — Пшеница", "011005 — Пшеница; 161128 — Лесоматериалы"]
+        shippingClientName: {type: string, description: Клиент фактического вывоза}
+        shippingOwnerName: {type: string, description: Собственник в строке КТК фактического вывоза}
+        departureTransport: {type: string, enum: [VEHICLE, RAILWAY]}
+        departureParty:
+          type: string
+          description: Экспедитор рейса / грузополучатель вывоза. Правила заполнения пары совпадают с arrivalParty.
+        departureCargo:
+          type: string
+          description: Список значений ЕТСНГ из строки КТК в заявке фактического вывоза. Сортировка и разделитель как у arrivalCargo. Поле пропускается при отсутствии груза вывоза.
+    Visit:
+      type: object
+      required: [id, containerId, containerName, receivingAt, receivingOrderId, receivingOrderNumber, storageDays, periods]
+      properties:
+        id: {type: string, format: uuid, description: UUID визита}
+        containerId: {type: string, format: uuid}
+        containerName: {type: string, description: Номер КТК}
+        receivingAt: {type: string, format: date-time, description: Фактическое начало визита}
+        shippingAt: {type: string, format: date-time, description: Фактический вывоз на дату среза}
+        receivingOrderId: {type: string, format: uuid}
+        receivingOrderNumber: {type: integer, format: int64}
+        shippingOrderId: {type: string, format: uuid}
+        shippingOrderNumber: {type: integer, format: int64}
+        storageDays: {type: integer, format: int64, minimum: 0, description: Календарные дни всего визита до даты среза включительно. День передачи считается один раз.}
+        storageDaysInPeriod:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Календарные дни пересечения визита с выбранным интервалом. Поле передаётся при month или при наличии хотя бы одной границы диапазона.
+        periods:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Period'
+    PageMetadata:
+      type: object
+      required: [page, size, totalElements, totalPages]
+      properties:
+        page: {type: integer, format: int32, minimum: 0}
+        size: {type: integer, format: int32, minimum: 1, maximum: 100}
+        totalElements: {type: integer, format: int64, minimum: 0, description: Количество визитов или отдельных периодов до пагинации}
+        totalPages: {type: integer, format: int32, minimum: 0, description: Округление totalElements / size вверх}
+    VisitPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Visit'
+    PeriodPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Period'
+    FilterProblem:
+      type: object
+      required: [status, title, detail, instance, code]
+      properties:
+        status: {type: integer, const: 400}
+        title: {type: string}
+        detail: {type: string}
+        instance: {type: string, format: uri-reference}
+        code: {type: string, enum: [INVALID_STORAGE_FILTER, VALIDATION_ERROR]}
+        errors:
+          type: object
+          description: Ошибки преобразования полей фильтра month/storedFrom/storedTo при VALIDATION_ERROR.
+          additionalProperties: {type: string}
+    BindingError:
+      type: object
+      required: [timestamp, status, error, path]
+      properties:
+        timestamp: {type: string, format: date-time}
+        status: {type: integer, const: 400}
+        error: {type: string}
+        path: {type: string}
+  responses:
+    Visits:
+      description: Страница визитов
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/VisitPage'
+          examples:
+            cohort:
+              $ref: '#/components/examples/cohort'
+            single:
+              $ref: '#/components/examples/single'
+            noCargo:
+              $ref: '#/components/examples/noCargo'
+            empty:
+              $ref: '#/components/examples/empty'
+    Containers:
+      description: Справочный список номеров КТК. Если список пуст, возвращается [].
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ContainerOption'
+          examples:
+            containers:
+              $ref: '#/components/examples/containers'
+    Periods:
+      description: Страница периодов без группировки по визитам
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PeriodPage'
+          examples:
+            flat:
+              $ref: '#/components/examples/flat'
+            empty:
+              $ref: '#/components/examples/empty'
+    Csv:
+      description: |
+        Вложение container-storage.csv в UTF-8 с BOM. Разделитель «;», все ячейки в двойных кавычках.
+        Внутренняя кавычка удваивается, строки заканчиваются CRLF. Значение без данных передаётся как пустая ячейка.
+        Если после начальных пробелов первый символ значения один из =, +, -, @, перед значением добавляется апостроф.
+        Без фильтра интервала файл содержит 17 колонок. С интервалом добавляется четвёртая колонка «Дней хранения в периоде» (всего 18).
+        Даты событий имеют формат dd.MM.yyyy HH:mm UTC. Пустая выборка даёт файл с одной строкой заголовков.
+      headers:
+        Content-Disposition:
+          description: Имя предлагаемого для скачивания файла
+          schema: {type: string, const: 'attachment; filename=container-storage.csv'}
+      content:
+        text/csv:
+          schema: {type: string}
+          examples:
+            month:
+              $ref: '#/components/examples/csvMonth'
+            allTime:
+              $ref: '#/components/examples/csvAll'
+    BadRequest:
+      description: |
+        Недопустимое сочетание или значение фильтров. Бизнес-ошибки включают будущий asOf,
+        одновременный month и диапазон, обратные даты и неизвестный статус.
+        При ошибке преобразования отдельного параметра (например, asOf, periodId, page) Spring может вернуть стандартный JSON.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/FilterProblem'
+          examples:
+            conflictingFilters:
+              summary: GET /api/container-periods/visits?month=2026-11&storedTo=2026-11-30
+              value:
+                status: 400
+                title: Ошибка выполнения запроса
+                detail: Выберите месяц или диапазон дат
+                instance: /api/container-periods/visits
+                code: INVALID_STORAGE_FILTER
+            invalidMonth:
+              summary: GET /api/container-periods/visits?month=invalid
+              value:
+                status: 400
+                title: Ошибка валидации
+                detail: Проверьте обязательные поля запроса
+                instance: /api/container-periods/visits
+                code: VALIDATION_ERROR
+                errors:
+                  month: "Failed to convert value of type 'java.lang.String' to required type 'java.time.YearMonth'; Failed to convert from type [java.lang.String] to type [java.time.YearMonth] for value [invalid]"
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BindingError'
+          example:
+            timestamp: '2026-11-26T12:15:46.457Z'
+            status: 400
+            error: Bad Request
+            path: /api/container-periods/visits
+  examples:
+    cohort:
+      summary: Ноябрь, смена собственника в первый день, ЖД-поставка с двумя грузами и фактический автовывоз
+      value:
+        items:
+          - id: "10000000-0000-4000-8000-000000000003"
+            containerId: "10000000-0000-4000-8000-000000000004"
+            containerName: "TKRU9000460"
+            receivingAt: "2026-10-31T08:00:00Z"
+            shippingAt: "2026-11-30T11:00:00Z"
+            receivingOrderId: "10000000-0000-4000-8000-000000000005"
+            receivingOrderNumber: 11001
+            shippingOrderId: "10000000-0000-4000-8000-000000000007"
+            shippingOrderNumber: 33001
+            storageDays: 31
+            storageDaysInPeriod: 30
+            periods:
+              - id: "10000000-0000-4000-8000-000000000001"
+                containerId: "10000000-0000-4000-8000-000000000004"
+                containerName: "TKRU9000460"
+                ownerName: "Собственник А"
+                arrivalAt: "2026-10-31T08:00:00Z"
+                departureAt: "2026-10-31T21:00:00Z"
+                status: "CLOSED"
+                storageDays: 2
+                storageDaysInPeriod: 1
+                startOrderId: "10000000-0000-4000-8000-000000000005"
+                startOrderType: "RECEIVING_ORDER"
+                startOrderNumber: 11001
+                endOrderId: "10000000-0000-4000-8000-000000000006"
+                endOrderType: "SERVICE_ORDER"
+                endOrderNumber: 22001
+                receivingClientName: "Клиент А"
+                receivingOwnerName: "Собственник А"
+                arrivalTransport: "RAILWAY"
+                arrivalParty: "Экспедитор А / Отправитель А"
+                arrivalCargo: "011005 — Пшеница; 161128 — Лесоматериалы"
+              - id: "10000000-0000-4000-8000-000000000002"
+                containerId: "10000000-0000-4000-8000-000000000004"
+                containerName: "TKRU9000460"
+                ownerName: "Собственник Б"
+                arrivalAt: "2026-10-31T21:00:00Z"
+                departureAt: "2026-11-30T11:00:00Z"
+                status: "CLOSED"
+                storageDays: 30
+                storageDaysInPeriod: 30
+                startOrderId: "10000000-0000-4000-8000-000000000006"
+                startOrderType: "SERVICE_ORDER"
+                startOrderNumber: 22001
+                endOrderId: "10000000-0000-4000-8000-000000000007"
+                endOrderType: "SHIPPING_ORDER"
+                endOrderNumber: 33001
+                receivingClientName: "Клиент А"
+                receivingOwnerName: "Собственник А"
+                arrivalTransport: "RAILWAY"
+                arrivalParty: "Экспедитор А / Отправитель А"
+                arrivalCargo: "011005 — Пшеница; 161128 — Лесоматериалы"
+                shippingClientName: "Клиент Б"
+                shippingOwnerName: "Собственник Б"
+                departureTransport: "VEHICLE"
+                departureParty: "— / Получатель Б"
+                departureCargo: "324116 — Металлопрокат"
+        page: 0
+        size: 20
+        totalElements: 1
+        totalPages: 1
+    single:
+      summary: Альтернативный пример с одним грузом на дату приёмки 31 октября, без фильтра месяца
+      value:
+        items:
+          - id: "10000000-0000-4000-8000-000000000003"
+            containerId: "10000000-0000-4000-8000-000000000004"
+            containerName: "TKRU9000460"
+            receivingAt: "2026-10-31T08:00:00Z"
+            receivingOrderId: "10000000-0000-4000-8000-000000000005"
+            receivingOrderNumber: 11001
+            storageDays: 1
+            periods:
+              - id: "10000000-0000-4000-8000-000000000001"
+                containerId: "10000000-0000-4000-8000-000000000004"
+                containerName: "TKRU9000460"
+                ownerName: "Собственник А"
+                arrivalAt: "2026-10-31T08:00:00Z"
+                status: "OPEN"
+                storageDays: 1
+                startOrderId: "10000000-0000-4000-8000-000000000005"
+                startOrderType: "RECEIVING_ORDER"
+                startOrderNumber: 11001
+                receivingClientName: "Клиент А"
+                receivingOwnerName: "Собственник А"
+                arrivalTransport: "RAILWAY"
+                arrivalParty: "Экспедитор А / Отправитель А"
+                arrivalCargo: "011005 — Пшеница"
+        page: 0
+        size: 20
+        totalElements: 1
+        totalPages: 1
+    noCargo:
+      summary: Автопоставка порожнего КТК без товарных позиций на дату приёмки, без фильтра месяца
+      value:
+        items:
+          - id: "10000000-0000-4000-8000-000000000003"
+            containerId: "10000000-0000-4000-8000-000000000004"
+            containerName: "TKRU9000460"
+            receivingAt: "2026-10-31T08:00:00Z"
+            receivingOrderId: "10000000-0000-4000-8000-000000000005"
+            receivingOrderNumber: 11001
+            storageDays: 1
+            periods:
+              - id: "10000000-0000-4000-8000-000000000001"
+                containerId: "10000000-0000-4000-8000-000000000004"
+                containerName: "TKRU9000460"
+                ownerName: "Собственник А"
+                arrivalAt: "2026-10-31T08:00:00Z"
+                status: "OPEN"
+                storageDays: 1
+                startOrderId: "10000000-0000-4000-8000-000000000005"
+                startOrderType: "RECEIVING_ORDER"
+                startOrderNumber: 11001
+                receivingClientName: "Клиент А"
+                receivingOwnerName: "Собственник А"
+                arrivalTransport: "VEHICLE"
+                arrivalParty: "Экспедитор А / Отправитель А"
+        page: 0
+        size: 20
+        totalElements: 1
+        totalPages: 1
+    empty:
+      summary: Совпадений нет
+      value:
+        items: []
+        page: 0
+        size: 20
+        totalElements: 0
+        totalPages: 0
+    flat:
+      summary: Два закрытых периода на 30 ноября, первыми идут более поздние события
+      value:
+        items:
+          - id: "10000000-0000-4000-8000-000000000002"
+            containerId: "10000000-0000-4000-8000-000000000004"
+            containerName: "TKRU9000460"
+            ownerName: "Собственник Б"
+            arrivalAt: "2026-10-31T21:00:00Z"
+            departureAt: "2026-11-30T11:00:00Z"
+            status: "CLOSED"
+            storageDays: 30
+            startOrderId: "10000000-0000-4000-8000-000000000006"
+            startOrderType: "SERVICE_ORDER"
+            startOrderNumber: 22001
+            endOrderId: "10000000-0000-4000-8000-000000000007"
+            endOrderType: "SHIPPING_ORDER"
+            endOrderNumber: 33001
+            receivingClientName: "Клиент А"
+            receivingOwnerName: "Собственник А"
+            arrivalTransport: "RAILWAY"
+            arrivalParty: "Экспедитор А / Отправитель А"
+            arrivalCargo: "011005 — Пшеница; 161128 — Лесоматериалы"
+            shippingClientName: "Клиент Б"
+            shippingOwnerName: "Собственник Б"
+            departureTransport: "VEHICLE"
+            departureParty: "— / Получатель Б"
+            departureCargo: "324116 — Металлопрокат"
+          - id: "10000000-0000-4000-8000-000000000001"
+            containerId: "10000000-0000-4000-8000-000000000004"
+            containerName: "TKRU9000460"
+            ownerName: "Собственник А"
+            arrivalAt: "2026-10-31T08:00:00Z"
+            departureAt: "2026-10-31T21:00:00Z"
+            status: "CLOSED"
+            storageDays: 2
+            startOrderId: "10000000-0000-4000-8000-000000000005"
+            startOrderType: "RECEIVING_ORDER"
+            startOrderNumber: 11001
+            endOrderId: "10000000-0000-4000-8000-000000000006"
+            endOrderType: "SERVICE_ORDER"
+            endOrderNumber: 22001
+            receivingClientName: "Клиент А"
+            receivingOwnerName: "Собственник А"
+            arrivalTransport: "RAILWAY"
+            arrivalParty: "Экспедитор А / Отправитель А"
+            arrivalCargo: "011005 — Пшеница; 161128 — Лесоматериалы"
+        page: 0
+        size: 20
+        totalElements: 2
+        totalPages: 1
+    containers:
+      summary: Номер из примера визита
+      value:
+        - id: "10000000-0000-4000-8000-000000000004"
+          name: "TKRU9000460"
+    csvMonth:
+      summary: Ноябрь, 18 колонок и два периода
+      value: "\uFEFF\"Номер КТК\";\"Собственник КТК\";\"Дней хранения\";\"Дней хранения в периоде\";\"Начало периода\";\"Событие\";\"Заявка\";\"Конец периода\";\"Событие\";\"Заявка\";\"Клиент/Собственник поставки\";\"Транспорт поставки\";\"Экспедитор/грузоотправитель поставки\";\"Груз поставки\";\"Клиент/Собственник вывоза\";\"Транспорт вывоза\";\"Экспедитор/грузополучатель вывоза\";\"Груз вывоза\"\r\n\
+        \"TKRU9000460\";\"Собственник Б\";\"30\";\"30\";\"31.10.2026 21:00 UTC\";\"Смена собственника\";\"22001\";\"30.11.2026 11:00 UTC\";\"Вывоз\";\"33001\";\"Клиент А / Собственник А\";\"ЖД\";\"Экспедитор А / Отправитель А\";\"011005 — Пшеница; 161128 — Лесоматериалы\";\"Клиент Б / Собственник Б\";\"Авто\";\"— / Получатель Б\";\"324116 — Металлопрокат\"\r\n\
+        \"TKRU9000460\";\"Собственник А\";\"2\";\"1\";\"31.10.2026 08:00 UTC\";\"Поставка\";\"11001\";\"31.10.2026 21:00 UTC\";\"Смена собственника\";\"22001\";\"Клиент А / Собственник А\";\"ЖД\";\"Экспедитор А / Отправитель А\";\"011005 — Пшеница; 161128 — Лесоматериалы\";\"\";\"\";\"\";\"\"\r\n"
+    csvAll:
+      summary: Все даты по состоянию на 30 ноября, 17 колонок и два периода
+      value: "\uFEFF\"Номер КТК\";\"Собственник КТК\";\"Дней хранения\";\"Начало периода\";\"Событие\";\"Заявка\";\"Конец периода\";\"Событие\";\"Заявка\";\"Клиент/Собственник поставки\";\"Транспорт поставки\";\"Экспедитор/грузоотправитель поставки\";\"Груз поставки\";\"Клиент/Собственник вывоза\";\"Транспорт вывоза\";\"Экспедитор/грузополучатель вывоза\";\"Груз вывоза\"\r\n\
+        \"TKRU9000460\";\"Собственник Б\";\"30\";\"31.10.2026 21:00 UTC\";\"Смена собственника\";\"22001\";\"30.11.2026 11:00 UTC\";\"Вывоз\";\"33001\";\"Клиент А / Собственник А\";\"ЖД\";\"Экспедитор А / Отправитель А\";\"011005 — Пшеница; 161128 — Лесоматериалы\";\"Клиент Б / Собственник Б\";\"Авто\";\"— / Получатель Б\";\"324116 — Металлопрокат\"\r\n\
+        \"TKRU9000460\";\"Собственник А\";\"2\";\"31.10.2026 08:00 UTC\";\"Поставка\";\"11001\";\"31.10.2026 21:00 UTC\";\"Смена собственника\";\"22001\";\"Клиент А / Собственник А\";\"ЖД\";\"Экспедитор А / Отправитель А\";\"011005 — Пшеница; 161128 — Лесоматериалы\";\"\";\"\";\"\";\"\"\r\n"

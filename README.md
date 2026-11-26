@@ -23,6 +23,7 @@ MVP принимает результаты TOS по каждому КТК. Пр
 | [AGENTS.md](AGENTS.md) | Правила разработки, проверки, автоматические commit/push между компьютерами |
 | [BACKEND_ALIGNMENT.md](BACKEND_ALIGNMENT.md) | Заявки, складские события и карта backend |
 | [CONTAINER_STOCK.md](CONTAINER_STOCK.md) | Собственники КТК, остатки, складские события и смена собственника |
+| Отчёт «Хранение КТК» | [ТЗ для frontend](docs/container-storage/frontend.md) · [ТЗ для backend](docs/container-storage/backend.md) · [Контракт OpenAPI и примеры](docs/container-storage/openapi.yaml) |
 | [FRONTEND_STANDARD.md](FRONTEND_STANDARD.md) | Компоненты, формы, таблицы и поведение интерфейса |
 | [database/README.md](database/README.md) | Установка, запуск, обновление, резервные копии и перенос БД |
 | [Генератор и демонстрационные данные](docs/equipment-number-formats.md) | Размещение двух КТК на вагоне, номера и ограничения учебных данных |
