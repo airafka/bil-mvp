@@ -119,7 +119,7 @@ export function OwnershipOrderCreatePage() {
         <div className="form-fields-grid"><div className="form-fields-column">
           <label className="field horizontal-field"><span>Номер заявки</span><UiInput value="" readOnly /></label>
           <label className="field horizontal-field"><span>Количество КТК</span><UiInput value={selected.size} readOnly /></label>
-          <label className="field horizontal-field"><span>Прежний собственник <b>*</b></span><UiSelect required disabled={busy} value={sourceClient} onChange={e => {
+          <label className="field horizontal-field"><span>{isDeferred ? 'Собственник на сегодня' : 'Прежний собственник'} <b>*</b></span><UiSelect required disabled={busy} value={sourceClient} onChange={e => {
             const id = e.target.value
             setSourceClient(id)
             if (client === id) setClient('')
@@ -227,7 +227,7 @@ export function OwnershipOrderViewPage() {
         <div><dt>Количество КТК</dt><dd>{editing ? selected.size : data.order.containerQuantity}</dd></div><div><dt>Подтверждено (UTC)</dt><dd>{completedAt(data.order.completionAt)}</dd></div>
         <div><dt><label htmlFor="ownership-deferred">Дата будущая</label></dt><dd>{editing ? <UiInput id="ownership-deferred" type="checkbox" checked={isDeferred} disabled={busy} onChange={e => { setDeferred(e.target.checked); setEffectiveDate(e.target.checked ? tomorrow : clock.date); clearSelection() }} /> : data.order.isDeferred ? 'Да' : 'Нет'}</dd></div>
         <div><dt><label htmlFor="ownership-effective-date">Дата передачи</label></dt><dd>{editing ? <UiInput id="ownership-effective-date" type="date" required min={isDeferred ? tomorrow : undefined} max={isDeferred ? "9999-12-31" : clock.date} disabled={busy} value={effectiveDate} onChange={e => { setEffectiveDate(e.target.value); clearSelection() }} /> : data.order.effectiveDate ? businessDateLabel(data.order.effectiveDate) : '—'}</dd></div>
-        <div><dt>Прежний собственник</dt><dd>{data.order.sourceClientName || '—'}</dd></div>
+        <div><dt>{isDeferred ? 'Собственник при подборе' : 'Прежний собственник'}</dt><dd>{data.order.sourceClientName || '—'}</dd></div>
         <div><dt><label htmlFor="ownership-new-client">Новый собственник</label></dt><dd>{editing ? <UiSelect id="ownership-new-client" required disabled={busy} value={client} onChange={e => { setClient(e.target.value); clearSelection() }}>
           {client === data.order.clientId && !clients.some(c => c.id === client) && <option value={client}>{data.order.clientName}</option>}
           {clients.filter(c => c.id !== data.order.sourceClientId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}

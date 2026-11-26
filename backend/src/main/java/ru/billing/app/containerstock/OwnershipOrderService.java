@@ -224,18 +224,18 @@ public class OwnershipOrderService {
         String from="""
             from ownership_transfer_candidates(?::date,?::uuid,?::uuid) candidate
             join container_owner o on o.id=candidate.owner_id join container c on c.id=o.container_id
-            join client cl on cl.id=candidate.previous_client_id
+            join client cl on cl.id=candidate.selection_client_id
             left join service_order_container_current sc on sc.container_id=o.container_id and sc.service_order_id=?
             where (?='' or position(lower(?) in lower(c.code||' '||cl.name))>0)
-              and (?::uuid is null or candidate.previous_client_id=?::uuid)
+              and (?::uuid is null or candidate.selection_client_id=?::uuid)
             """;
         var args=new ArrayList<Object>(Arrays.asList(effectiveDate,clientId,id,id,query,query,sourceClientId,sourceClientId));
         long count=jdbc.queryForObject("select count(*) "+from,Long.class,args.toArray());
         args.add(size);args.add(page*size);
-        var rows=jdbc.query("select sc.id as link_id,o.id as owner_id,o.container_id,c.code as container_name,c.container_type,candidate.previous_client_id as client_id,cl.name as client_name,o.status,candidate.container_visit_id,null::uuid as expected_client_id,null::text as result_status,null::text as result_reason "+from+" order by (sc.id is not null) desc,c.code limit ? offset ?",(rs,n)->link(rs),args.toArray());
+        var rows=jdbc.query("select sc.id as link_id,o.id as owner_id,o.container_id,c.code as container_name,c.container_type,candidate.selection_client_id as client_id,cl.name as client_name,o.status,candidate.container_visit_id,null::uuid as expected_client_id,null::text as result_status,null::text as result_reason "+from+" order by (sc.id is not null) desc,c.code limit ? offset ?",(rs,n)->link(rs),args.toArray());
         return PagedResponse.of(withVisitPeriods(rows),page,size,count);
     }
-    record Candidate(UUID visit,UUID previousClient,java.time.OffsetDateTime instant) {}
+    record Candidate(UUID visit,UUID selectionClient,UUID previousClient,java.time.OffsetDateTime instant) {}
     /** The caller holds the order and all selected container locks. */
     private Map<UUID,Candidate> validateCandidates(Header h, Map<UUID, UUID> ownersByContainer, boolean accepting) {
         if (ownersByContainer.isEmpty()) {
@@ -253,7 +253,8 @@ public class OwnershipOrderService {
         args.addAll(containers);
         var rows=jdbc.query("select * from ownership_transfer_candidates(?::date,?::uuid,?::uuid) where container_id in ("+marks+")",
                 (rs,n)->Map.entry(rs.getObject("container_id",UUID.class),
-                        new Candidate(rs.getObject("container_visit_id",UUID.class),rs.getObject("previous_client_id",UUID.class),
+                        new Candidate(rs.getObject("container_visit_id",UUID.class),rs.getObject("selection_client_id",UUID.class),
+                                rs.getObject("previous_client_id",UUID.class),
                                 rs.getObject("transfer_at",java.time.OffsetDateTime.class))),args.toArray());
         Map<UUID,Candidate> eligible=new HashMap<>();
         for (var row : rows) eligible.put(row.getKey(), row.getValue());
@@ -262,13 +263,13 @@ public class OwnershipOrderService {
                 String sourceMessage = accepting ? "Selected containers are no longer available for ownership transfer"
                         : "Container owner %s is not available for service order %s".formatted(owner.getValue(), h.id());
                 throw new ApiException(HttpStatus.BAD_REQUEST, "OWNERSHIP_DATE_UNAVAILABLE",
-                        "КТК недоступен для передачи. Проверьте дату и выполнение поставки, резерв вывоза, собственников на дату передачи и другие черновики",
+                        "КТК недоступен для передачи. Проверьте дату и выполнение поставки, резерв вывоза, выбранных собственников и другие черновики",
                         sourceMessage);
             }
         }
-        UUID source=rows.getFirst().getValue().previousClient();
-        if (eligible.values().stream().anyMatch(candidate -> !candidate.previousClient().equals(source)))
-            throw error(HttpStatus.CONFLICT, "OWNERSHIP_MIXED_SOURCE", "Выберите КТК одного прежнего собственника на дату передачи");
+        UUID source=rows.getFirst().getValue().selectionClient();
+        if (eligible.values().stream().anyMatch(candidate -> !candidate.selectionClient().equals(source)))
+            throw error(HttpStatus.CONFLICT, "OWNERSHIP_MIXED_SOURCE", "Выберите КТК одного прежнего собственника");
         if (h.sourceClientId()==null) jdbc.update("update service_order set old_client_owner_id=? where id=?",source,h.id());
         return eligible;
     }
