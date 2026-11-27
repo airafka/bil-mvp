@@ -326,7 +326,12 @@ console.log('PASS same-day receiving/transfer/shipping; shipping revokes future;
 // At-most-once confirmation under concurrent requests.
 const race=await x.arrival();const id=(await api('/service-orders','POST',{clientId:x.b,service:'CHANGE_OWNER',effectiveDate:'2026-10-10',containerOwnerIds:[sql(`select id from container_owner where container_id='${race.ktk}'`)]},201)).order.id;
 const statuses=await Promise.all([1,2].map(()=>fetch(base+'/service-orders/'+id+'/accept',{method:'POST'}).then(r=>r.status)));assert.deepEqual(statuses.sort(),[200,409]);await expectOwner(race.ktk,x.b);assert.equal(sql(`select count(*) from container_owner_history where order_id='${id}'`),'1');
-const version=sql(`select version from container_owner where container_id='${race.ktk}'`),audit=stable();await Promise.all(Array.from({length:8},()=>api('/container-owners?size=100')));assert.equal(sql(`select version from container_owner where container_id='${race.ktk}'`),version);assert.deepEqual(stable(),audit);
+const registerRowTransaction = () => sql(`select xmin::text from container_owner where container_id=${quote(race.ktk)}`);
+const beforeReads = registerRowTransaction();
+const audit = stable();
+await Promise.all(Array.from({length:8},()=>api('/container-owners?size=100')));
+assert.equal(registerRowTransaction(), beforeReads, 'Reading the register must not rewrite the stock row');
+assert.deepEqual(stable(), audit);
 console.log('PASS concurrent confirmation: exactly one operation; repeated reads do not write unchanged register/history');
 // Stop only this test backend and simulate time passing; first API access catches up.
 const restart=await x.arrival();const restartOrder=await x.transfer(restart.ktk,x.b,'2026-10-12');assert.equal(sql(`select count(*) from container_owner_history where order_id='${restartOrder}'`),'0');run(['stop','billing-register-owner-new']);sql("update application_clock set business_date='2026-10-12',version=version+1 where id=1");assert.equal(physical(restart.ktk),x.a);run(['start','billing-register-owner-new']);

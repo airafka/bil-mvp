@@ -82,7 +82,7 @@ public class ContainerStockService {
         State old=state(container);
         if(old==null) jdbc.update("insert into container_owner(id,container_id,client_id,status,shipping_order_id) values(?,?,?,?,?)",
             UUID.randomUUID(),container,client,status,shipping);
-        else jdbc.update("update container_owner set client_id=?,status=?,shipping_order_id=?,version=version+1,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
+        else jdbc.update("update container_owner set client_id=?,status=?,shipping_order_id=?,updated_at=billing_now() at time zone 'UTC',updated_by='local' where id=?",
             client,status,shipping,old.id());
         // Only drafts follow the register. Confirmation freezes the shipment owner.
         jdbc.update("""
@@ -278,7 +278,8 @@ public class ContainerStockService {
         for(var row:rows) tasks.change(row,row.status(),null);
     }
     static final String OWNER_SELECT="""
-        select o.*,c.code as container_name,c.container_type,cl.name as client_name
+        select o.id,o.client_id,o.container_id,o.receiving_order_id,o.shipping_order_id,o.status,
+               c.code as container_name,c.container_type,cl.name as client_name
         from container_owner_current o join container c on c.id=o.container_id left join client cl on cl.id=o.client_id
         """;
     Owner owner(java.sql.ResultSet rs)throws java.sql.SQLException {
