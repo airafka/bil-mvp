@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Поставка и вывоз КТК · Карта событий ALIS</title>
+<style>
+:root{font-family:Inter,"Segoe UI",Arial,sans-serif;color:#182e38;background:#f3f5f2;font-size:15px;--ink:#182e38;--muted:#4c636b;--line:#cdd8d5;--teal:#006a56;--mono:"IBM Plex Mono",Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0}
+button,select{font:inherit;color:inherit}
+button,a,select{touch-action:manipulation}
+button{background:white;border:1px solid var(--line);border-radius:6px;cursor:pointer}
+button:hover,a:hover{color:var(--teal)}
+button:focus-visible,a:focus-visible,select:focus-visible,.viewport:focus-visible{outline:3px solid #e48b28;outline-offset:2px}
+button:disabled{cursor:default;opacity:.45}
+a{color:var(--teal);text-underline-offset:3px}
+.mast{background:#132e39;color:#f3faf7;border-bottom:3px solid #72c8ad}
+.mast-inner,main{max-width:1840px;margin:auto;padding-inline:clamp(14px,2.6vw,48px)}
+.mast-inner{display:flex;align-items:center;justify-content:space-between;height:49px;gap:12px}
+.brand{font-weight:750;letter-spacing:.06em}
+.brand small,.mast a{font:12px var(--mono);letter-spacing:0;color:#c3d8d7}
+.brand small{margin-left:9px}
+.mast a{text-decoration:none}
+main{padding-bottom:22px}
+.heading{padding-block:clamp(15px,2.2vh,28px) 15px}
+h1,h2,h3,p{margin:0}
+h1{font-size:clamp(27px,3.1vw,47px);font-weight:650;line-height:1.12;letter-spacing:-.045em}
+.heading p{margin-top:7px;color:var(--muted);line-height:1.45}
+.controls{display:flex;gap:12px 22px;align-items:center;flex-wrap:wrap;margin:0 0 16px}
+.segment{display:inline-flex;gap:3px;padding:3px;background:#e3eae7;border:1px solid #cad6d1;border-radius:8px;max-width:100%}
+.segment button{border:0;background:transparent;color:#3f555d;min-height:34px;padding:6px clamp(9px,1.4vw,21px);font-weight:600}
+.segment.primary [aria-pressed=true]{background:#174756;color:white}
+.segment.secondary [aria-pressed=true]{background:white;color:#00624f;box-shadow:0 1px 3px #20393324}
+.transport{display:flex;align-items:center;gap:9px}
+.transport>span,.secondary-text,.map-meta{font-size:13px;color:var(--muted)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) clamp(300px,28vw,440px);gap:14px;align-items:start}
+.panel{border:1px solid #bfceca;border-radius:12px;background:white;min-width:0;overflow:hidden}
+.map-head{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line);min-height:62px;flex-wrap:wrap}
+.map-head h2{font-size:19px;letter-spacing:-.025em}
+.map-meta{font:12px var(--mono);margin-top:4px}
+.zoom-controls{display:flex;gap:4px;align-items:center}
+.zoom-controls button{min-height:31px;min-width:31px;padding:2px 7px;font-size:16px}
+#fit{font-size:13px;margin-left:6px}
+#percent{font:11px var(--mono);color:var(--muted);min-width:36px;text-align:center}
+.viewport{height:clamp(380px,calc(100dvh - 370px),780px);overflow:auto;position:relative;background-color:#f1f5f1;background-image:radial-gradient(#bfcfc5 1px,transparent 1px);background-size:17px 17px;cursor:grab;overscroll-behavior:contain;scrollbar-color:#97aba2 #e3ebe5;scrollbar-width:thin;outline-offset:-3px!important}
+.viewport.dragging{cursor:grabbing;user-select:none}
+#sizer{position:relative;overflow:hidden}
+#stage{position:absolute;left:0;top:0;transform-origin:0 0}
+#connections{position:absolute;inset:0;overflow:visible;pointer-events:none}
+.wire{fill:none;stroke:#82968f;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+.wire.near{stroke:#147561;stroke-width:3}
+.edge-label{font:12px "Segoe UI",sans-serif;fill:#41584f;stroke:#f1f5f1;stroke-width:5;paint-order:stroke;stroke-linejoin:round}
+.node{position:absolute;width:217px;height:94px;text-align:left;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:10px 12px 10px 16px;border:1.3px solid #a9bab3;border-left:5px solid var(--kind);border-radius:9px;background:#fff;box-shadow:0 2px 3px #1939270a;overflow:hidden}
+.node:hover{border-color:var(--kind);box-shadow:0 3px 8px #1a40391c;color:var(--ink)}
+.node[aria-pressed=true]{outline:3px solid #174756;outline-offset:2px}
+.event{--kind:#007259;--tint:#e3f3ea}
+.process{--kind:#536b78;--tint:#edf1f3}
+.decision{--kind:#98611c;--tint:#faf0de}
+.result{--kind:#39579a;--tint:#e9eefb}
+.kind{display:flex;align-items:center;gap:6px;color:var(--kind);font:600 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.07em}
+.kind::before,.key i{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--kind)}
+.decision .kind::before,.key.decision i{transform:rotate(45deg);border-radius:1px}
+.event .kind::before,.key.event i{border-radius:50%}
+.node b{font-size:15px;line-height:1.12;font-weight:660;letter-spacing:-.015em}
+.node small{font:10.5px/1.15 var(--mono);overflow-wrap:anywhere;color:#4e6066}
+.map-foot{padding:10px 16px;display:flex;justify-content:space-between;gap:12px;align-items:center;border-top:1px solid var(--line)}
+.legend{display:flex;gap:5px 13px;flex-wrap:wrap}
+.key{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+#mini{border:1px solid #cbd6d0;border-radius:4px;background:#f5f8f4;width:114px;height:49px;cursor:crosshair;flex-shrink:0}
+.jump{display:flex;gap:10px;align-items:center;border-top:1px solid #e0e6e2;padding:9px 16px;font-size:13px;color:var(--muted)}
+select{border:1px solid #bdcbc5;border-radius:5px;background:white;min-height:32px;max-width:100%;min-width:0;padding:4px 22px 4px 7px;color:var(--ink)}
+.jump select{flex:1}
+.detail{display:flex;flex-direction:column;max-height:calc(clamp(380px,calc(100dvh - 370px),780px) + 196px)}
+.cap{font:600 11px var(--mono);text-transform:uppercase;letter-spacing:.07em;color:#436759}
+.detail-head{padding:18px 18px 14px;background:#edf3ee;border-bottom:1px solid var(--line)}
+.detail-head h2{font-size:clamp(20px,1.8vw,28px);line-height:1.15;letter-spacing:-.035em;margin:7px 0}
+.detail-head .sub{font:12px/1.4 var(--mono);color:#435b60;overflow-wrap:anywhere}
+.back-map{display:none;float:right;font-size:12px;min-height:28px}
+@media(max-width:740px){.back-map{display:block}}
+.detail-nav{display:flex;border-bottom:1px solid var(--line);padding:0 12px}
+.detail-nav button{padding:10px 8px;border:0;border-bottom:3px solid transparent;border-radius:0;color:#51666d;font-size:13px;font-weight:600;background:none}
+.detail-nav [aria-pressed=true]{color:#006351;border-color:var(--teal)}
+.detail-content{min-height:0;overflow:auto;padding:15px 18px 18px;scrollbar-width:thin}
+.detail-content p{font-size:14px;line-height:1.49}
+.detail-content h3{font-size:14px;margin:17px 0 8px}
+.writes{margin:0;border:1px solid #d6dfda;border-radius:6px}
+.write{padding:8px 10px}
+.write+.write{border-top:1px solid #dce4df}
+.write dt{font:600 12px/1.4 var(--mono);overflow-wrap:anywhere;color:#125d50}
+.write dd{margin:3px 0 0;font-size:13px;line-height:1.4}
+.choices{display:grid;gap:6px}
+.choice{text-align:left;padding:7px 9px;background:#f7f9f7;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;line-height:1.35}
+.choice::after{content:"→";color:var(--teal)}
+.choice strong{font-weight:650}
+.origin{margin-top:15px;padding-top:10px;border-top:1px solid #dce4df;font:11.5px/1.5 var(--mono);color:#51666b;overflow-wrap:anywhere}
+.previous{margin-top:12px;font-size:13px;color:#51666b}.previous summary{cursor:pointer}.previous .choices{margin-top:7px}
+.json-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0 6px}
+.endpoint{font:600 12px var(--mono);color:#00634e}
+.copy{font-size:12px;padding:5px 9px}
+.detail-content pre{margin:0;padding:12px;border-radius:7px;background:#132d38;color:#f0f6f4;font:12px/1.55 var(--mono);overflow:auto;tab-size:2}
+.json-key{color:#91e0bf}
+.json-num{color:#f7c680}
+.details-note{color:var(--muted);font-size:12px!important}
+.packet-chooser{width:100%;margin:5px 0}
+footer{font-size:12px;line-height:1.5;color:var(--muted);margin-top:10px}
+[hidden]{display:none!important}
+@media(max-width:920px){.layout{grid-template-columns:minmax(0,1fr) 300px;gap:8px}.map-head,.map-foot,.jump{padding-inline:10px}.detail-head,.detail-content{padding-inline:12px}}
+@media(max-width:740px){.layout{grid-template-columns:minmax(0,1fr)}.viewport{height:44dvh;min-height:270px;max-height:450px}.detail{max-height:none}.map-foot{padding-block:5px}#mini{height:35px;width:85px}.map-head{min-height:45px;padding-block:7px}.jump{padding-block:6px}.heading{padding:14px 0 10px}.controls{margin-bottom:10px;gap:6px}.map-meta{font-size:11px}.segment button{min-height:31px}.detail-head{padding-block:12px}.transport>span{display:none}.mast-inner{height:40px}.brand small,.mast a{font-size:10px}}
+@media(max-width:380px){.mast-inner,main{padding-inline:9px}.brand small{margin-left:3px}.map-head h2{font-size:16px}.key{font-size:11px}.controls{gap:5px}.segment button{font-size:13px;padding-inline:7px}}
+</style>
+</head>
+<body>
+<header class="mast"><div class="mast-inner"><div class="brand">ALIS <small>/ dev_back</small></div><a href="https://github.com/airafka/dev_back/blob/08343f22af5413321dd3136f1336c4f2f37b8c8a/backend-stage%20%281%29.zip">Исходники · 08343f2 ↗</a></div></header>
+<main>
+  <div class="heading"><h1>Поставка и вывоз КТК</h1><p>Входящие события TOS на контейнерной площадке. Выберите узел, чтобы увидеть пакет, условия перехода и записи в БД.</p></div>
+  <nav class="controls" aria-label="Выбор схемы">
+    <div class="segment primary" aria-label="Направление"><button data-mode="r">Поставка</button><button data-mode="s">Вывоз</button><button data-mode="log">Приём пакета</button></div>
+    <div class="transport" id="transport"><span>Площадка</span><div class="segment secondary"><button data-transport="a">КП-Авто</button><button data-transport="r">КП-ЖД</button></div></div>
+  </nav>
+  <div class="layout">
+    <section class="panel" aria-labelledby="map-title">
+      <div class="map-head"><div><h2 id="map-title"></h2><div id="map-meta" class="map-meta"></div></div>
+      <div class="zoom-controls"><button id="smaller" aria-label="Уменьшить масштаб">−</button><span id="percent"></span><button id="larger" aria-label="Увеличить масштаб">+</button><button id="fit">Вся схема</button></div></div>
+      <div id="viewport" class="viewport" tabindex="0" aria-label="Карта событий. Тяните фон или используйте прокрутку. Кнопки плюс и минус меняют масштаб."><div id="sizer"><div id="stage"><svg id="connections" aria-hidden="true"></svg><div id="nodes"></div></div></div></div>
+      <div class="map-foot"><div class="legend"><span class="key event"><i></i>Пакет</span><span class="key process"><i></i>Действие</span><span class="key decision"><i></i>Условие</span><span class="key result"><i></i>Исход</span></div><svg id="mini" aria-hidden="true"><title>Обзор карты. Нажмите, чтобы переместиться.</title></svg></div>
+      <label class="jump" for="node-picker">Перейти к узлу <select id="node-picker"></select></label>
+    </section>
+    <aside class="panel detail" aria-labelledby="detail-title"><div class="detail-head"><button id="back-map" class="back-map">↑ К карте</button><div id="detail-kind" class="cap"></div><h2 id="detail-title"></h2><div class="sub" id="detail-sub"></div></div>
+      <div class="detail-nav"><button id="show-info">Разбор узла</button><button id="show-json">Примеры JSON</button></div>
+      <div id="detail-content" class="detail-content"></div>
+    </aside>
+  </div>
+  <footer>Тяните фон для перемещения. Ctrl + колесо меняет масштаб. Примеры с условными UUID можно копировать. Схема работает без подключения к БД.</footer>
+  <footer>В этой версии <code>dev_back</code> таблицы визитов и периодов хранения ещё не ведутся. Действия конкретного контура определяет <code>inbound_event_config</code>.</footer>
+</main>
+<noscript>Для перемещения по веткам и просмотра примеров включите JavaScript.</noscript>
+<script>
+"use strict";
+const packets = (() => {
+  // Варианты режима вывоза — отдельные заявки. Повторяющийся _id обозначает одно задание.
+  const uuid = (suffix) => '7ea09334-b1c6-442f-978b-' + String(suffix).padStart(12, '0');
+  const order = (suffix, number) => ({ _order: uuid(suffix), orderNumber: number });
+  const receiveAuto = order(101, 'П-00101');
+  const receiveRail = order(102, 'П-00102');
+  const shipAuto = order(201, 'В-00201');
+  const shipAutoEmpty = order(202, 'В-00202');
+  const shipRailAll = order(203, 'В-00203');
+  const shipRailContainer = order(204, 'В-00204');
+  const shipRailWagon = order(205, 'В-00205');
+  const shipRailNone = order(206, 'В-00206');
+  const autoContainer = 'TKRU9000460';
+  const railContainer = 'CCLU2147395';
+  const truckNumber = 'А123ВС77';
+  const wagonNumber = '98309990';
+  const eventNames = {
+    VH_ARRIVED: 'Прибытие транспорта',
+    UNLOAD_FINISH: 'Разгрузка завершена',
+    LOAD_FINISH: 'Погрузка завершена',
+    VH_DEPARTURE: 'Убытие транспорта',
+  };
+  function event(orderFields, task, eventCode, eventDateTime, results = {}) {
+    return {
+      _id: uuid(task),
+      ...orderFields,
+      source: 'TOS',
+      site: 'Контейнерная площадка',
+      eventName: eventNames[eventCode],
+      eventCode,
+      eventDateTime,
+      ...results,
+    };
+  }
+  function cargo(cargoNumber, transportType, transportNumber, empty = false) {
+    return { cargoResult: [{
+      cargoNumber,
+      cargoType: 'Стандартный 40',
+      qty: 1,
+      transportType,
+      transportNumber,
+      active: true,
+      cargoSpec: empty ? [] : [{ code: '161005', EOM: '166', qty: 12000 }],
+      seals: empty ? [] : [{ code: 'РЖДК6021041' }],
+    }] };
+  }
+  function services(requestedServiceId) {
+    // operationType._id ссылается на строку заказанной услуги в этой заявке.
+    return { addServicesResult: [{
+      qty: 2,
+      operationType: { _id: uuid(requestedServiceId), name: 'Осмотр контейнера' },
+    }] };
+  }
+  return {
+    unloadAuto: event(receiveAuto, 10101, 'UNLOAD_FINISH', '2026-11-02T08:00:00Z', cargo(autoContainer, 'АВТО', truckNumber)),
+    unloadRail: event(receiveRail, 10201, 'UNLOAD_FINISH', '2026-11-03T08:00:00Z', cargo(railContainer, 'ЖД', wagonNumber)),
+    unloadAutoServices: event(receiveAuto, 10101, 'UNLOAD_FINISH', '2026-11-02T08:00:00Z', services(10151)),
+    unloadRailServices: event(receiveRail, 10201, 'UNLOAD_FINISH', '2026-11-03T08:00:00Z', services(10251)),
+    arriveReceiveWagon: event(receiveRail, 10211, 'VH_ARRIVED', '2026-11-03T06:00:00Z'),
+    arriveReceiveContainer: event(receiveRail, 10201, 'VH_ARRIVED', '2026-11-03T06:10:00Z'),
+    loadAuto: event(shipAuto, 20101, 'LOAD_FINISH', '2026-11-18T12:00:00Z', cargo(autoContainer, 'АВТО', truckNumber)),
+    loadAutoEmpty: event(shipAutoEmpty, 20201, 'LOAD_FINISH', '2026-11-18T12:00:00Z', cargo(autoContainer, 'АВТО', truckNumber, true)),
+    loadAutoServices: event(shipAuto, 20101, 'LOAD_FINISH', '2026-11-18T12:00:00Z', services(20151)),
+    loadRailAll: event(shipRailAll, 20301, 'LOAD_FINISH', '2026-11-20T15:00:00Z', cargo(railContainer, 'ЖД', wagonNumber)),
+    loadRailContainer: event(shipRailContainer, 20401, 'LOAD_FINISH', '2026-11-20T15:00:00Z', cargo(railContainer, 'ЖД', wagonNumber)),
+    loadRailWagon: event(shipRailWagon, 20501, 'LOAD_FINISH', '2026-11-20T15:00:00Z', cargo(railContainer, 'ЖД', wagonNumber)),
+    loadRailNone: event(shipRailNone, 20601, 'LOAD_FINISH', '2026-11-20T15:00:00Z', cargo(railContainer, 'ЖД', wagonNumber)),
+    arriveShipWagon: event(shipRailAll, 20311, 'VH_ARRIVED', '2026-11-20T13:30:00Z'),
+    departAuto: event(shipAuto, 20101, 'VH_DEPARTURE', '2026-11-18T12:40:00Z'),
+    departRail: event(shipRailAll, 20311, 'VH_DEPARTURE', '2026-11-20T15:40:00Z'),
+  };
+})();
+
+const routingFlow = {
+  title: 'Приём пакета',
+  nodes: [
+    {
+      id: 'in-packet', col: 0, row: 1, kind: 'event', title: 'Получен пакет', sub: 'POST /datareon/event',
+      body: 'Контроллер принимает JSON, проверяет обязательные поля и вложенные результаты. Затем преобразует _id и _order в UUID, а площадку определяет по имени site. Необязательный заголовок External-ID выводится в лог.',
+      writes: [], packet: 'unloadRail', source: 'DatareonController.handleEvent:139–149 · InboundEventDto:26–60 · InboundEventConverter.toInboundEventData:43–61 · TerminalAreaService.getTerminalAreaBySite:51–58',
+    },
+    {
+      id: 'in-bad-dto', col: 0, row: 3, kind: 'result', title: 'Пакет отклонён до журнала', sub: 'Проверка или преобразование',
+      body: 'Например, пустой _id нарушает правило DTO, непустое значение abc не разбирается как UUID, а неизвестное имя площадки не проходит поиск. Ошибка возникает до вызова сервиса регистрации. Строка inbound_event для этого запроса отсутствует.',
+      writes: [], packet: null, source: 'DatareonController.handleEvent:139–149 · InboundEventDto:26–39 · InboundEventConverter.toInboundEventData:43–52 · TerminalAreaService.getTerminalAreaBySite:51–58',
+    },
+    {
+      id: 'in-rules', col: 1, row: 1, kind: 'decision', title: 'Какие действия настроены?', sub: 'Поиск по eventCode',
+      body: 'Сервис выбирает все строки inbound_event_config с указанным event_code. Один код может запускать несколько действий. Параметры вида заявки, транспорта и площадки учитывает конкретный обработчик. Связки из интеграционных тестов зависят от загрузки настроек на стенде.',
+      writes: [], packet: null, source: 'InboundEventDatareonService.handleInboundEvent:34–49 · InboundEventConfigDaoService.findAllByEventCode:39–41 · BaseInboundEventAction:54–64',
+    },
+    {
+      id: 'in-skip', col: 1, row: 3, kind: 'result', title: 'Событие пропущено', sub: 'SKIPPED',
+      body: 'Без настроенного действия журнал сразу получает SKIPPED. Обработчики заявок не вызываются. Так может завершиться технически корректный пакет с известным отправителю eventCode.',
+      writes: [['inbound_event.status', 'SKIPPED'], ['inbound_event.status_details', 'No actions required'], ['inbound_event.action_codes', 'Пустой список.']],
+      packet: null, source: 'InboundEventDatareonService.handleInboundEvent:37–56 · DatareonControllerTest:108–117',
+    },
+    {
+      id: 'in-actions', col: 2, row: 1, kind: 'process', title: 'Зарегистрировать и выполнить', sub: 'NEW → действия по приоритету',
+      body: 'Журнал получает собственный UUID, ссылки на задание и заявку и список назначенных действий. Затем все действия пакета выполняются в одной отдельной транзакции. TOS, WMS, прибытие вагона и убытие имеют приоритет 0, действия смены статуса идут следом с приоритетом 1.',
+      writes: [['inbound_event.id', 'Новый UUID записи журнала.'], ['inbound_event.task_id', '_id задания.'], ['inbound_event.order_id', '_order заявки.'], ['inbound_event.status', 'NEW'], ['inbound_event.action_codes', 'Список назначенных действий.']],
+      packet: null, source: 'InboundEventConverter.toInboundEvent:65–80 · InboundEventDatareonService.handleInboundEvent:37–56 · ActionsProcessor.processEventActions:26–31 · InboundEventActionHandlingCode:11–24',
+    },
+    {
+      id: 'in-generic', col: 3, row: 0, kind: 'process', title: 'Общее завершение заявки', sub: 'Если назначено STATUS_COMPLETED',
+      body: 'Для подходящей нетерминальной заявки обработчик ставит DONE и вызывает учёт вагонов для применимых ЖД-заявок. Он не завершает строки КТК, не вызывает ContainerStatusService и не создаёт container_movement. Если TOS уже завершил ту же заявку первым действием, общий обработчик отвергает терминальный статус, транзакция откатывается.',
+      writes: [['receiving_order.order_status', 'DONE, если обрабатывается поставка.'], ['shipping_order.order_status', 'DONE, если обрабатывается вывоз.']],
+      packet: null, source: 'StatusCompletedResultAction.init:23–26 · BaseChangeStatusResultAction.processAction:46–84 · BaseInboundEventAction:70–76 · RailwayCarriageOwnerService.markShipped:214–238, markReceived:413–438',
+    },
+    {
+      id: 'in-outcome', col: 3, row: 2, kind: 'decision', title: 'Как завершилась обработка?', sub: 'Результат цепочки действий',
+      body: 'Сервис отмечает исход уже зарегистрированного пакета. Если обработчик выбросил исключение, изменения действий в их общей транзакции откатываются. В статусе журнала отражается класс исключения. При нормальном возврате возможна частичная готовность заявки.',
+      writes: [], packet: null, source: 'ActionsProcessor.processEventActions:26–31 · InboundEventDatareonService.processActions:60–82',
+    },
+    {
+      id: 'in-done', col: 4, row: 0, kind: 'result', title: 'Действия обработали пакет', sub: 'DONE в журнале',
+      body: 'Цепочка вернулась без ошибки. Например, TOS может завершить первое из двух заданий КТК. Журнал пакета уже получит DONE, а сама заявка останется IN_PROGRESS до завершения остальных строк.',
+      writes: [['inbound_event.status', 'DONE'], ['inbound_event.status_details', 'DONE']],
+      packet: null, source: 'InboundEventDatareonService.processActions:63–69 · TosReceivingResultAction.doneOrderIfAllContainersFinished:133–164 · InboundEventDatareonServiceTest:620–657',
+    },
+    {
+      id: 'in-invalid', col: 4, row: 1, kind: 'result', title: 'Ошибка данных в действии', sub: 'INVALID',
+      body: 'Действие выбросило IllegalArgumentException. Например, для TOS_RECEIVING_RESULT не переданы ни результаты грузов, ни результаты услуг. Диагностика сохраняется в строке журнала.',
+      writes: [['inbound_event.status', 'INVALID'], ['inbound_event.status_details', 'Текст исключения, до 1000 символов.']],
+      packet: null, source: 'TosReceivingResultAction.validateEventData:97–102 · BaseInboundEventAction.throwValidationException:66–68 · InboundEventDatareonService.processActions:70–75,85–86',
+    },
+    {
+      id: 'in-failed', col: 4, row: 3, kind: 'result', title: 'Сбой при исполнении действия', sub: 'FAILED',
+      body: 'Иное исключение при исполнении, включая IllegalStateException, приводит к FAILED. Например, общий обработчик смены статуса обнаружил, что подходящая заявка уже DONE или REJECTED.',
+      writes: [['inbound_event.status', 'FAILED'], ['inbound_event.status_details', 'Текст исключения, до 1000 символов.']],
+      packet: null, source: 'BaseChangeStatusResultAction:26–28,47–84 · BaseInboundEventAction:70–76 · InboundEventDatareonService.processActions:76–86',
+    },
+  ],
+  edges: [
+    ['in-packet', 'in-bad-dto', 'ошибка входа'],
+    ['in-packet', 'in-rules', 'данные разобраны'],
+    ['in-rules', 'in-skip', '0 действий'],
+    ['in-rules', 'in-actions', '1 или более'],
+    ['in-actions', 'in-generic', 'есть общее действие'],
+    ['in-actions', 'in-outcome', 'без общего завершения'],
+    ['in-generic', 'in-outcome', ''],
+    ['in-outcome', 'in-done', 'успех'],
+    ['in-outcome', 'in-invalid', 'ошибка аргумента'],
+    ['in-outcome', 'in-failed', 'иное исключение'],
+  ],
+};
+
+const receivingFlows = {
+  ra: {
+    title: 'Поставка · КП-Авто',
+    nodes: [
+      {
+        id: 'raAccept', col: 0, row: 1, kind: 'process',
+        title: 'Подтвердить поставку', sub: 'КТК перечислены в заявке',
+        body: 'ALIS проверяет активные строки заявки и выбранного собственника каждого КТК. Для подтверждения у КТК может отсутствовать запись регистра либо быть статус DEPARTED. Повторяющийся в составе КТК резервируется один раз.',
+        writes: [
+          ['receiving_order.order_status', 'ACCEPTED после успешной проверки и резервирования.'],
+          ['container_owner', 'EXPECTED, выбранный клиент и receiving_order_id этой поставки.'],
+          ['container_owner_history', 'Для каждого резерва сохраняются заявка, старые и новые собственник и статус.'],
+        ],
+        packet: null, source: 'ReceivingOrderService.accept:436–450 · ContainerStatusService.reserveForReceivingOrder:65–85',
+      },
+      {
+        id: 'raLog', col: 1, row: 1, kind: 'process',
+        title: 'Зарегистрировать событие', sub: 'POST /datareon/event',
+        body: 'После проверки DTO ALIS находит площадку по site, создаёт запись журнала и подбирает действия по eventCode. Для показанных ниже пакетов назначено TOS_RECEIVING_RESULT. Собственного шага CARRIAGE_ARRIVED для автомобиля в этом обработчике нет.',
+        writes: [['inbound_event', 'UUID записи, task_id, order_id, номер заявки, площадка, код, имя, event_date_time, назначенные действия. Без подходящей настройки — SKIPPED.']],
+        packet: null, source: 'InboundEventDatareonService.handleInboundEvent:34–56 · CarriageArrivedAction.isSuitableOrder:237–245',
+      },
+      {
+        id: 'raCargo', col: 2, row: 0, kind: 'event',
+        title: 'Получена выгрузка КТК', sub: 'UNLOAD_FINISH · cargoResult',
+        body: 'В пакете есть как минимум один грузовой результат. _order задаёт поставку, _id указывает на строку задания, cargoNumber содержит маркировку КТК. Пакет также может содержать выполненные допуслуги.',
+        writes: [], packet: 'unloadAuto', source: 'TosReceivingResultAction.validateEventData:97–102 · InboundEventConverter.toInboundEventData:43–61',
+      },
+      {
+        id: 'raServices', col: 2, row: 2, kind: 'event',
+        title: 'Получены только допуслуги', sub: 'UNLOAD_FINISH · addServicesResult',
+        body: 'Пустой cargoResult допустим, если есть хотя бы одна допуслуга. _id в шапке пакета всё равно указывает на строку КТК. Отдельный operationType._id внутри услуги указывает на заказанную услугу.',
+        writes: [], packet: 'unloadAutoServices', source: 'TosReceivingResultAction.validateEventData:97–102 · InboundEventConverter.toExtraOperationResultData:113–119',
+      },
+      {
+        id: 'raCargoRow', col: 3, row: 0, kind: 'process',
+        title: 'Зафиксировать результат строки', sub: 'Количество из cargoResult[0]',
+        body: 'По _id обработчик сначала ищет строку накладной. У обычной автопоставки он находит receiving_order_container и записывает количество из первого результата. Если пришли и допуслуги, для каждой переданной строки обновляется её количество.',
+        writes: [
+          ['receiving_order_container', 'status = FINISHED, actual_quantity = cargoResult[0].qty.'],
+          ['receiving_order_requested_service', 'При наличии addServicesResult записывает actual_quantity = qty по operationType._id.'],
+        ],
+        packet: null, source: 'TosReceivingResultAction.updateContainer:178–188 · updateReceivingOrderContainer:210–217 · updateRequestedServices:220–228',
+      },
+      {
+        id: 'raServiceRow', col: 3, row: 2, kind: 'process',
+        title: 'Записать услуги и завершить строку', sub: 'Без грузового количества',
+        body: 'Даже при одних допуслугах обработчик завершает строку КТК по _id. Фактическое количество КТК сохраняет прежнее значение. В строках переданных услуг новое количество заменяет прежнее.',
+        writes: [
+          ['receiving_order_container.status', 'FINISHED.'],
+          ['receiving_order_requested_service.actual_quantity', 'qty каждой услуги по operationType._id.'],
+        ],
+        packet: null, source: 'TosReceivingResultAction.processReceivingOrder:124–130 · updateReceivingOrderContainer:210–217 · updateRequestedServices:220–228',
+      },
+      {
+        id: 'raComplete', col: 4, row: 1, kind: 'decision',
+        title: 'Весь состав завершён?', sub: 'Шапка ACCEPTED или IN_PROGRESS',
+        body: 'Список должен содержать хотя бы одну строку, и у каждой должен быть FINISHED. Для авто в состав входят строки receiving_order_container с deleted = false. Общая проверка присоединяет активные строки накладных той же заявки, если они есть.',
+        writes: [], packet: null, source: 'TosReceivingResultAction.doneOrderIfAllContainersFinished:133–156 · ReceivingOrderContainerDaoService.createFilterByReceivingOrder:175–179',
+      },
+      {
+        id: 'raPartial', col: 5, row: 0, kind: 'result',
+        title: 'Обработаны два КТК из пяти', sub: 'Три строки ещё открыты',
+        body: 'У двух строк уже FINISHED. Шапка сохраняет исходный статус, все пять КТК остаются EXPECTED. Для двух успешных пакетов с одним грузовым результатом у каждого после их обработки будет два движения.',
+        writes: [], packet: null, source: 'TosReceivingResultAction.doneOrderIfAllContainersFinished:143–164 · BaseTosResultAction.getContainerMovementsFromInboundEvent:35–52',
+      },
+      {
+        id: 'raDone', col: 5, row: 2, kind: 'result',
+        title: 'Закрыть поставку целиком', sub: 'Все активные строки FINISHED',
+        body: 'Обработчик завершает шапку и проводит все КТК заявки в регистре. Обычный переход после резерва — EXPECTED → ON_TERMINAL. Принадлежность КТК для этого перехода определяется составом заявки.',
+        writes: [
+          ['receiving_order.order_status', 'DONE.'],
+          ['container_owner', 'ON_TERMINAL и receiving_order_id этой поставки по каждому КТК.'],
+          ['container_owner_history', 'Строка по RECEIVING_ORDER при изменении статуса или собственника.'],
+        ],
+        packet: null, source: 'TosReceivingResultAction.doneOrderIfAllContainersFinished:150–156 · ContainerStatusService.markReceived:89–99 · transition:285–305',
+      },
+      {
+        id: 'raMovements', col: 6, row: 1, kind: 'result',
+        title: 'Записать движения и итог пакета', sub: 'Одно движение на cargoResult',
+        body: 'Движение создаётся для каждого элемента cargoResult. Контейнер находится по cargoNumber. В пакете с одними услугами движений ноль. Ошибка действий откатывает их изменения, а её причина остаётся в журнале.',
+        writes: [
+          ['container_movement', 'Новый UUID, КТК, order_id = _order, document_id = _id, код и время события, транспорт, номер и active.'],
+          ['inbound_event.status', 'DONE при успехе. Для ошибки действия — INVALID или FAILED с подробностями.'],
+        ],
+        packet: null, source: 'BaseTosResultAction.addContainerMovements:29–52 · ActionsProcessor.processEventActions:26–31 · InboundEventDatareonService.processActions:60–80',
+      },
+    ],
+    edges: [
+      ['raAccept', 'raLog', 'поступил пакет'],
+      ['raLog', 'raCargo', 'есть груз'],
+      ['raLog', 'raServices', 'только услуги'],
+      ['raCargo', 'raCargoRow', 'по _id'],
+      ['raServices', 'raServiceRow', 'по _id'],
+      ['raCargoRow', 'raComplete', ''],
+      ['raServiceRow', 'raComplete', ''],
+      ['raComplete', 'raPartial', 'нет'],
+      ['raComplete', 'raDone', 'да'],
+      ['raPartial', 'raMovements', ''],
+      ['raDone', 'raMovements', ''],
+    ],
+  },
+  rr: {
+    title: 'Поставка · КП-ЖД',
+    nodes: [
+      {
+        id: 'rrAccept', col: 0, row: 1.5, kind: 'process',
+        title: 'Подтвердить поставку по накладным', sub: 'Вагоны и КТК в составе',
+        body: 'Вагон поставки указан в waybill_railway_carriage, его КТК — в waybill_container. Возможна поставка одних вагонов. При подтверждении резервируются индивидуальные вагоны и КТК, входящие в действующий состав.',
+        writes: [
+          ['receiving_order.order_status', 'ACCEPTED после проверки и резервирования.'],
+          ['railway_carriage_owner', 'EXPECTED по вагону, ссылка на поставку, собственник.'],
+          ['railway_carriage_owner_history', 'Изменение состояния или собственника при резерве вагона.'],
+          ['container_owner', 'EXPECTED по КТК, ссылка на поставку, собственник.'],
+          ['container_owner_history', 'Изменение состояния или собственника при резерве КТК.'],
+        ],
+        packet: null, source: 'ReceivingOrderService.accept:436–450 · RailwayCarriageOwnerService.reserveForReceivingOrder:351–407 · ContainerStatusService.reserveForReceivingOrder:65–85',
+      },
+      {
+        id: 'rrLog', col: 1, row: 1.5, kind: 'process',
+        title: 'Зарегистрировать событие', sub: 'POST /datareon/event',
+        body: 'ALIS создаёт запись журнала и выбирает действия по коду события. Прибытие и выгрузка имеют собственные пакеты. В рамках VH_ARRIVED тип задания определяется по тому, в какой таблице найден _id.',
+        writes: [['inbound_event', 'task_id, order_id, номер, площадка, код, имя, время и назначенные действия. Нет настройки для кода — SKIPPED.']],
+        packet: null, source: 'InboundEventDatareonService.handleInboundEvent:34–56 · CarriageArrivedAction.processReceivingOrder:97–111',
+      },
+      {
+        id: 'rrArrWagon', col: 2, row: 0, kind: 'event',
+        title: 'Прибыл вагон', sub: 'VH_ARRIVED · задание вагона',
+        body: 'При подходящей ЖД-поставке действие переводит шапку в IN_PROGRESS, если переход разрешён. Находит и блокирует строку вагона по _id. При первом обработанном вагоне устанавливает время шапки из eventDateTime. Уже завершённую строку повторно не обрабатывает.',
+        writes: [
+          ['waybill_railway_carriage.status', 'FINISHED у указанной строки.'],
+          ['receiving_order', 'При разрешённом переходе — IN_PROGRESS. Для первого вагона — actual_receiving_date_time.'],
+        ],
+        packet: 'arriveReceiveWagon', source: 'CarriageArrivedAction.handleRailwayCarriageArrived:115–134 · updateOrderStatusToInProgress:213–219',
+      },
+      {
+        id: 'rrArrContainer', col: 2, row: 1, kind: 'event',
+        title: 'Прибыл КТК на вагоне', sub: 'VH_ARRIVED · задание КТК',
+        body: 'По _id найдена строка КТК накладной. Она получает тот же статус FINISHED, что и при результате выгрузки. Шапка переходит в IN_PROGRESS, если переход разрешён. Если время прибытия шапки ещё пусто, используется eventDateTime.',
+        writes: [
+          ['waybill_container.status', 'FINISHED. Повтор по завершённой строке пропускается.'],
+          ['receiving_order', 'IN_PROGRESS при разрешённом переходе. actual_receiving_date_time заполняется, если пусто.'],
+        ],
+        packet: 'arriveReceiveContainer', source: 'CarriageArrivedAction.processReceivingOrder:97–109 · handleContainerArrived:137–152',
+      },
+      {
+        id: 'rrCargo', col: 2, row: 3, kind: 'event',
+        title: 'Получена выгрузка КТК', sub: 'UNLOAD_FINISH · cargoResult',
+        body: 'Пакет относится к заданию КТК. При наличии грузового результата берётся qty первого элемента. В модели строки КТК накладной нет поля фактического количества, поэтому значение выводится в лог. Пакет может содержать и результаты допуслуг.',
+        writes: [
+          ['waybill_container.status', 'FINISHED для строки по _id.'],
+          ['receiving_order_requested_service.actual_quantity', 'Если есть допуслуги, записывается их qty по operationType._id.'],
+        ],
+        packet: 'unloadRail', source: 'TosReceivingResultAction.updateWaybillContainer:192–206 · updateRequestedServices:220–228',
+      },
+      {
+        id: 'rrServices', col: 2, row: 4, kind: 'event',
+        title: 'Получены только допуслуги', sub: 'UNLOAD_FINISH · addServicesResult',
+        body: 'Пакет с пустым cargoResult и непустыми допуслугами проходит проверку. _id шапки пакета указывает на КТК, а operationType._id — на строку заказанной услуги. Обработчик завершает строку КТК и проверяет полноту поставки.',
+        writes: [
+          ['waybill_container.status', 'FINISHED для строки по _id.'],
+          ['receiving_order_requested_service.actual_quantity', 'qty каждой переданной услуги.'],
+        ],
+        packet: 'unloadRailServices', source: 'TosReceivingResultAction.validateEventData:97–102 · processReceivingOrder:124–130 · updateRequestedServices:220–228',
+      },
+      {
+        id: 'rrWagonCheck', col: 3, row: 0, kind: 'decision',
+        title: 'Только вагоны и все прибыли?', sub: 'Нет КТК во всей поставке',
+        body: 'Проверяется отсутствие активных КТК в обеих таблицах состава и завершение всех неисключённых вагонов поставки. Порожний вагон в смешанной заявке сам по себе эту ветку закрытия не запускает.',
+        writes: [], packet: null, source: 'CarriageArrivedAction.tryMarkOrderDone:155–178 · WaybillRailwayCarriageRepository.allCarriagesFinished:31–33',
+      },
+      {
+        id: 'rrArrivalOpen', col: 4, row: 1, kind: 'result',
+        title: 'Заявка после прибытия открыта', sub: 'Ожидаются следующие события',
+        body: 'При наличии КТК обработчик прибытия оставляет закрытие поставки обработчику выгрузки. Если состав включает только вагоны, заявка ждёт остальные вагоны. Прибытие конкретного КТК не добавляет container_movement и не проводит регистр.',
+        writes: [['inbound_event.status', 'DONE при успешной обработке пакета прибытия.']],
+        packet: null, source: 'CarriageArrivedAction.handleContainerArrived:137–152 · tryMarkOrderDone:160–177 · InboundEventDatareonService.processActions:60–69',
+      },
+      {
+        id: 'rrOnlyWagons', col: 4, row: 0, kind: 'result',
+        title: 'Закрыть поставку одних вагонов', sub: 'Последний вагон прибыл',
+        body: 'При разрешённом переходе шапка становится DONE. Все вагоны этой поставки переходят из EXPECTED в ON_TERMINAL. Событий выгрузки КТК для этой ветки не требуется.',
+        writes: [
+          ['receiving_order.order_status', 'DONE.'],
+          ['railway_carriage_owner', 'ON_TERMINAL у каждого проведённого вагона.'],
+          ['railway_carriage_owner_history', 'История перехода из EXPECTED по заявке поставки.'],
+          ['inbound_event.status', 'DONE при успехе.'],
+        ],
+        packet: null, source: 'CarriageArrivedAction.tryMarkOrderDone:160–169 · RailwayCarriageOwnerService.markReceived:411–439',
+      },
+      {
+        id: 'rrComplete', col: 3, row: 3.5, kind: 'decision',
+        title: 'Завершены все строки КТК?', sub: 'Минимум одна активная строка',
+        body: 'Общая проверка объединяет контейнерные строки двух таблиц. На ЖД исключаются позиции с excluded = true у самой строки или её вагона. В зачёт идёт и FINISHED по прибытию. Дополнительно необходим статус шапки ACCEPTED или IN_PROGRESS.',
+        writes: [], packet: null, source: 'TosReceivingResultAction.doneOrderIfAllContainersFinished:133–156 · WaybillContainerRepository.findAllByReceivingOrderId:16–18',
+      },
+      {
+        id: 'rrPartial', col: 4, row: 3, kind: 'result',
+        title: 'Обработаны два КТК из пяти', sub: 'Три строки ещё открыты',
+        body: 'Если остальные три строки ещё не получили FINISHED, шапка остаётся открытой. Резервы пяти КТК и вагонов сохраняют EXPECTED. Два грузовых пакета с одним результатом у каждого создают два движения КТК.',
+        writes: [], packet: null, source: 'TosReceivingResultAction.doneOrderIfAllContainersFinished:143–164 · BaseTosResultAction.getContainerMovementsFromInboundEvent:35–52',
+      },
+      {
+        id: 'rrDone', col: 4, row: 4, kind: 'result',
+        title: 'Закрыть поставку с КТК', sub: 'Шапка и регистры всего состава',
+        body: 'Проводятся все КТК и вагоны поставки. Отдельной сверки FINISHED каждого вагона в этой ветке нет. Если остальные строки КТК уже завершены по VH_ARRIVED, одна выгрузка может перевести шапку в DONE.',
+        writes: [
+          ['receiving_order.order_status', 'DONE.'],
+          ['container_owner', 'ON_TERMINAL по всем КТК состава.'],
+          ['container_owner_history', 'Запись при изменении статуса или собственника.'],
+          ['railway_carriage_owner', 'ON_TERMINAL по всем вагонам состава.'],
+          ['railway_carriage_owner_history', 'Запись для каждого вагона, перешедшего из EXPECTED.'],
+        ],
+        packet: null, source: 'TosReceivingResultAction.doneOrderIfAllContainersFinished:150–156 · ContainerStatusService.markReceived:89–99 · RailwayCarriageOwnerService.markReceived:411–439',
+      },
+      {
+        id: 'rrMovements', col: 5, row: 3.5, kind: 'result',
+        title: 'Записать движения и итог пакета', sub: 'Одно движение на cargoResult',
+        body: 'По каждому элементу cargoResult находится физический КТК по cargoNumber. В движении сохраняются время события и номер транспорта. При одних услугах движений ноль. Ошибка действий откатывает изменения этого пакета.',
+        writes: [
+          ['container_movement', 'Новый UUID, КТК, order_id = _order, document_id = _id, код и время, транспорт, номер и active.'],
+          ['inbound_event.status', 'DONE при успехе. Для ошибки действия — INVALID или FAILED с подробностями.'],
+        ],
+        packet: null, source: 'BaseTosResultAction.addContainerMovements:29–52 · InboundEventDatareonService.processActions:60–80',
+      },
+    ],
+    edges: [
+      ['rrAccept', 'rrLog', 'поступил пакет'],
+      ['rrLog', 'rrArrWagon', 'прибытие вагона'],
+      ['rrLog', 'rrArrContainer', 'прибытие КТК'],
+      ['rrLog', 'rrCargo', 'есть груз'],
+      ['rrLog', 'rrServices', 'только услуги'],
+      ['rrArrWagon', 'rrWagonCheck', ''],
+      ['rrWagonCheck', 'rrOnlyWagons', 'да'],
+      ['rrWagonCheck', 'rrArrivalOpen', 'нет'],
+      ['rrArrContainer', 'rrArrivalOpen', ''],
+      ['rrCargo', 'rrComplete', ''],
+      ['rrServices', 'rrComplete', ''],
+      ['rrComplete', 'rrPartial', 'нет'],
+      ['rrComplete', 'rrDone', 'да'],
+      ['rrPartial', 'rrMovements', ''],
+      ['rrDone', 'rrMovements', ''],
+    ],
+  },
+};
+
+const shippingFlows = {
+  sa: {
+    title: 'Вывоз · КП-Авто',
+    nodes: [
+      {
+        id: 'sa-accept', col: 0, row: 1.5, kind: 'process', title: 'Подтвердить автовывоз', sub: 'shipping_order → ACCEPTED',
+        body: 'ALIS блокирует заявку, проверяет состав и переводит шапку в ACCEPTED. Для заранее указанных КТК проверяет наличие на терминале и резервирует их под эту заявку. Для безномерного автовывоза валидатор требует одну количественную строку на один порожний КТК без кодов ЕТСНГ.',
+        writes: [['shipping_order.order_status', 'ACCEPTED'], ['container_owner', 'Для известных КТК записать RESERVED_OUT и shipping_order_id.'], ['container_owner_history', 'Переход в резерв для каждого известного КТК.']],
+        packet: null, source: 'ShippingOrderService.accept:334; ShippingOrderAcceptValidator.missingContainerChecks:168'
+      },
+      {
+        id: 'sa-mode', col: 1, row: 1, kind: 'decision', title: 'Как заполнена заявка?', sub: 'shipping_order.filling_type',
+        body: 'При настроенном действии TOS_SHIPMENT_RESULT обработчик находит вывоз по _order, сверяет вид транспорта и площадку с конфигурацией, затем выбирает ветку по filling_type. Вход должен содержать cargoResult или addServicesResult.',
+        writes: [], packet: null, source: 'TosShipmentResultAction.validateEventData:110; processAction:119'
+      },
+      {
+        id: 'sa-all', col: 2, row: 0, kind: 'event', title: 'Погружен известный КТК', sub: 'LOAD_FINISH · ALL',
+        body: 'По _id находят строку shipping_order_container. Из первого cargoResult берут qty. Если cargoNumber отличается, флаг random разрешает подстановку фактического КТК. При random=false обработчик пишет предупреждение и сохраняет КТК строки. Для разрешённой замены вне остатков он добавляет комментарий в заявку.',
+        writes: [['shipping_order_container', 'actual_quantity из первого результата. При разрешённой замене обновляются container_id и container_owner_id.'], ['shipping_order.comment', 'При вынужденной замене вне остатков дописывается пояснение.']],
+        packet: 'loadAuto', source: 'TosShipmentResultAction.updateContainer:271; replaceContainerInOrder:300'
+      },
+      {
+        id: 'sa-services', col: 2, row: 1, kind: 'event', title: 'Пришёл результат допуслуги', sub: 'LOAD_FINISH · ALL · addServicesResult',
+        body: 'Вариант ALL принимает пакет, содержащий только addServicesResult. _id указывает на строку КТК, идентификатор каждой допуслуги — на строку запрошенной услуги. В обработчике нет отдельной сверки этих идентификаторов с составом _order.',
+        writes: [['shipping_order_requested_service.actual_quantity', 'Присвоить qty соответствующей строке допуслуги.']],
+        packet: 'loadAutoServices', source: 'TosShipmentResultAction.processOrderWithFillingTypeAll:143; updateRequestedServices:289'
+      },
+      {
+        id: 'sa-empty', col: 2, row: 2, kind: 'event', title: 'Определён порожний КТК', sub: 'LOAD_FINISH · NONE_CONTAINER',
+        body: 'Требуется ровно один cargoResult. По cargoNumber находят физический КТК, из container_owner получают его текущего собственника. Обработчик ищет строку по _id и заполняет её данными пришедшей заявки либо создаёт строку с таким UUID.',
+        writes: [['shipping_order_container', 'Записать shipping_order_id, container_id, container_owner_id, empty=true и status=FINISHED.']],
+        packet: 'loadAutoEmpty', source: 'TosShipmentResultAction.processOrderWithFillingTypeNoneContainer:218'
+      },
+      {
+        id: 'sa-finish', col: 3, row: 0.5, kind: 'process', title: 'Завершить строку КТК', sub: 'ALL · FINISHED и движения',
+        body: 'В ALL строка получает FINISHED, в том числе при сообщении только о допуслугах. По каждому cargoResult обработчик создаёт отдельное движение с новым UUID. Он сохраняет переданный active, в том числе false. Пустой cargoResult не даёт строк движения.',
+        writes: [['shipping_order_container.status', 'FINISHED.'], ['container_movement', 'На каждый cargoResult — физический КТК по cargoNumber, order_id, document_id из _id, event_code, event_date_time, transport_type, transport_number, active.']],
+        packet: null, source: 'TosShipmentResultAction.processOrderWithFillingTypeAll:143; BaseTosResultAction.addContainerMovements:29'
+      },
+      {
+        id: 'sa-check', col: 4, row: 1, kind: 'decision', title: 'Все строки КТК завершены?', sub: 'allFinished и допустимый переход',
+        body: 'Обе ветки перечитывают строки КТК данной заявки. Для перехода в DONE каждая найденная строка должна иметь FINISHED, а текущий статус шапки должен разрешать переход. Здесь проверяется состав строк, отдельного сравнения с total_container_quantity нет.',
+        writes: [], packet: null, source: 'TosShipmentResultAction.doneOrderIfAllContainerFinished:251'
+      },
+      {
+        id: 'sa-done', col: 5, row: 0.5, kind: 'result', title: 'Вывоз завершён', sub: 'DONE · КТК → DEPARTED',
+        body: 'Обработчик меняет статус заявки и передаёт в markShipped все физические КТК её состава. Для каждого сохраняются ссылка на вывоз и состояние DEPARTED. История добавляется при изменении состояния или собственника. При отсутствии регистра используется клиент заявки.',
+        writes: [['shipping_order.order_status', 'DONE.'], ['container_owner', 'DEPARTED, shipping_order_id и собственник.'], ['container_owner_history', 'Переход по SHIPPING_ORDER для затронутых КТК.']],
+        packet: null, source: 'TosShipmentResultAction.doneOrderIfAllContainerFinished:251; ContainerStatusService.markShipped:147'
+      },
+      {
+        id: 'sa-pending', col: 5, row: 2, kind: 'result', title: 'Статус шапки сохраняется', sub: 'Условие DONE не выполнено',
+        body: 'Обработанная строка сохраняет результат. Пакетное списание КТК этой веткой не вызывается. Следующий результат может завершить оставшиеся задания.',
+        writes: [], packet: null, source: 'TosShipmentResultAction.doneOrderIfAllContainerFinished:251'
+      },
+      {
+        id: 'sa-depart', col: 1, row: 3, kind: 'event', title: 'Автомобиль выехал', sub: 'VH_DEPARTURE',
+        body: 'Самостоятельное сообщение о выезде. Обработчик ищет заявку по _order, проверяет разрешённый транспорт и наличие WAREHOUSE в массиве площадок настройки. Исходная миграция указывает WAREHOUSE и CONTAINER. Идентификатор задания в этом действии не используется.',
+        writes: [['shipping_order.actual_shipping_date_time', 'Записать eventDateTime выезда в шапку. Строки, регистры и статус заявки это действие не меняет.']],
+        packet: 'departAuto', source: 'VhDepartureAction.processAction:27; BaseInboundEventAction.hasSuitableTerminalArea:58'
+      }
+    ],
+    edges: [
+      ['sa-accept', 'sa-mode', 'погрузка'],
+      ['sa-mode', 'sa-all', 'ALL'],
+      ['sa-mode', 'sa-services', 'ALL · услуги'],
+      ['sa-mode', 'sa-empty', 'NONE_CONTAINER'],
+      ['sa-all', 'sa-finish', ''],
+      ['sa-services', 'sa-finish', ''],
+      ['sa-finish', 'sa-check', ''],
+      ['sa-empty', 'sa-check', ''],
+      ['sa-check', 'sa-done', 'да'],
+      ['sa-check', 'sa-pending', 'нет'],
+      ['sa-accept', 'sa-depart', 'выезд']
+    ]
+  },
+  sr: {
+    title: 'Вывоз · КП-ЖД',
+    nodes: [
+      {
+        id: 'sr-accept', col: 0, row: 2, kind: 'process', title: 'Подтвердить ЖД-вывоз', sub: 'shipping_order → ACCEPTED',
+        body: 'ALIS резервирует указанные КТК. В ALL и RAILWAY_CARRIAGE определены и резервируются конкретные вагоны. В CONTAINER и NONE проверяется количественный план по типу и собственнику вагона, фактический вагон станет известен при погрузке.',
+        writes: [['shipping_order.order_status', 'ACCEPTED после проверки.'], ['container_owner', 'Для заранее указанных КТК — RESERVED_OUT и ссылка на вывоз.'], ['container_owner_history', 'Резерв по каждому заранее указанному КТК.'], ['railway_carriage_owner', 'Для номерных вагонов — RESERVED_OUT и ссылка на вывоз.'], ['railway_carriage_owner_history', 'Резерв каждого номерного вагона.'], ['shipping_order_railway_carriage.owner_railway_carriage_id_new', 'Для заранее определённого вагона — фактический собственник из регистра.']],
+        packet: null, source: 'ShippingOrderService.accept:334; RailwayCarriageOwnerService.reserveForShippingOrder:128'
+      },
+      {
+        id: 'sr-mode', col: 1, row: 1.5, kind: 'decision', title: 'Какие номера заданы?', sub: 'shipping_order.filling_type',
+        body: 'Для результата погрузки по _order выбирают ветку по составу заявки. В ALL заранее известны оба номера, в CONTAINER — КТК, в RAILWAY_CARRIAGE — вагон, в NONE оба определяются по данным TOS.',
+        writes: [], packet: null, source: 'TosShipmentResultAction.processAction:119'
+      },
+      {
+        id: 'sr-all', col: 2, row: 0, kind: 'event', title: 'Вагон и КТК заданы', sub: 'LOAD_FINISH · ALL',
+        body: 'По _id завершается существующая строка КТК. Из первого cargoResult берут qty, при расхождении номера действует флаг random и правило замены. При наличии addServicesResult обновляются фактические количества допуслуг.',
+        writes: [['shipping_order_container', 'actual_quantity, status=FINISHED и, при разрешённой замене, КТК и собственник.'], ['shipping_order_requested_service.actual_quantity', 'qty из addServicesResult по UUID услуги.'], ['container_movement', 'Отдельное движение на каждый cargoResult, включая присланный active.']],
+        packet: 'loadRailAll', source: 'TosShipmentResultAction.processOrderWithFillingTypeAll:143; BaseTosResultAction.addContainerMovements:29'
+      },
+      {
+        id: 'sr-container', col: 2, row: 1, kind: 'event', title: 'Задан только КТК', sub: 'LOAD_FINISH · CONTAINER',
+        body: 'По transportNumber находят фактический вагон. Для строки КТК, найденной по _id, сохраняют ссылку на строку этого вагона и пломбы из результата. Несколько ссылок на один вагон данной заявки используют одну вагонную строку.',
+        writes: [['shipping_order_container', 'shipping_order_railway_carriage_id, seal_numbers, status=FINISHED.']],
+        packet: 'loadRailContainer', source: 'TosShipmentResultAction.processOrderWithFillingTypeContainer:152; updateContainerInUnnumberedShippingOrder:370'
+      },
+      {
+        id: 'sr-wagon', col: 2, row: 3, kind: 'event', title: 'Задан только вагон', sub: 'LOAD_FINISH · RAILWAY_CARRIAGE',
+        body: 'Физический КТК находят по cargoNumber, вагон — по transportNumber. Ищут существующую строку этого вагона в указанной заявке и завершают её. Данные КТК и груза приходят в этом же результате.',
+        writes: [['shipping_order_railway_carriage.status', 'FINISHED для существующей строки вагона этой заявки.']],
+        packet: 'loadRailWagon', source: 'TosShipmentResultAction.processOrderWithFillingTypeRailwayCarriage:164'
+      },
+      {
+        id: 'sr-none', col: 2, row: 2, kind: 'event', title: 'Оба номера пришли из TOS', sub: 'LOAD_FINISH · NONE',
+        body: 'На каждую позицию cargoResult разрешают transportNumber в физический вагон, cargoNumber — в физический КТК и фиксируют состав вывоза. Строка вагона переиспользуется для нескольких КТК одного вагона.',
+        writes: [], packet: 'loadRailNone', source: 'TosShipmentResultAction.processOrderWithFillingTypeNone:194'
+      },
+      {
+        id: 'sr-actual', col: 3, row: 1, kind: 'process', title: 'Зафиксировать фактический вагон', sub: 'CONTAINER / NONE',
+        body: 'При первом появлении вагона проверяются статус заявки, состояние ON_TERMINAL, тип и собственник вагона и доступное количество по плану. Одной транзакцией оформляются выбытие и строка вывоза. При наличии строки этого же вагона в этой заявке она переиспользуется.',
+        writes: [['railway_carriage_owner', 'При первом включении — DEPARTED и shipping_order_id.'], ['railway_carriage_owner_history', 'Одна запись ON_TERMINAL → DEPARTED по вывозу.'], ['shipping_order_railway_carriage', 'Новая строка с railway_carriage_id, owner_railway_carriage_id_new и status=FINISHED.']],
+        packet: null, source: 'TosShipmentResultAction.addFinishedShippingOrderRailwayCarriage:347; RailwayCarriageOwnerService.markUnnumberedCarriageShipped:167'
+      },
+      {
+        id: 'sr-items', col: 3, row: 3, kind: 'process', title: 'Записать фактический КТК и груз', sub: 'RAILWAY_CARRIAGE / NONE',
+        body: 'Создают строку КТК с полученным _id, привязкой к вывозу и вагону, собственником из регистра, пломбами и FINISHED. Пустой cargoSpec означает порожний КТК. На каждую позицию груза разрешают код ЕТСНГ и пишут массу. В цикле для нескольких КТК текущий код присваивает каждой новой строке один и тот же _id пакета.',
+        writes: [['shipping_order_container', 'id из _id, container_id, container_owner_id, shipping_order_id, shipping_order_railway_carriage_id, seal_numbers, empty и FINISHED.'], ['shipping_order_container_item', 'shipping_order_id, shipping_order_container_id, etsng_code_id и wight_gross из cargoSpec.qty.']],
+        packet: null, source: 'TosShipmentResultAction.addFinishedShippingOrderContainer:381; addShippingOrderContainerItem:405'
+      },
+      {
+        id: 'sr-check-all', col: 4, row: 0, kind: 'decision', title: 'Все строки КТК завершены?', sub: 'ALL · статус каждой строки',
+        body: 'Перечитать состав КТК этой заявки. Если все строки имеют FINISHED и текущий статус разрешает DONE, перейти к проведению. Транспортное задание FINISHED не заменяет проверку строк КТК.',
+        writes: [], packet: null, source: 'TosShipmentResultAction.doneOrderIfAllContainerFinished:251'
+      },
+      {
+        id: 'sr-check-count', col: 4, row: 2, kind: 'decision', title: 'План по КТК выполнен?', sub: 'Количество строк с вагоном',
+        body: 'Для CONTAINER, RAILWAY_CARRIAGE и NONE сравнивают число строк КТК с привязанным вагоном и total_container_quantity шапки. Нужно точное равенство и разрешённый переход в DONE. В этих трёх ветках движения container_movement и фактические количества допуслуг не записываются.',
+        writes: [], packet: null, source: 'TosShipmentResultAction.doneUnnumberedOrderIfAllContainersAssigned:420'
+      },
+      {
+        id: 'sr-done', col: 5, row: 0.5, kind: 'result', title: 'Вывоз завершён', sub: 'DONE · регистры КТК и вагонов',
+        body: 'Для заранее известных вагонов markShipped завершает резерв этой заявки. Вагоны, найденные по факту, уже выбыли при создании их строк. Шапка получает DONE, а весь состав физически идентифицированных КТК передаётся в пакетное списание. История КТК пишется при изменении статуса или собственника.',
+        writes: [['shipping_order.order_status', 'DONE.'], ['container_owner', 'Для КТК — DEPARTED и ссылка на вывоз.'], ['container_owner_history', 'История перехода по заявке вывоза.'], ['railway_carriage_owner', 'Номерной вагон RESERVED_OUT → DEPARTED.'], ['railway_carriage_owner_history', 'Запись завершения вывоза номерного вагона.']],
+        packet: null, source: 'TosShipmentResultAction.doneUnnumberedOrderIfAllContainersAssigned:420; RailwayCarriageOwnerService.markShipped:217; ContainerStatusService.markShipped:147'
+      },
+      {
+        id: 'sr-pending', col: 5, row: 2.5, kind: 'result', title: 'Статус шапки сохраняется', sub: 'Условие DONE не выполнено',
+        body: 'Зарегистрированные результаты отдельных заданий сохраняются. В частности, безномерный вагон из CONTAINER или NONE уже может иметь состояние DEPARTED до завершения всей заявки. Пакетное списание остальных строк на этом шаге не выполняется.',
+        writes: [], packet: null, source: 'TosShipmentResultAction.doneUnnumberedOrderIfAllContainersAssigned:420'
+      },
+      {
+        id: 'sr-arrive', col: 1, row: 4, kind: 'event', title: 'Вагон подан под погрузку', sub: 'VH_ARRIVED · строка вагона',
+        body: 'Для ЖД-вывоза на контейнерной площадке обработчик находит заявку по _order и вагонную строку по _id. Если переход допустим, меняет статус шапки на IN_PROGRESS. Завершает задание вагона. В этой ветке явно не проверяется принадлежность найденной строки указанной заявке.',
+        writes: [['shipping_order.order_status', 'IN_PROGRESS при допустимом переходе.'], ['shipping_order_railway_carriage.status', 'FINISHED. Состояния собственников и задания КТК здесь не меняются.']],
+        packet: 'arriveShipWagon', source: 'CarriageArrivedAction.processShippingOrder:186'
+      },
+      {
+        id: 'sr-depart', col: 1, row: 5, kind: 'event', title: 'Получено сообщение о выезде', sub: 'VH_DEPARTURE · время шапки',
+        body: 'При подходящей настройке обработчик находит вывоз по _order и записывает время выезда в шапку. Он проверяет допуск транспорта и наличие WAREHOUSE в массиве площадок настройки. В исходной миграции перечислены WAREHOUSE и CONTAINER. Конкретный вагон, КТК и строки погрузки обработчик не читает.',
+        writes: [['shipping_order.actual_shipping_date_time', 'eventDateTime. Это действие не закрывает вагонный визит и не переводит заявку в DONE.']],
+        packet: 'departRail', source: 'VhDepartureAction.processAction:27; BaseInboundEventAction.hasSuitableTerminalArea:58'
+      }
+    ],
+    edges: [
+      ['sr-accept', 'sr-mode', 'погрузка'],
+      ['sr-mode', 'sr-all', 'ALL'],
+      ['sr-mode', 'sr-container', 'CONTAINER'],
+      ['sr-mode', 'sr-wagon', 'RAILWAY_CARRIAGE'],
+      ['sr-mode', 'sr-none', 'NONE'],
+      ['sr-container', 'sr-actual', 'вагон из TOS'],
+      ['sr-wagon', 'sr-items', 'КТК из TOS'],
+      ['sr-none', 'sr-actual', 'вагон из TOS'],
+      ['sr-actual', 'sr-items', 'NONE: затем КТК'],
+      ['sr-all', 'sr-check-all', ''],
+      ['sr-actual', 'sr-check-count', 'CONTAINER'],
+      ['sr-items', 'sr-check-count', ''],
+      ['sr-check-all', 'sr-done', 'да'],
+      ['sr-check-all', 'sr-pending', 'нет'],
+      ['sr-check-count', 'sr-done', 'да'],
+      ['sr-check-count', 'sr-pending', 'нет'],
+      ['sr-accept', 'sr-arrive', 'подача'],
+      ['sr-accept', 'sr-depart', 'выезд']
+    ]
+  }
+};
+(function () {
+  const flows = { ...receivingFlows, ...shippingFlows, log: routingFlow };
+  const byId = id => document.getElementById(id);
+  const vp = byId("viewport");
+  const stage = byId("stage");
+  const nodesLayer = byId("nodes");
+  const connections = byId("connections");
+  const content = byId("detail-content");
+  const mini = byId("mini");
+  const picker = byId("node-picker");
+  const kinds = { event: "Пакет", process: "Действие", decision: "Условие", result: "Исход" };
+  const colors = { event: "#007259", process: "#667c89", decision: "#a8752c", result: "#4567a7" };
+  const w = 217, h = 94, colStep = 293, rowStep = 132, margin = 32;
+  let flowId, flow, selected, tab, transport = "a", scale = .88, worldW, worldH;
+  let coords = new Map(), wires = [];
+
+  function element(tag, cls, value) {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (value !== undefined) el.textContent = value;
+    return el;
+  }
+  function vector(tag, attributes) {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [name, value] of Object.entries(attributes)) el.setAttribute(name, value);
+    return el;
+  }
+  function option(value, text) {
+    return new Option(text, value);
+  }
+  function getNode(id) {
+    return flow.nodes.find(node => node.id === id);
+  }
+  function edgePoints(edge, previous) {
+    const [from, to] = edge;
+    const a = coords.get(from), b = coords.get(to);
+    const sy = a.y + h / 2, ty = b.y + h / 2;
+    const sx = a.x + w + 2, tx = b.x - 5;
+    const siblings = flow.edges.filter(e => e[0] === from);
+    const index = siblings.findIndex(e => e === edge);
+    const fan = (index - (siblings.length - 1) / 2) * 6;
+    const x1 = sx + 18 + fan, x2 = tx - 16;
+    if (a.x === b.x) {
+      const side = a.x + w + 17 + Math.abs(fan);
+      return [[sx,sy],[side,sy],[side,ty],[a.x+w+4,ty]];
+    }
+    const candidates = [];
+    function add(points) {
+      const compact = [];
+      for (const p of points) {
+        const last = compact.at(-1);
+        if (last && last[0] === p[0] && last[1] === p[1]) continue;
+        const prev = compact.at(-2);
+        if (prev && ((prev[0] === last[0] && last[0] === p[0]) || (prev[1] === last[1] && last[1] === p[1]))) compact.pop();
+        compact.push(p);
+      }
+      let score = (compact.length - 2) * 16;
+      for (let i = 1; i < compact.length; i++) {
+        const [ax, ay] = compact[i - 1], [bx, by] = compact[i];
+        const l = Math.min(ax, bx), r = Math.max(ax, bx), t = Math.min(ay, by), d = Math.max(ay, by);
+        score += r - l + d - t;
+        for (const [id, node] of coords) {
+          if (id === from || id === to) continue;
+          if (r >= node.x - 6 && l <= node.x + w + 6 && d >= node.y - 6 && t <= node.y + h + 6) score += 100000;
+        }
+        for (const existing of previous) {
+          for (let j = 1; j < existing.length; j++) {
+            const [px, py] = existing[j - 1], [qx, qy] = existing[j];
+            if (ay === by && py === qy && ay === py) score += 1.5 * Math.max(0, Math.min(r, Math.max(px,qx)) - Math.max(l, Math.min(px,qx)));
+            if (ax === bx && px === qx && ax === px) score += 1.5 * Math.max(0, Math.min(d, Math.max(py,qy)) - Math.max(t, Math.min(py,qy)));
+          }
+        }
+      }
+      candidates.push({ points: compact, score });
+    }
+    for (const x of [x1, x2, (x1 + x2) / 2 + fan]) add([[sx,sy],[x,sy],[x,ty],[tx,ty]]);
+    const lanes = new Set([sy, ty, 14, worldH - 14]);
+    for (const node of coords.values()) {
+      lanes.add(node.y - 14);
+      lanes.add(node.y + h + 14);
+    }
+    for (const y of lanes) add([[sx,sy],[x1,sy],[x1,y],[x2,y],[x2,ty],[tx,ty]]);
+    candidates.sort((a,b) => a.score - b.score);
+    return candidates[0].points;
+  }
+  function makeGraph() {
+    coords = new Map(flow.nodes.map(n => [n.id,{x:margin+n.col*colStep, y:margin+n.row*rowStep}]));
+    worldW = Math.max(...Array.from(coords.values(),p=>p.x)) + w + margin;
+    worldH = Math.max(...Array.from(coords.values(),p=>p.y)) + h + margin;
+    stage.style.width = worldW + "px";
+    stage.style.height = worldH + "px";
+    connections.setAttribute("width", worldW);
+    connections.setAttribute("height", worldH);
+    connections.replaceChildren();
+    const defs = vector("defs",{});
+    for (const [id,color] of [["arrow","#82968f"],["current-arrow","#147561"]]) {
+      const marker = vector("marker",{id,viewBox:"0 0 10 10",refX:9,refY:5,markerWidth:5,markerHeight:5,orient:"auto"});
+      marker.append(vector("path",{d:"M 0 0 L 10 5 L 0 10 Z",fill:color}));
+      defs.append(marker);
+    }
+    connections.append(defs);
+    nodesLayer.replaceChildren();
+    picker.replaceChildren();
+    const fragment = document.createDocumentFragment();
+    for (const n of flow.nodes) {
+      const pos = coords.get(n.id);
+      const button = element("button","node "+n.kind);
+      button.dataset.id = n.id;
+      button.style.left = pos.x+"px";
+      button.style.top = pos.y+"px";
+      button.append(element("span","kind",kinds[n.kind]),element("b","",n.title),element("small","",n.sub));
+      button.addEventListener("click",()=>{
+        selectNode(n.id,"info",false);
+        if (window.matchMedia("(max-width:740px)").matches) byId("detail-title").closest("aside").scrollIntoView({block:"start"});
+      });
+      fragment.append(button);
+      picker.add(option(n.id,n.title));
+    }
+    nodesLayer.append(fragment);
+    const previous = [];
+    const labels = [];
+    wires = flow.edges.map(edge => {
+      const points = edgePoints(edge, previous);
+      previous.push(points);
+      const path = vector("polyline",{points:points.map(p=>p.join(",")).join(" "),class:"wire","marker-end":"url(#arrow)"});
+      const caption = vector("title",{});
+      caption.textContent = edge[2] || getNode(edge[1]).title;
+      path.append(caption);
+      connections.append(path);
+      if (edge[2]) {
+        const width = edge[2].length * 6.8 + 12;
+        const runs = points.slice(1).map((p,i)=>({a:points[i],b:p})).filter(p=>p.a[1]===p.b[1]).sort((p,q)=>Math.abs(q.a[0]-q.b[0])-Math.abs(p.a[0]-p.b[0]));
+        for (const run of runs) {
+          const x = (run.a[0]+run.b[0])/2, y = run.a[1]-7;
+          if (Math.abs(run.a[0]-run.b[0])<width || labels.some(l=>Math.abs(l.y-y)<16 && Math.abs(l.x-x)<(l.width+width)/2)) continue;
+          const text = vector("text",{x,y,class:"edge-label","text-anchor":"middle"});
+          text.textContent = edge[2];
+          connections.append(text);
+          labels.push({x,y,width});
+          break;
+        }
+      }
+      return {edge,path,points};
+    });
+    byId("map-title").textContent = flow.title;
+    byId("map-meta").textContent = flow.nodes.length+" узлов · "+flow.edges.length+" переходов";
+    drawMini();
+  }
+  function drawMini() {
+    mini.setAttribute("viewBox",`0 0 ${worldW} ${worldH}`);
+    mini.replaceChildren();
+    for (const {points} of wires) mini.append(vector("polyline",{points:points.map(p=>p.join(",")).join(" "),fill:"none",stroke:"#9aaea1","stroke-width":7}));
+    for (const n of flow.nodes) {
+      const {x,y} = coords.get(n.id);
+      mini.append(vector("rect",{x,y,width:w,height:h,rx:12,fill:colors[n.kind]}));
+    }
+    mini.append(vector("rect",{id:"mini-window",fill:"#fff","fill-opacity":.15,stroke:"#152f39","stroke-width":12}));
+  }
+  function updateMini() {
+    const view = byId("mini-window");
+    if (!view) return;
+    const x = Math.max(0,vp.scrollLeft/scale), y = Math.max(0,vp.scrollTop/scale);
+    for (const [key,value] of Object.entries({x,y,width:Math.min(worldW-x,vp.clientWidth/scale),height:Math.min(worldH-y,vp.clientHeight/scale)})) view.setAttribute(key,Math.max(0,value));
+  }
+  function zoom(target,anchorX=vp.clientWidth/2,anchorY=vp.clientHeight/2) {
+    const x = (vp.scrollLeft+anchorX)/scale, y = (vp.scrollTop+anchorY)/scale;
+    scale = Math.max(.12,Math.min(1.8,target));
+    stage.style.transform = `scale(${scale})`;
+    byId("sizer").style.width = Math.ceil(worldW*scale)+"px";
+    byId("sizer").style.height = Math.ceil(worldH*scale)+"px";
+    vp.scrollLeft = x*scale-anchorX;
+    vp.scrollTop = y*scale-anchorY;
+    byId("percent").textContent = Math.round(scale*100)+"%";
+    byId("smaller").disabled = scale<=.12;
+    byId("larger").disabled = scale>=1.8;
+    updateMini();
+  }
+  function reveal(id) {
+    const pos = coords.get(id);
+    vp.scrollTo({left:(pos.x+w/2)*scale-vp.clientWidth*.45,top:(pos.y+h/2)*scale-vp.clientHeight*.48,behavior:"instant"});
+    updateMini();
+  }
+  function fit() {
+    zoom(Math.min((vp.clientWidth-4)/worldW,(vp.clientHeight-4)/worldH,1.15),0,0);
+    vp.scrollTo(0,0);
+    updateMini();
+  }
+  function choice(target,caption) {
+    const n = getNode(target);
+    const b = element("button","choice");
+    b.dataset.target = target;
+    const label = element("span");
+    if (caption) label.append(element("strong","",caption)," · ");
+    label.append(n.title);
+    b.append(label);
+    b.addEventListener("click",()=>selectNode(target,"info",true));
+    return b;
+  }
+  function showAnalysis(n) {
+    content.append(element("p","",n.body));
+    if (n.writes.length) {
+      content.append(element("h3","","Что меняется в БД"));
+      const list = element("dl","writes");
+      for (const [table,change] of n.writes) {
+        const row = element("div","write");
+        row.append(element("dt","",table),element("dd","",change));
+        list.append(row);
+      }
+      content.append(list);
+    }
+    const next = flow.edges.filter(e=>e[0]===n.id);
+    if (next.length) {
+      content.append(element("h3","",next.length===1?"Следующий шаг":"Ветки перехода"));
+      const list = element("div","choices");
+      next.forEach(e=>list.append(choice(e[1],e[2])));
+      content.append(list);
+    }
+    const prev = flow.edges.filter(e=>e[1]===n.id);
+    if (prev.length) {
+      const details = element("details","previous");
+      details.append(element("summary","","Предыдущие шаги"));
+      const list = element("div","choices");
+      prev.forEach(e=>list.append(choice(e[0],e[2])));
+      details.append(list);
+      content.append(details);
+    }
+    content.append(element("div","origin","Источник · "+n.source));
+  }
+  async function copyJson(button,pre,value) {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard");
+      await navigator.clipboard.writeText(value);
+      button.textContent = "Скопировано";
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents(pre);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      button.textContent = document.execCommand("copy") ? "Скопировано" : "Выделено · Ctrl+C";
+    }
+  }
+  function showPackets(n) {
+    const sampleNodes = flow.nodes.filter(node=>node.packet && packets[node.packet]);
+    const unique = new Map(sampleNodes.map(node=>[node.packet,node]));
+    const selector = element("select","packet-chooser");
+    selector.setAttribute("aria-label","Пример входящего пакета");
+    selector.add(option("","Выберите пакет этого сценария"));
+    for (const [key,node] of unique) selector.add(option(key,packets[key].eventCode+" · "+node.title));
+    selector.value = n.packet || "";
+    selector.addEventListener("change",()=>{ if (unique.has(selector.value)) selectNode(unique.get(selector.value).id,"json",true); else selectNode(n.id,"info",false); });
+    content.append(selector);
+    if (!n.packet) {
+      content.append(element("p","details-note","Для этого шага отдельный входящий пакет не предусмотрен. Выберите событие из списка, чтобы открыть его JSON."));
+      return;
+    }
+    const value = JSON.stringify(packets[n.packet],null,2);
+    const bar = element("div","json-tools");
+    const pre = element("pre");
+    const copy = element("button","copy","Копировать");
+    copy.addEventListener("click",()=>copyJson(copy,pre,value));
+    bar.append(element("span","endpoint","POST /datareon/event"),copy);
+    content.append(bar);
+    const code = element("code");
+    for (const line of value.split("\n")) {
+      const key = line.match(/^(\s*)("[^"]+")(:.*)$/);
+      if (key) { code.append(key[1],element("span","json-key",key[2]),key[3],"\n"); }
+      else code.append(line,"\n");
+    }
+    pre.append(code);
+    content.append(pre);
+    content.append(element("div","origin","Пример тела запроса. UUID задания, заявки и связанных записей условные."));
+  }
+  let hashTimer, lastHashWrite = -Infinity;
+  function shareSelection() {
+    clearTimeout(hashTimer);
+    const hash = "#"+[flowId,selected,tab].join("/");
+    if (hash===location.hash) return;
+    const update = () => {
+      history.replaceState(null,"",hash);
+      lastHashWrite = performance.now();
+    };
+    const delay = 180 - (performance.now()-lastHashWrite);
+    if (delay<=0) update(); else hashTimer=setTimeout(update,delay);
+  }
+  function selectNode(id,which="info",center=false) {
+    const n = getNode(id) || flow.nodes[0];
+    selected = n.id;
+    tab = which==="json" ? "json" : "info";
+    document.querySelectorAll(".node").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.id===selected)));
+    wires.forEach(({edge,path})=>{
+      const near = edge[0]===selected || edge[1]===selected;
+      path.classList.toggle("near",near);
+      path.setAttribute("marker-end",near?"url(#current-arrow)":"url(#arrow)");
+    });
+    picker.value = selected;
+    byId("detail-kind").textContent = kinds[n.kind]+" · "+flow.title;
+    byId("detail-title").textContent = n.title;
+    byId("detail-sub").textContent = n.sub;
+    byId("show-info").setAttribute("aria-pressed",String(tab==="info"));
+    byId("show-json").setAttribute("aria-pressed",String(tab==="json"));
+    byId("show-json").textContent = n.packet ? "Пример JSON" : "Примеры JSON";
+    content.replaceChildren();
+    if (tab==="json") showPackets(n); else showAnalysis(n);
+    content.scrollTop = 0;
+    if (center) reveal(selected);
+    shareSelection();
+  }
+  function openFlow(id,node,which) {
+    flowId = Object.hasOwn(flows,id) ? id : "ra";
+    flow = flows[flowId];
+    if (flowId!=="log") transport = flowId[1];
+    document.querySelectorAll("[data-mode]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.mode===(flowId==="log"?"log":flowId[0]))));
+    document.querySelectorAll("[data-transport]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.transport===transport)));
+    byId("transport").hidden = flowId==="log";
+    makeGraph();
+    const first = getNode(node) || flow.nodes.find(n=>n.kind==="event" && n.packet) || flow.nodes[0];
+    zoom(vp.clientWidth<520?.78:.9,0,0);
+    selectNode(first.id,which,true);
+  }
+  function fromHash() {
+    const [id,node,which] = location.hash.slice(1).split("/");
+    openFlow(id,node,which);
+  }
+  document.querySelectorAll("[data-mode]").forEach(b=>b.addEventListener("click",()=>{
+    const id = b.dataset.mode==="log"?"log":b.dataset.mode+transport;
+    if (id!==flowId) openFlow(id);
+  }));
+  document.querySelectorAll("[data-transport]").forEach(b=>b.addEventListener("click",()=>{
+    if (flowId!=="log" && b.dataset.transport!==transport) openFlow(flowId[0]+b.dataset.transport);
+  }));
+  picker.addEventListener("change",()=>selectNode(picker.value,"info",true));
+  byId("show-info").addEventListener("click",()=>selectNode(selected,"info"));
+  byId("show-json").addEventListener("click",()=>selectNode(selected,"json"));
+  byId("smaller").addEventListener("click",()=>zoom(scale/1.2));
+  byId("larger").addEventListener("click",()=>zoom(scale*1.2));
+  byId("fit").addEventListener("click",fit);
+  byId("back-map").addEventListener("click",()=>{vp.scrollIntoView({block:"center"});vp.focus({preventScroll:true});});
+  vp.addEventListener("scroll",updateMini,{passive:true});
+  vp.addEventListener("wheel",e=>{
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const rect = vp.getBoundingClientRect();
+    zoom(scale*Math.exp(-e.deltaY*.0025),e.clientX-rect.left,e.clientY-rect.top);
+  },{passive:false});
+  vp.addEventListener("keydown",e=>{
+    if (e.target!==vp) return;
+    if (["+", "=", "-", "0"].includes(e.key)) {
+      e.preventDefault();
+      if (e.key==="0") fit(); else zoom(e.key==="-"?scale/1.2:scale*1.2);
+    }
+  });
+  let drag = null;
+  vp.addEventListener("pointerdown",e=>{
+    if (e.pointerType==="touch" || e.button!==0 || e.target.closest("button")) return;
+    drag = {id:e.pointerId,x:e.clientX,y:e.clientY,left:vp.scrollLeft,top:vp.scrollTop};
+    vp.setPointerCapture(e.pointerId);
+    vp.classList.add("dragging");
+    e.preventDefault();
+  });
+  vp.addEventListener("pointermove",e=>{
+    if (!drag || drag.id!==e.pointerId) return;
+    vp.scrollLeft = drag.left-(e.clientX-drag.x);
+    vp.scrollTop = drag.top-(e.clientY-drag.y);
+  });
+  vp.addEventListener("lostpointercapture",()=>{drag=null;vp.classList.remove("dragging");});
+  mini.addEventListener("click",e=>{
+    const point = new DOMPoint(e.clientX,e.clientY).matrixTransform(mini.getScreenCTM().inverse());
+    vp.scrollTo({left:point.x*scale-vp.clientWidth/2,top:point.y*scale-vp.clientHeight/2});
+  });
+  window.addEventListener("hashchange",fromHash);
+  new ResizeObserver(updateMini).observe(vp);
+  fromHash();
+})();
+</script>
+</body>
+</html>
