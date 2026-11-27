@@ -37,6 +37,83 @@
 
 Строки КТК поставки/вывоза и ЖД-накладной имеют status NULL / UPLOADED / FINISHED. Как в `TosReceivingResultAction` и `TosShipmentResultAction` из dev_back, backend принимает результат отдельного КТК и проверяет выполнение всех строк перед завершением заявки. Кнопка имитирует такие результаты по оставшимся строкам. Формат события и поведение при повторе приведены в разделе ниже. Правила и отмены — в [учёте КТК](CONTAINER_STOCK.md#статусы-строк-ктк).
 
+## Входящие пакеты КП в dev_back
+
+Ниже описано поведение ALIS по исходникам `backend-stage` версии `08343f2`. Схемы показывают, что меняет обработчик при успешном получении пакета. Какие коды фактически приходили на конкретную площадку и в каком порядке, можно установить по журналу её БД. [Снимок dev_back](https://github.com/airafka/dev_back/blob/08343f22af5413321dd3136f1336c4f2f37b8c8a/backend-stage%20%281%29.zip) · [Контракт ALIS](openapi%20%281%29.yaml)
+
+**Как читать пакет.** TOS через Datareon передаёт JSON на `POST /datareon/event`. `eventCode` определяет событие, `site` — площадку, `eventDateTime` — время события. `_order` — UUID заявки, `_id` — UUID задания TOS. У номерной операции `_id` указывает на строку состава заявки или накладной. Физический номер КТК передаётся в `cargoResult[].cargoNumber`, номер машины или вагона — в `cargoResult[].transportNumber`. Результаты допуслуг передаются в `addServicesResult[]`.
+
+Каждая принятая доставка получает отдельную запись в `inbound_event`. По `eventCode` из `inbound_event_config` выбираются назначенные действия. Их коды сохраняются в `action_codes`. В журнале `DONE` означает успешную обработку пакета, `SKIPPED` — отсутствие настройки, `INVALID` или `FAILED` — ошибку. У заявки есть собственный `order_status`, а у задания — свой `status`. Привязки пакетов ниже прослеживаются по обработчикам, интеграционным тестам и миграциям. Полной конфигурации работающей площадки в снимке нет.
+
+Конфигурация также допускает действия `STATUS_IN_WORK` и `STATUS_COMPLETED`. Это внутренние команды обновления шапки. Если для входящего кода отдельно назначено `STATUS_COMPLETED`, оно может закрыть заявку и провести вагонный регистр без проверки строк КТК и без обновления `container_owner`. Поэтому для разбора конкретной заявки важны и `event_code`, и `action_codes` журнала. Связку `VH_ARRIVED → STATUS_IN_WORK` удаляет миграция KIS-3355.
+
+**До входящих пакетов.** При подтверждении поставки ALIS записывает в `container_owner` известные КТК со статусом `EXPECTED` и ссылкой `receiving_order_id`. При подтверждении вывоза известные КТК получают `RESERVED_OUT` и `shipping_order_id`. Переход отражается в `container_owner_history`. Для указанных в ЖД-заявке вагонов соответствующий резерв и историю ведут `railway_carriage_owner` и `railway_carriage_owner_history`. Поэтому запись истории может существовать ещё до первого результата TOS.
+
+### Поставка на КП
+
+```mermaid
+flowchart TD
+    A["КП-Авто · UNLOAD_FINISH по КТК"] --> B["receiving_order_container по _id<br/>status = FINISHED, actual_quantity из первого cargoResult"]
+    C["КП-ЖД · VH_ARRIVED"] -->|"_id вагона"| D["waybill_railway_carriage.status = FINISHED"]
+    C -->|"_id КТК"| E["waybill_container.status = FINISHED"]
+    D -->|"Заявка без КТК, прибыли все вагоны"| W["receiving_order = DONE<br/>вагоны ON_TERMINAL и история"]
+    F["КП-ЖД · UNLOAD_FINISH по КТК"] --> G["waybill_container по _id<br/>status = FINISHED"]
+    B --> H{"Все строки КТК заявки FINISHED?"}
+    G --> H
+    H -->|"Нет"| I["Результат строки сохранён<br/>КТК остаются EXPECTED"]
+    H -->|"Да, переход разрешён"| J["receiving_order = DONE<br/>КТК и вагоны состава ON_TERMINAL, запись истории"]
+```
+
+| Поток и пакет | Что меняется в момент обработки |
+| --- | --- |
+| **КП-Авто · `UNLOAD_FINISH`** | `TOS_RECEIVING_RESULT` завершает строку `receiving_order_container`. При наличии `cargoResult` записывает `actual_quantity = cargoResult[0].qty`. Собственного этапа прибытия машины в действии `CARRIAGE_ARRIVED` нет. |
+| **КП-ЖД · `VH_ARRIVED`** | `CARRIAGE_ARRIVED` переводит шапку в `IN_PROGRESS`, если переход разрешён. По `_id` завершает задание вагона **или** задание КТК накладной. Первый обработанный вагон записывает `receiving_order.actual_receiving_date_time = eventDateTime`. При прибытии по заданию КТК дата заполняется, если ещё пуста. Для поставки без КТК прибытие последнего вагона закрывает заявку и переводит вагоны в `ON_TERMINAL`. |
+| **КП-ЖД · `UNLOAD_FINISH`** | `TOS_RECEIVING_RESULT` завершает строку `waybill_container`. Количество в эту строку не записывается. Проверка завершения учитывает также строки КТК, которые уже получили `FINISHED` по `VH_ARRIVED`. |
+
+На обоих видах транспорта `UNLOAD_FINISH` добавляет в `container_movement` по записи на каждый элемент `cargoResult`. В ней сохраняются КТК по `cargoNumber`, `order_id = _order`, `document_id = _id`, код и время события, транспорт и признак `active`. При наличии допуслуг обновляется `receiving_order_requested_service.actual_quantity`. Пакет только с результатом допуслуги тоже может завершить строку КТК по `_id`. В этом случае движений по КТК будет ноль.
+
+Для поставки с КТК действие проверяет действующие строки из `waybill_container` и `receiving_order_container`. Если есть хотя бы одна строка, все они `FINISHED` и шапка в `ACCEPTED` или `IN_PROGRESS`, заявка получает `DONE`. Тогда для КТК всего состава обновляется `container_owner` до `ON_TERMINAL` и записывается переход в `container_owner_history`. Для вагонов ЖД-поставки обновляются вагонный регистр и история.
+
+**Пример с пятью КТК.** Если у двух КТК есть успешный `UNLOAD_FINISH` с одним грузовым результатом у каждого, а три остальных задания ещё открыты, в БД будут две строки `FINISHED` и два движения. Все пять КТК останутся `EXPECTED`, в их истории будет резерв поставки. Переход в `ON_TERMINAL` появится при закрытии заявки. На ЖД возможен другой результат, если остальные три строки уже получили `FINISHED` по прибытию. Тогда обработчик выгрузки может закрыть заявку до получения отдельных `UNLOAD_FINISH` по этим трём КТК.
+
+### Вывоз с КП
+
+```mermaid
+flowchart TD
+    A["КП-Авто · LOAD_FINISH"] -->|"ALL: известный КТК"| B["Завершить shipping_order_container<br/>количество, допуслуги, движения"]
+    A -->|"NONE_CONTAINER: один порожний КТК"| C["Создать или обновить shipping_order_container по _id<br/>фактический КТК, empty = true, FINISHED"]
+    D["КП-ЖД · VH_ARRIVED по вагону"] --> E["shipping_order_railway_carriage.status = FINISHED<br/>shipping_order переходит в IN_PROGRESS, если разрешено"]
+    F["КП-ЖД · LOAD_FINISH"] -->|"ALL: известны вагон и КТК"| B
+    F -->|"CONTAINER / RAILWAY_CARRIAGE / NONE"| G["Связать фактический вагон и КТК<br/>в составе вывоза"]
+    B --> H["Все строки КТК FINISHED"]
+    C --> H
+    G --> I["Число строк КТК с вагоном равно плану"]
+    H -->|"Переход разрешён"| J["shipping_order = DONE<br/>container_owner = DEPARTED по составу и запись истории"]
+    I -->|"Переход разрешён"| J
+    V["VH_DEPARTURE · при подходящей настройке"] --> T["shipping_order.actual_shipping_date_time = eventDateTime"]
+```
+
+| Поток и пакет | Что меняется в момент обработки |
+| --- | --- |
+| **КП-Авто · `LOAD_FINISH`, номерной вывоз (`ALL`)** | `TOS_SHIPMENT_RESULT` находит `shipping_order_container` по `_id`, ставит `FINISHED`, берёт `actual_quantity` из первого грузового результата. При наличии данных обновляет `shipping_order_requested_service.actual_quantity` и пишет по одному `container_movement` на элемент `cargoResult`. При расхождении номера в задании и пакете обработчик может заменить заранее выбранный случайный КТК. У явно указанного КТК сохраняется плановый номер. |
+| **КП-Авто · `LOAD_FINISH`, безномерный вывоз (`NONE_CONTAINER`)** | Заявка на один порожний КТК. Требуется ровно один `cargoResult`. По `cargoNumber` определяется фактический КТК и его собственник из `container_owner`. По `_id` создаётся или обновляется `shipping_order_container` со статусом `FINISHED` и `empty = true`. Движение в `container_movement` эта ветка не создаёт. |
+| **КП-ЖД · `VH_ARRIVED` по вагону** | `CARRIAGE_ARRIVED` переводит шапку вывоза в `IN_PROGRESS` при допустимом переходе и завершает `shipping_order_railway_carriage` по `_id`. Это прибытие вагона под погрузку. Остаток и история выбытия вагона в этот момент не меняются. |
+| **КП-ЖД · `LOAD_FINISH`, `ALL`** | Применяется то же правило номерного КТК, что при автовывозе. При закрытии заявки номерные вагоны в `railway_carriage_owner` переходят из `RESERVED_OUT` в `DEPARTED` с записью в `railway_carriage_owner_history`. |
+| **КП-ЖД · `LOAD_FINISH`, `CONTAINER`** | В плане известен КТК. По `transportNumber` находится фактический вагон. Обработчик создаёт или использует строку `shipping_order_railway_carriage`, привязывает к ней существующую `shipping_order_container` по `_id`, переносит пломбы и ставит КТК `FINISHED`. При первом добавлении вагона его регистр и история сразу фиксируют `ON_TERMINAL → DEPARTED`. |
+| **КП-ЖД · `LOAD_FINISH`, `RAILWAY_CARRIAGE`** | В плане известен вагон. Его строка в `shipping_order_railway_carriage` получает `FINISHED`. Из пакета создаётся строка `shipping_order_container` с фактическим КТК, привязкой к вагону, пломбами и статусом `FINISHED`. По каждой позиции `cargoSpec` добавляется `shipping_order_container_item`. Номерной вагон списывается при закрытии заявки. |
+| **КП-ЖД · `LOAD_FINISH`, `NONE`** | Фактические вагон и КТК определяются из пакета. Вагон и его выбытие оформляются как при `CONTAINER`, строка КТК и позиции груза — как при `RAILWAY_CARRIAGE`. |
+| **КП-Авто и КП-ЖД · `VH_DEPARTURE`** | `VhDepartureAction` по `_order` находит вывоз и при подходящей настройке записывает `shipping_order.actual_shipping_date_time = eventDateTime`. В коде проверяется наличие `WAREHOUSE` в разрешённых площадках настройки или отсутствие ограничений. Миграция KIS-147 включает и `WAREHOUSE`, и `CONTAINER`; фактическая площадка заявки в этом условии не сравнивается. Действие не использует `_id`, не определяет выбывший вагон и не меняет регистры или историю. |
+
+При `ALL` и `NONE_CONTAINER` закрытие вывоза зависит от статуса существующих строк КТК. При `CONTAINER`, `RAILWAY_CARRIAGE` и `NONE` сравнивается число строк КТК, привязанных к вагону, с `shipping_order.total_container_quantity`; эти три ветки не пишут движения КТК и фактические количества допуслуг. При выполнении условия и допустимом переходе шапка получает `DONE`. Обработчик ставит КТК всего состава `DEPARTED` в `container_owner` со ссылкой на вывоз и добавляет историю изменения. Для КТК без предварительного номерного резерва возможен переход `ON_TERMINAL → DEPARTED`.
+
+### Как сверять результат для хранения
+
+- `inbound_event` показывает получение и результат обработки пакета. `container_movement` показывает переданные в поддерживаемых ветках движения КТК. Повторная доставка результата может добавить движение повторно.
+- `container_owner` показывает текущий статус. `container_owner_history` хранит заявку, КТК, прежнего и нового собственника и статусы. Переход записывается при изменении статуса или собственника. Поэтому число записей истории не обязано совпадать с числом пакетов.
+- Для вагона `VH_ARRIVED` по вагонному заданию позволяет определить прибывший вагон. При вывозе `VH_DEPARTURE` даёт дату шапки, а списание вагона в регистре может произойти по `LOAD_FINISH`. По этим двум записям нельзя однозначно восстановить момент физического выезда каждого вагона.
+- В снимке ALIS нет таблиц `container_visit`, `container_period`, `railway_carriage_visit`, `railway_carriage_period`. Пообъектная фиксация выгрузки КТК, погрузки КТК и физического выезда вагона для расчёта хранения описана в [целевых правилах заполнения](docs/container-storage/table-population.md).
+- У ЖД-накладной свой вход `POST /datareon/waybill`. При создании заполняются `waybill` и строки состава, включая `waybill_railway_carriage` и `waybill_container`. Справочники оборудования приходят через `/datareon/etran_container` и `/datareon/etran_railway`, снимки остатков — через `/datareon/container-remain` и `/datareon/railway-carriage-remain`. Эти пакеты имеют самостоятельное назначение и не завершают задание TOS.
+
 ## Входящие результаты TOS
 
 `POST /datareon/event` принимает JSON через frontend или напрямую на backend. Заголовок `External-ID` необязателен. Внешний отправитель передаёт `_order` (UUID заявки), `_id` (UUID задания), `orderNumber`, `source`, `site` (имя площадки), `eventName`, `eventCode` и `eventDateTime` с часовым поясом. UUID и название площадки определяют заявку. Номер документа и название события сохраняются для сверки.
