@@ -23,7 +23,7 @@ MVP принимает результаты TOS по каждому КТК. Пр
 | [AGENTS.md](AGENTS.md) | Правила разработки, проверки, автоматические commit/push между компьютерами |
 | [BACKEND_ALIGNMENT.md](BACKEND_ALIGNMENT.md) | Заявки, складские события и карта backend |
 | [CONTAINER_STOCK.md](CONTAINER_STOCK.md) | Собственники КТК, остатки, складские события и смена собственника |
-| Смена собственника и хранение КТК | [Блок 1. Доработка БД](docs/container-storage/database.md). ТЗ по отчёту для ALIS — [FE](docs/container-storage/frontend.md) · [BE](docs/container-storage/backend.md) · [Проект API отчёта](docs/container-storage/alis-openapi.yaml). Для сверки — [снимок API основной системы](openapi%20%281%29.yaml) · [действующий API MVP и примеры](docs/container-storage/openapi.yaml) |
+| Смена собственника и хранение КТК и вагонов | [Блок 1. Доработка БД](docs/container-storage/database.md) · [Хранение вагонов на КП-ЖД](docs/container-storage/database.md#19-хранение-вагонов-на-кп-жд). ТЗ по отчёту КТК для ALIS — [FE](docs/container-storage/frontend.md) · [BE](docs/container-storage/backend.md) · [Проект API отчёта](docs/container-storage/alis-openapi.yaml). Для сверки — [снимок API основной системы](openapi%20%281%29.yaml) · [действующий API MVP и примеры](docs/container-storage/openapi.yaml) |
 | [FRONTEND_STANDARD.md](FRONTEND_STANDARD.md) | Компоненты, формы, таблицы и поведение интерфейса |
 | [database/README.md](database/README.md) | Установка, запуск, обновление, резервные копии и перенос БД |
 | [Генератор и демонстрационные данные](docs/equipment-number-formats.md) | Размещение двух КТК на вагоне, номера и ограничения учебных данных |
